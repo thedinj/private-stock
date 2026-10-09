@@ -1,0 +1,192 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Server-side debugging
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            // Breakpoints in route handlers, services, and repos. Next runs its server
+            // compilation in a child process, so `autoAttachChildProcesses` is what makes
+            // breakpoints outside the parent actually bind.
+            "name": "Debug: Web (Next)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/apps/web",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["dev"],
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**"],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            // Waits for Next to print its URL, then opens it in your normal browser.
+            //
+            // `openExternally`, not `debugWithChrome`, and that is the whole point of this
+            // block. `debugWithChrome` spawns a *second debug session* to drive the browser,
+            // and a second session is a second thing that can die: a failed attach when
+            // Chrome already holds its profile lock, or simply closing the window. Paired
+            // with `stopAll` on the compound, that took the worker down with it, which reads
+            // as "the worker will not start" and, left overnight, as a library that quietly
+            // stopped processing hours ago.
+            //
+            // So the browser is opened rather than driven. It still lands on the right URL in
+            // your real profile, signed in and with extensions present, and nothing about
+            // that window's lifetime can now reach the server processes.
+            //
+            // The cost is client-side breakpoints, which this path never delivered reliably
+            // anyway. "Debug: Browser only (server already running)" below exists for that,
+            // and is honest about the throwaway profile it needs in order to work.
+            "serverReadyAction": {
+                "pattern": "- Local:\\s+(https?://\\S+)",
+                "uriFormat": "%s",
+                "action": "openExternally"
+            }
+            // NODE_ENV is deliberately NOT set here. Next derives it per command — dev is
+            // development, build and start are production — and pinning it causes:
+            //
+            //   ⚠ You are using a non-standard "NODE_ENV" value in your environment.
+            //
+            // "Non-standard" there means "not what this command expects", not "unknown
+            // value", which makes it a confusing thing to chase. The trap is the integrated
+            // terminal: it keeps the debug session's environment, so running `pnpm build` in
+            // that same terminal afterwards inherits NODE_ENV=development and warns.
+        },
+        {
+            // The worker is a plain Node process, so this is ordinary and reliable
+            // debugging — the reason ffmpeg work lives here rather than in Next.
+            "name": "Debug: Worker",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/apps/worker",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["dev"],
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**"],
+            "console": "integratedTerminal",
+            // Opened, unlike everywhere else. A launch failure -- a bad runtimeExecutable, a
+            // cwd that does not exist, a shell that cannot parse the env block -- is reported
+            // in the Debug Console and nowhere else, and `debug.internalConsoleOptions` in
+            // settings.json suppresses it too. A worker that failed to start therefore did so
+            // in complete silence: the same class of fault the terminal-profile comment in
+            // settings.json warns about, arriving by a different door.
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            // Kept for the worker, unlike the web config: this is a plain Node process, so
+            // nothing sets NODE_ENV for us, and our own code keys off it.
+            //
+            // It no longer turns on SQL echoing. That used to follow from NODE_ENV and made
+            // 1.6 GB an hour of terminal output the default state of every debug run --
+            // enough that the terminal stopped draining it and the worker blocked on its own
+            // stdout. Set PRIVATE_STOCK_SQL_LOG=1 here when you actually want to watch
+            // statements, and expect to stop the session rather than leave it running.
+            "env": {
+                "NODE_ENV": "development"
+            }
+        },
+        {
+            "name": "Debug: Attach to running process",
+            "type": "node",
+            "request": "attach",
+            "port": 9229,
+            "skipFiles": ["<node_internals>/**"],
+            "restart": true
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Tests
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            // Runs only the file in the active editor. `--no-file-parallelism` keeps
+            // breakpoints in the main process rather than a worker thread, which is the
+            // usual reason a Vitest breakpoint never hits.
+            "name": "Debug: Vitest (current file)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**"],
+            "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+            "args": ["run", "--no-file-parallelism", "${relativeFile}"],
+            "smartStep": true,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug: Vitest (db package)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/packages/db",
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**"],
+            "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+            "args": ["run", "--no-file-parallelism"],
+            "smartStep": true,
+            "console": "integratedTerminal"
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Database CLI
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "name": "Debug: db:migrate",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/packages/db",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["db:migrate"],
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**"],
+            "console": "integratedTerminal"
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Client-side debugging
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            // A fresh Chrome window against a throwaway profile, for when you started the
+            // app yourself and only want a browser attached.
+            //
+            // Deliberately still a throwaway profile, unlike the config above: attaching a
+            // debugger needs its own Chrome process, and a new window on your normal profile
+            // joins the one already running. The cost is that this browser is signed out of
+            // everything and looks like automation to any site that scores for it, so do not
+            // try to log in to anything here - use the compound config, or your own Chrome.
+            //
+            // Two settings are doing that. `--new-window` is the one basket-bot uses; alone
+            // it is not enough, because if Chrome is already running under your normal
+            // profile the new window joins that existing process and the debugger has
+            // nothing to attach to. `userDataDir` forces a separate profile, which forces a
+            // separate process — and gives a clean browser each run: no extensions injecting
+            // scripts, no stale session, no cached service worker.
+            "name": "Debug: Browser only (server already running)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8842",
+            "webRoot": "${workspaceFolder}/apps/web",
+            "userDataDir": "${workspaceFolder}/.vscode/.chrome-debug-profile",
+            "runtimeArgs": ["--new-window", "--no-first-run", "--no-default-browser-check"],
+            "sourceMapPathOverrides": {
+                "webpack://_N_E/*": "${webRoot}/*"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            // The normal way to run the app: both processes debuggable, and a browser
+            // window opened automatically once Next is listening.
+            //
+            // `stopAll` is deliberately absent. It ends every session in the compound when
+            // one of them ends, which is reasonable for two halves of one request path and
+            // wrong for a worker: that process runs ffmpeg jobs for hours and has no business
+            // dying because a browser window closed or the web dev server was restarted. It
+            // did exactly that here, twice and unobserved -- the queue stopped for eleven
+            // hours, and the only evidence was jobs frozen in `claimed` with a heartbeat
+            // equal to the moment they were claimed.
+            //
+            // The cost is that the stop button now stops one session rather than both, which
+            // is the right trade for a process whose whole purpose is to keep going.
+            "name": "Debug: Full Stack (Web + Worker)",
+            "configurations": ["Debug: Web (Next)", "Debug: Worker"],
+            "presentation": {
+                "order": 1
+            }
+        }
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        // NodeNext, not bundler, and this is load-bearing rather than tidiness.
+        // Under "bundler" tsc accepts an extensionless relative import and emits it verbatim,
+        // which Node's ESM loader then cannot resolve -- so `node dist/cli/migrate.js` and
+        // `node apps/worker/dist/index.js`, the two commands the container entrypoint runs,
+        // both died with ERR_MODULE_NOT_FOUND. Nothing caught it because tsx resolves those
+        // specifiers in development and Next bundles them for the web app; the container is the
+        // only consumer of this output as plain ESM. NodeNext makes the compiler refuse the
+        // import that would break it.
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "declaration": true,
+        "declarationMap": true,
+        "composite": true,
+        "types": ["node"],
+        "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

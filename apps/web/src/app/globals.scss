@@ -1,0 +1,207 @@
+// Ground colours applied at the document level so there is never a flash of white between
+// the HTML arriving and Mantine's provider mounting.
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #14100d;
+    color: #e7e0da;
+    -webkit-font-smoothing: antialiased;
+}
+
+// The room's light, on the document rather than in a component (§14).
+//
+// Firelight low on the left, a late sun high on the right, and a little grain over both. All
+// three are background layers on <body> rather than fixed overlay elements, which keeps them
+// out of the stacking context entirely: an overlay has to be positioned above the ground and
+// below every page, and gets that wrong the first time anything else is given a z-index.
+//
+// `fixed` attachment is what makes it a room and not a wallpaper — the light stays put while
+// the library scrolls past it.
+//
+// The grain carries its own opacity inside the SVG because a background layer cannot be
+// faded on its own, and is desaturated: coloured noise over a warm ground reads as a
+// compression artifact rather than as film.
+body {
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E"),
+        radial-gradient(84% 58% at 4% 106%, rgba(207, 166, 89, 0.2) 0%, rgba(207, 166, 89, 0) 58%),
+        radial-gradient(64% 46% at 97% -8%, rgba(155, 113, 32, 0.15) 0%, rgba(155, 113, 32, 0) 56%);
+    background-repeat: repeat, no-repeat, no-repeat;
+    background-attachment: fixed;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/**
+ * The study: the room next door to the cellar (§14).
+ *
+ * Set by `useStudyRoom` while an item is open, and removed the moment you leave. The library
+ * is the cellar — firelight low on the left, a late sun high on the right, warm ground, brass
+ * edges everywhere. In here all of that goes out, because the only light in this room is the
+ * screen, and light you can see coming from two places at once is not light from a screen.
+ *
+ * The ground drops nearly to black, the firelight is switched off, and the grain comes up: a
+ * darker room shows more of it, and the picture should sit in something that looks like air
+ * rather than on a flat panel.
+ *
+ * The shell recedes rather than disappears. Its border goes, its fill flattens into the
+ * ground and its labels drop back — you can still get out, it just stops asking to be read.
+ */
+:root[data-room="study"] {
+    --ps-ground: #0b0806;
+    --ps-surface: #1a140f;
+}
+
+// `:root` *is* the html element, so it takes the ground itself; body needs saying separately
+// because it paints its own.
+:root[data-room="study"],
+:root[data-room="study"] body {
+    background-color: #0b0806;
+}
+
+body {
+    transition: background-color 420ms ease;
+}
+
+:root[data-room="study"] body {
+    // Grain alone, and more of it. The two firelight layers are what make the cellar a room
+    // with a fire in it; this room has a screen instead, and that light is cast by the stage.
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+}
+
+// The shell, one step back. Both the header and the navbar keep their geometry -- nothing
+// moves, so nothing reflows -- and give up their edge and their contrast.
+//
+// **The shell's, by class -- not every `header` and `nav` on the page.** These were bare
+// element selectors, and a Mantine Drawer's or Modal's title bar is a real `<header>`: sticky,
+// and meant to be opaque. The study made it transparent, so in the viewer's Details panel the
+// title slid over the rows scrolling beneath it with nothing behind it.
+//
+// **The ground, not transparent.** Transparent was the same look while nothing moved, and
+// wrong the moment something did: the header is fixed, so the page scrolled up through it and
+// its text ran under the title, and on a phone the navbar is a sheet drawn *over* the page, so
+// the menu's links printed straight across the tag boxes beneath. The room's own ground colour
+// keeps the edge and the contrast gone and still covers what is behind.
+:root[data-room="study"] {
+    .mantine-AppShell-header,
+    .mantine-AppShell-navbar {
+        background-color: var(--ps-ground);
+        border-color: transparent;
+        transition:
+            background-color 420ms ease,
+            border-color 420ms ease;
+    }
+
+    // Not the active one: where you are is the single thing in the shell still worth
+    // reading, and dimming it too would leave a nav with nothing to orient by.
+    .mantine-AppShell-navbar a:not([data-active]) {
+        color: var(--mantine-color-oak-4);
+        transition: color 420ms ease;
+    }
+}
+
+// Safe areas, named once (§14).
+//
+// `viewport-fit=cover` is set in the root layout, which is what lets the ground colour reach
+// the edges of a notched phone — and also what puts the gesture bar on top of whatever is at
+// the bottom of the page. These are the insets every fixed edge has to pay; `0px` rather
+// than `0` so `calc()` still has a unit to work with on a desktop browser.
+:root {
+    --ps-safe-top: env(safe-area-inset-top, 0px);
+    --ps-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --ps-safe-left: env(safe-area-inset-left, 0px);
+    --ps-safe-right: env(safe-area-inset-right, 0px);
+}
+
+// Touch targets stay at least 44px on coarse pointers (§14). Declared once here rather
+// than remembered per component.
+//
+// Icon buttons are left at Mantine's own size. Mantine is a lower layer (see the root
+// layout), so a bare `button` here would beat their sizing and stretch a 36px square into a
+// 36x44 slot -- off the line of everything beside it. They kept their size before the layer
+// too, by specificity, so this is the status quo written down rather than a new exception.
+//
+// `nav a` is here because the rule missed the navigation it was written for: Mantine's
+// NavLink renders a plain anchor with no `role`, so the five primary destinations stayed at
+// 40.8px on a touch device -- the one place in the app where a missed tap costs the most.
+@media (pointer: coarse) {
+    // The exclusion inside `:where`, so the rule weighs what a bare `button` does. A `:not`
+    // counts its class, and the single-class `min-height: 0` that undoes this for a chip's
+    // halves or a number input's steppers then lost to it.
+    button:where(:not(.mantine-ActionIcon-root, .mantine-CloseButton-root)),
+    a[role="button"],
+    nav a,
+    [role="slider"] {
+        min-height: 44px;
+    }
+
+    // Controls whose target is not a button: a segmented choice, a switch's row, a star. A
+    // `min-height` wins over the height the theme pins on SegmentedControl, so the desktop
+    // alignment it exists for is untouched.
+    .mantine-SegmentedControl-root,
+    .mantine-Switch-body {
+        min-height: 44px;
+        align-items: center;
+    }
+
+    // Text inputs and selects, everywhere: only the library raised them by hand, so search and
+    // sort on Reels, Clips, Captures and Tags stayed 36px under a thumb.
+    //
+    // Through Mantine's height variable as well as `min-height`, and on the wrapper, which
+    // declares `--input-height-sm` itself (so a value set any higher up never arrives). With
+    // only `min-height` the box grew and everything sized from the variable did not: a number
+    // input's steppers stayed 36px against a 44px box, and the text sat off-centre.
+    .mantine-Input-wrapper {
+        --input-height-sm: 44px;
+    }
+
+    .mantine-Input-input {
+        min-height: 44px;
+    }
+
+    // Exempt from the button rule above, which made each of a number input's two steppers
+    // 44px and stacked 88px of them beside a 44px box. They share the box's height between
+    // them; the box itself is the target, and it takes the number from the keypad.
+    .mantine-NumberInput-control {
+        min-height: 0;
+    }
+
+    // Likewise a slider's thumb, which `[role="slider"]` stretched into a tall capsule. Its
+    // reach is an invisible square around it instead, and the track takes a tap anywhere along
+    // it regardless.
+    .mantine-Slider-thumb {
+        min-height: 0;
+
+        &::after {
+            content: "";
+            position: absolute;
+            inset: calc((44px - var(--slider-thumb-size)) / -2);
+        }
+    }
+
+    .mantine-Rating-label {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    // The light is static, but the grain is a repeating texture: leave it be.
+    body {
+        background-attachment: scroll;
+    }
+}

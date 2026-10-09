@@ -1,0 +1,56 @@
+// A tag's picture beside its name, over the window on its page.
+
+.inset {
+    position: relative;
+    flex: none;
+    width: clamp(180px, 22vw, 240px);
+
+    &[data-portrait] {
+        width: clamp(140px, 15vw, 190px);
+    }
+}
+
+.picture {
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--mantine-radius-sm);
+    border: 1px solid rgba(207, 166, 89, 0.45);
+    background-color: var(--ps-well);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+
+    .inset[data-portrait] & {
+        aspect-ratio: 4 / 5;
+    }
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.more {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    opacity: 0.85;
+}
+
+// A phone: smaller, above the name rather than beside it -- never below 88 pixels across.
+@media (max-width: 48em) {
+    .inset {
+        width: 132px;
+
+        &[data-portrait] {
+            width: 88px;
+        }
+    }
+
+    // A thumb's worth for the menu, over a picture this small.
+    .more {
+        right: -10px;
+        bottom: -10px;
+    }
+}

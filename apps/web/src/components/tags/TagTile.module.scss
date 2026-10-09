@@ -1,0 +1,189 @@
+// A tag as a label on a framed picture: the picture window of its own page, at card size.
+
+/**
+ * The wall of tiles.
+ *
+ * At least 280px a tile -- wider than the library grid's 190 (`gridGeometry.ts`), which is the
+ * point of the view -- and capped at the full width, so a phone shows one large card per row
+ * rather than two that are each smaller than the grid it came from.
+ */
+.wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+    gap: var(--mantine-spacing-lg) var(--mantine-spacing-md);
+    padding-block: var(--mantine-spacing-sm);
+}
+
+.tile {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.frame {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: var(--mantine-radius-sm);
+    background-color: var(--ps-well);
+    border: 1px solid var(--ps-hairline);
+    box-shadow:
+        inset 0 1px 0 rgba(230, 210, 173, 0.06),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+
+    // A person is taller than they are wide; a keyword or a source has no shape of its own.
+    &[data-portrait] {
+        aspect-ratio: 4 / 5;
+    }
+
+    &:hover,
+    &:focus-within {
+        border-color: rgba(207, 166, 89, 0.45);
+        box-shadow: var(--ps-hover-glow);
+        transform: translateY(-2px);
+    }
+}
+
+.picture {
+    position: absolute;
+    inset: 0;
+    display: block;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 400ms ease;
+    }
+}
+
+.frame:hover .picture img {
+    transform: scale(1.03);
+}
+
+.blank {
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(
+        140% 125% at 76% 36%,
+        #9c5334 0%,
+        #58302e 40%,
+        #23191a 75%,
+        #130f0c 100%
+    );
+}
+
+// Dark enough under the caption for the name to read on any picture; clear above it.
+.scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        180deg,
+        rgba(20, 16, 13, 0) 45%,
+        rgba(20, 16, 13, 0.55) 70%,
+        rgba(11, 8, 6, 0.92) 100%
+    );
+}
+
+// Clicks fall through to the picture except on the name and the heart themselves.
+.caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-sm) 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    pointer-events: none;
+
+    a,
+    button {
+        pointer-events: auto;
+    }
+}
+
+.nameLine {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.heart {
+    flex: none;
+    margin-top: 1px;
+}
+
+.name {
+    font-family: var(--mantine-font-family-headings);
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.2;
+    color: var(--ps-title);
+    text-decoration: none;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 140ms ease;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--mantine-color-brass-3);
+        outline: none;
+    }
+}
+
+.aliases {
+    color: var(--mantine-color-oak-3);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--mantine-spacing-xs);
+    min-height: 44px;
+}
+
+@media (max-width: 48em) {
+    .name {
+        font-size: 20px;
+    }
+
+    // A thumb's worth on a phone (CLAUDE.md "Responsive"), as on the row.
+    .heart :global(.mantine-ActionIcon-root) {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        margin-block: -8px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .frame,
+    .picture img {
+        transition: none;
+    }
+
+    .frame:hover,
+    .frame:focus-within {
+        transform: none;
+    }
+
+    .frame:hover .picture img {
+        transform: none;
+    }
+}

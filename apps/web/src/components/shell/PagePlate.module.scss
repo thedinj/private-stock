@@ -1,0 +1,115 @@
+// The letterhead. One per screen, and nothing else in the app is allowed to look like it.
+
+.plate {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--mantine-spacing-md);
+    flex-wrap: wrap;
+}
+
+.copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+// Small, wide and brass, against a title four times its size. The whole hierarchy is
+// carried by that jump: the display face has one weight, so it cannot be carried by
+// anything else.
+.eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--mantine-color-brass-4);
+    line-height: 1;
+}
+
+// The title and whatever speaks about it, on one line that gives the title the room.
+.titleLine {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-sm);
+    min-width: 0;
+}
+
+/**
+ * One size on every page (§14, "house rules").
+ *
+ * There were two: a 60px display title for screens you "arrive at" and a section-sized one for
+ * screens you "work in". The distinction was real in the reasoning and invisible in use --
+ * Reels and Clips sit next to each other in the navigation, and moving between them made the
+ * heading jump from 60px to 26px, which reads as inconsistency rather than as meaning. So the
+ * plate has one size, the working one: the eyebrow, the rule and the serif carry the
+ * letterhead, and the content keeps its room.
+ *
+ * At most two lines of a name that is user input -- a directory, a saved view, a playlist --
+ * so a long one cannot push the page down.
+ */
+// Under `.plate` for the specificity: Mantine's own Title rule sets the h1 size, and a single
+// class ties with it and wins or loses on stylesheet order.
+.plate .title {
+    min-width: 0;
+    color: var(--ps-title);
+    text-wrap: balance;
+    letter-spacing: -0.015em;
+    margin: 0;
+    font-size: var(--mantine-h3-font-size);
+    line-height: var(--mantine-h3-line-height);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+// Never wraps under the title on a wide screen, always does on a phone.
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-xs);
+    flex-shrink: 0;
+}
+
+/**
+ * The rule that travels and gives out.
+ *
+ * Drawn from the left edge of the title, at brass nearly full strength, gone by two thirds.
+ * It is the one place per screen the accent is spent at full volume -- which is the only
+ * reason it reads as an accent anywhere else.
+ */
+.rule {
+    height: 2px;
+    background: var(--ps-plate-rule);
+    transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .rule {
+        animation: draw 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes draw {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+}
+
+.lede {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--mantine-color-dimmed);
+    max-width: 68ch;
+}

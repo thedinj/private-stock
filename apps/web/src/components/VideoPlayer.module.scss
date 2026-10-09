@@ -1,0 +1,213 @@
+// The player, in the page and on the whole screen.
+
+.player {
+    background: #0d0a08;
+    border-radius: var(--mantine-radius-sm);
+    overflow: hidden;
+    // The containing block for the hidden preloading element at the bottom of this file, so
+    // that a 1px box parked at the origin is parked inside the player and clipped by it.
+    position: relative;
+}
+
+/**
+ * In the page: never more than three quarters of the viewport.
+ *
+ * The title, the rating and the way onward have to be reachable without scrolling, and a
+ * 21:9 film on a laptop would otherwise take the whole screen and leave the page below it
+ * looking like the end of the document.
+ */
+.video {
+    width: 100%;
+    // Short enough that the title and the rating row are on screen when the page opens on a
+    // laptop, where three quarters of the viewport plus the bar put them below the fold -- and
+    // never less than two fifths of it, so a phone in landscape still gets a picture.
+    max-height: max(40dvh, min(75dvh, calc(100dvh - 17rem)));
+    display: block;
+    cursor: pointer;
+}
+
+/**
+ * Fullscreen: the picture in the middle, the controls over it.
+ *
+ * Keyed on an attribute rather than `:fullscreen`, because the element the browser is showing
+ * full screen is the *document* — the player is laid over the page instead of being handed the
+ * screen itself, so that stepping to the next item does not remove the fullscreen element from
+ * under the browser. `usePlayerFullscreen` explains why that is the only version that survives
+ * autoplay rolling through a set.
+ *
+ * Above the app shell and below a popover: the speed menu is a portal at the end of the body,
+ * and in fullscreen it has to be able to open over the picture it belongs to.
+ */
+.player[data-fullscreen] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--mantine-z-index-modal);
+    display: flex;
+    flex-direction: column;
+    border-radius: 0;
+    background: #000;
+}
+
+/**
+ * The picture takes every pixel the screen has.
+ *
+ * The height cap has to be lifted explicitly: three quarters of the viewport is the right rule
+ * in the page and the wrong one here, and a `max-height` that survived into fullscreen is
+ * exactly the bug it once caused. `object-fit: contain` centres the frame in what it is given.
+ */
+.player[data-fullscreen] .video {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    height: auto;
+    object-fit: contain;
+}
+
+/**
+ * The control bar, in the page.
+ *
+ * Nothing but a stacking position: above the held frame (§14d), which is absolutely positioned
+ * over the picture and would otherwise paint across the top of the scrubber during a join.
+ * Fullscreen is where this class does its real work, below.
+ */
+.controls {
+    position: relative;
+    z-index: 2;
+}
+
+/**
+ * On a full screen the bar is *over* the picture, not under it.
+ *
+ * In the page the two are stacked and neither hides the other. Given the whole screen, a strip
+ * of controls in the flow costs the film a band of its height for as long as it plays — so the
+ * bar comes out of the flow, the picture takes every pixel, and the bar floats on a gradient
+ * that keeps it legible over whatever is behind it.
+ *
+ * Which is only tolerable because it leaves: `data-hidden` is written after a few seconds of
+ * nothing happening and cleared by the first sign of a viewer (`useIdleControls`). It slides
+ * rather than blinks, and stops taking the pointer while it is gone, so a click aimed at the
+ * picture is not caught by a bar nobody can see.
+ */
+.player[data-fullscreen] .controls {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    // Deep enough to read a timecode against a bright frame: the scrim was half this and the
+    // dimmed text sat on a sunlit sky. It is the picture's own bottom edge that pays, and only
+    // for the seconds the bar is up.
+    padding-block-start: calc(var(--mantine-spacing-xl) * 1.5);
+    background: linear-gradient(
+        to top,
+        rgb(0 0 0 / 0.92),
+        rgb(0 0 0 / 0.75) 40%,
+        rgb(0 0 0 / 0.35) 72%,
+        transparent
+    );
+    transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+}
+
+/**
+ * Clear of the phone's own buttons.
+ *
+ * Fullscreen hides the system bars, and the same tap that brings this bar back brings them back
+ * too -- drawn over the bottom of the screen, where the bar is, so Back, Home and Recents sat on
+ * the timecode and the clip button. The safe-area insets are what a phone reports for that,
+ * and the floor beside them is for the phones that report nothing while the bars are only
+ * passing: 48px is the height Android gives its three-button bar. Touch only, as the bars are;
+ * the sides pay the insets too, for a notch in landscape.
+ */
+.player[data-fullscreen] .controls {
+    padding-block-end: var(--ps-safe-bottom);
+    padding-inline: var(--ps-safe-left) var(--ps-safe-right);
+}
+
+@media (pointer: coarse) {
+    .player[data-fullscreen] .controls {
+        padding-block-end: max(var(--ps-safe-bottom), 48px);
+    }
+}
+
+.player[data-fullscreen] .controls[data-hidden] {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+}
+
+/**
+ * The pointer goes with the bar.
+ *
+ * A cursor parked over a film is the same interruption the bar was, and bringing it back is the
+ * same gesture: the movement that shows the controls shows it too.
+ */
+.player[data-idle] {
+    cursor: none;
+}
+
+/** Someone who asked not to be moved gets the same bar, appearing and disappearing outright. */
+@media (prefers-reduced-motion: reduce) {
+    .controls {
+        transition: none;
+    }
+}
+
+/**
+ * The element holding the item you are about to open (§8b).
+ *
+ * Present, sized to nothing, and out of everything: out of the layout, out of the tab order,
+ * out of the accessibility tree. Deliberately **not** `display: none` — a browser is within its
+ * rights to treat an undisplayed element as not worth loading, and a preload that does not
+ * preload would be worse than none, because nothing would ever say so.
+ */
+.warming {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/**
+ * The frame held across a join (§14d).
+ *
+ * Positioned and sized in JavaScript, because it has to sit exactly where the picture is and the
+ * picture's box depends on the video's own aspect and on whether we are fullscreen. `contain`
+ * matches how a `<video>` letterboxes itself, so the held frame occupies the same pixels the
+ * moving one did and the swap is invisible.
+ */
+.freeze {
+    position: absolute;
+    object-fit: contain;
+    pointer-events: none;
+    background: #0d0a08;
+    z-index: 1;
+}
+
+/**
+ * Bare: filling a stage that brings its own transport (§14g).
+ *
+ * The tasting lays the player in a layer that already covers the screen, so the player takes
+ * that layer's box and letterboxes the picture inside it. The pointer is inherited: clicking
+ * the picture is the stage's business, not the player's.
+ */
+.player[data-bare] {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.player[data-bare] .video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+    cursor: inherit;
+}
+
+.player[data-bare][data-fit="cover"] .video {
+    object-fit: cover;
+}

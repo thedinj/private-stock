@@ -1,0 +1,247 @@
+// The showcase (§14f): the study's darkness, edge to edge, with nothing in it but pictures.
+
+.stage {
+    position: fixed;
+    inset: 0;
+    // Clip, not hidden: a hidden box can still be scrolled by script, and anything that
+    // scrolls an element into view — focus, a test harness — slid the whole stage up, lenses
+    // and chrome with it, leaving the bottom lens as a dark band across the middle of the wall.
+    overflow: clip;
+    background-color: #0b0806;
+    // The conveyor owns every gesture; the browser panning or zooming underneath it would
+    // fight the drift.
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    overscroll-behavior: none;
+
+    // A lens rather than a hard edge: the wall darkens into the frame at top and bottom, so
+    // rows arrive out of shadow rather than being cut in by the window.
+    &::before,
+    &::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: clamp(48px, 9vh, 120px);
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    &::before {
+        top: 0;
+        background: linear-gradient(to bottom, rgba(11, 8, 6, 0.85), rgba(11, 8, 6, 0));
+    }
+
+    &::after {
+        bottom: 0;
+        background: linear-gradient(to top, rgba(11, 8, 6, 0.85), rgba(11, 8, 6, 0));
+    }
+
+    &[data-idle] {
+        cursor: none;
+    }
+}
+
+.layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    will-change: transform;
+}
+
+// While drifting, the wall moves under a still pointer. Nothing under it has been pointed at,
+// and the first real movement wakes the stage and hands the tiles back.
+.stage[data-drifting] .layer {
+    pointer-events: none;
+}
+
+.tile {
+    position: absolute;
+    display: block;
+    overflow: hidden;
+    border-radius: 3px;
+    background-color: var(--ps-well);
+    outline: none;
+    animation: arrive 700ms ease both;
+    transition:
+        transform 260ms ease,
+        box-shadow 420ms ease,
+        filter 700ms ease;
+
+    // The tile speaking (§14f): lit rather than pointed at. The ring is the tile's own
+    // shadow, which its `overflow: hidden` does not clip, and the transition above is what
+    // lets it fade off one tile while it rises on the next. Once lit it breathes, slowly.
+    &[data-voiced] {
+        z-index: 1;
+        transform: scale(1.05);
+        filter: brightness(1.06) saturate(1.08);
+        box-shadow: var(--ps-voice-glow);
+        animation:
+            arrive 700ms ease both,
+            voice-breathe 4.5s ease-in-out 420ms infinite;
+
+        .cover {
+            filter: none;
+        }
+    }
+
+    &[data-pointed],
+    &:focus-visible {
+        z-index: 1;
+        transform: scale(1.035);
+        box-shadow: var(--ps-hover-glow);
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 2px var(--mantine-color-brass-5);
+    }
+
+    // Pointed at while speaking: the hover's lift wins, and the breathing would override it.
+    &[data-voiced][data-pointed] {
+        animation: none;
+    }
+}
+
+// A spotlight: while a tile speaks, the rest of the wall steps back. A ring alone was lost
+// against bright footage; the contrast with its neighbours is what finds it.
+.stage[data-voicing] .tile:not([data-voiced]) {
+    filter: brightness(0.9) saturate(0.95);
+}
+
+@keyframes arrive {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes voice-breathe {
+    0%,
+    100% {
+        box-shadow: var(--ps-voice-glow);
+    }
+
+    50% {
+        box-shadow: var(--ps-voice-glow-soft);
+    }
+}
+
+.cover,
+.clip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cover {
+    // Held a little back, so the moment the clip takes over reads as the picture waking.
+    filter: saturate(0.85) brightness(0.85);
+}
+
+.clip {
+    transition: opacity 500ms ease;
+    pointer-events: none;
+}
+
+.cover {
+    transition: filter 500ms ease;
+}
+
+// The voice's player, over the montage. Held out of sight while cued; faded in once it has
+// frames, as the montage is.
+.voice {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 420ms ease;
+    pointer-events: none;
+
+    &[data-shown] {
+        opacity: 1;
+    }
+}
+
+// How far through its taste the speaking tile is: a hairline along the bottom edge.
+.voiceLine {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background-color: var(--mantine-color-brass-4);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+
+// Sound was refused for want of a gesture. The wall carries on silent; this says why, and the
+// first touch anywhere answers it.
+.unlock {
+    position: absolute;
+    left: 50%;
+    bottom: calc(24px + var(--ps-safe-bottom));
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 1px solid var(--mantine-color-brass-8);
+    border-radius: 999px;
+    color: var(--ps-title);
+    font: inherit;
+    font-size: var(--mantine-font-size-sm);
+    background-color: rgba(11, 8, 6, 0.65);
+    backdrop-filter: blur(8px);
+    transform: translateX(-50%);
+    cursor: pointer;
+    animation: arrive 420ms ease both;
+}
+
+.centre {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.chrome {
+    position: absolute;
+    top: calc(12px + var(--ps-safe-top));
+    right: calc(12px + var(--ps-safe-right));
+    z-index: 3;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background-color: rgba(11, 8, 6, 0.55);
+    backdrop-filter: blur(8px);
+    transition: opacity 420ms ease;
+
+    .stage[data-idle] & {
+        opacity: 0;
+        pointer-events: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tile {
+        animation: none;
+        transition: none;
+
+        &[data-pointed] {
+            transform: none;
+        }
+
+        &[data-voiced] {
+            animation: none;
+            transform: none;
+        }
+    }
+}

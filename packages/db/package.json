@@ -1,0 +1,46 @@
+{
+    "name": "@private-stock/db",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "description": "SQLite schema, migrations, and repositories",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "clean": "rimraf dist tsconfig.tsbuildinfo",
+        "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "db:init": "tsx src/cli/init.ts",
+        "db:migrate": "tsx src/cli/migrate.ts",
+        "db:migrate:rollback": "tsx src/cli/migrate.ts rollback",
+        "db:baseline": "tsx src/cli/baseline.ts",
+        "db:reset": "tsx src/cli/reset.ts",
+        "db:diagnose": "tsx src/cli/diagnose.ts"
+    },
+    "dependencies": {
+        "@private-stock/core": "workspace:*",
+        "better-sqlite3": "^11.8.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.2",
+        "@types/better-sqlite3": "^7.6.12",
+        "@types/node": "^22.10.5",
+        "@vitest/coverage-v8": "^4.1.11",
+        "eslint": "^9.18.0",
+        "rimraf": "^6.1.2",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.2",
+        "typescript-eslint": "^8.53.0",
+        "vitest": "^4.1.11"
+    }
+}

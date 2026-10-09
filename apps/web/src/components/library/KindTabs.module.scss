@@ -1,0 +1,19 @@
+/**
+ * The tabs as the first thing in the working row (`inline`).
+ *
+ * The full height of the row, so the active tab's underline lands on the row's own rule and
+ * the two read as one line. The list's own rule goes: the row draws one the whole width.
+ */
+.inlineRoot {
+    align-self: stretch;
+    display: flex;
+}
+
+.inlineList {
+    --tabs-list-border-width: 0px;
+    flex-wrap: nowrap;
+}
+
+.inlineTab {
+    height: 100%;
+}

@@ -1,0 +1,9 @@
+Keeps this directory in git, which is load-bearing rather than tidy.
+
+The Dockerfile copies apps/web/public into the runtime image. Git does not track
+empty directories, so without a file here a fresh clone has no public/ at all and
+`docker build` fails on that COPY with "failed to compute cache key ... not found"
+-- a message that names the layer rather than the cause. The repo built fine on
+any machine that had ever run the app, and failed on every clean checkout.
+
+Delete this once there is a favicon to replace it (ROADMAP, Loose ends).

@@ -1,0 +1,183 @@
+// The tasting (§14g): one thing at a time, edge to edge, in the study's darkness.
+
+.stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background-color: var(--ps-ground);
+    // Swipes are the stage's; the browser panning or zooming underneath would fight them.
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    overscroll-behavior: none;
+    cursor: pointer;
+
+    &[data-idle] {
+        cursor: none;
+    }
+}
+
+/**
+ * A film layer and a picture layer, one lit at a time.
+ *
+ * Faded rather than swapped, and never `display: none`: a hidden layer is where the next item is
+ * being made ready, and an element that is not rendered does not buffer.
+ */
+.layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 420ms ease;
+
+    &[data-live] {
+        z-index: 1;
+        opacity: 1;
+    }
+}
+
+.centre {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+
+    button {
+        pointer-events: auto;
+    }
+}
+
+/** The big play button, when the browser would not start the show without being asked. */
+.start {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    width: 88px;
+    height: 88px;
+    border: 0;
+    border-radius: 50%;
+    color: var(--mantine-color-brass-4);
+    background-color: rgba(11, 8, 6, 0.6);
+    backdrop-filter: blur(8px);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+
+    svg {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+// The pills share the showcase's look: glass over the picture, gone when nobody is using them.
+.chrome,
+.transport {
+    position: absolute;
+    z-index: 3;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background-color: rgba(11, 8, 6, 0.55);
+    backdrop-filter: blur(8px);
+    cursor: default;
+    transition: opacity 420ms ease;
+
+    .stage[data-idle] & {
+        opacity: 0;
+        pointer-events: none;
+    }
+}
+
+.chrome {
+    top: calc(12px + var(--ps-safe-top));
+    right: calc(12px + var(--ps-safe-right));
+}
+
+.transport {
+    bottom: calc(16px + var(--ps-safe-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/** The item's name, top left, for as long as the controls are up. */
+.title {
+    position: absolute;
+    z-index: 3;
+    top: calc(22px + var(--ps-safe-top));
+    left: calc(20px + var(--ps-safe-left));
+    // Clear of the top-right pill (three 44px buttons and their padding) on a phone.
+    max-width: calc(100% - 200px - var(--ps-safe-left) - var(--ps-safe-right));
+    color: var(--mantine-color-gray-3);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    transition: opacity 420ms ease;
+
+    .stage[data-idle] & {
+        opacity: 0;
+    }
+}
+
+/**
+ * How much of this item is left, along the bottom edge.
+ *
+ * Stays when the controls go: it is information rather than a control, and without it a held
+ * photograph and a running one look the same.
+ */
+.progress {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background-color: color-mix(in srgb, var(--mantine-color-brass-6) 22%, transparent);
+    pointer-events: none;
+}
+
+.progressFill,
+.progressDwell {
+    height: 100%;
+    background-color: var(--mantine-color-brass-6);
+    transform-origin: left center;
+    transform: scaleX(0);
+}
+
+// A film's line is drawn from its playhead, a frame at a time, by the stage.
+.progressFill {
+    will-change: transform;
+}
+
+// A photograph's is one sweep, paused in place while the show is held.
+.progressDwell {
+    animation: elapse var(--ps-dwell, 5000ms) linear forwards;
+
+    &[data-held] {
+        animation-play-state: paused;
+    }
+}
+
+@keyframes elapse {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+
+// Cuts instead of dissolves. The progress line keeps moving: it is information, and one slow
+// linear sweep is not the kind of motion the preference is about.
+@media (prefers-reduced-motion: reduce) {
+    .layer,
+    .chrome,
+    .transport,
+    .title {
+        transition: none;
+    }
+}

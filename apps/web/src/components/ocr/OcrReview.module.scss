@@ -1,0 +1,306 @@
+/**
+ * Reviewing text read from pictures (§5d).
+ *
+ * Built like the duplicates sheet (`DupeRow.module.scss`), because it is the same kind of visit:
+ * a long queue worked through by eye, a row at a time, with the picture deciding most rows.
+ */
+
+// ─── A row of either list ───────────────────────────────────────────────────
+
+.row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--ps-hairline);
+    // A brass edge marks the row the keyboard is on, without moving anything.
+    border-left: 3px solid transparent;
+    scroll-margin-block: 96px;
+
+    &[data-focused="true"] {
+        border-left-color: var(--mantine-color-brass-6);
+        background-color: var(--ps-surface);
+    }
+}
+
+// The tick, in a column of its own so the whole left edge is a 44px target.
+.tick {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 2px;
+    min-height: 44px;
+}
+
+.head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px var(--mantine-spacing-sm);
+}
+
+.headEnd {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.string {
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 14px;
+    color: var(--ps-text-warm);
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.stats {
+    font-size: 12px;
+    color: var(--mantine-color-oak-6);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+// ─── A matched string (the Matches tab) ─────────────────────────────────────
+
+// The frame decides most of these, so it leads the row instead of a tick.
+.matchRow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--mantine-spacing-sm);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--ps-hairline);
+    border-left: 3px solid transparent;
+    scroll-margin-block: 96px;
+
+    &[data-focused="true"] {
+        border-left-color: var(--mantine-color-brass-6);
+        background-color: var(--ps-surface);
+    }
+
+    @media (max-width: 48em) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+// What named a tag, picked out of the string without changing its colour.
+.matched {
+    background: none;
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--mantine-color-brass-5);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.candidates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--mantine-spacing-xs);
+    margin-top: 8px;
+}
+
+// One string an item shows, under the item's name. A second one is ruled off from the first.
+.queueString {
+    margin-top: var(--mantine-spacing-xs);
+
+    & + & {
+        padding-top: var(--mantine-spacing-xs);
+        border-top: 1px dashed var(--ps-hairline);
+    }
+}
+
+.candidate {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-xs);
+    min-height: 44px;
+    padding: 4px 10px;
+    border: 1px solid var(--ps-hairline);
+    border-radius: var(--mantine-radius-sm);
+    max-width: 100%;
+
+    // In the queue the whole chip ticks the name; in Rules it only shows what was decided.
+    &:is(label) {
+        cursor: pointer;
+    }
+
+    &[data-state="rejected"] .candidateName {
+        text-decoration: line-through;
+        color: var(--mantine-color-oak-5);
+    }
+}
+
+.candidateName {
+    overflow-wrap: anywhere;
+    color: var(--ps-title);
+}
+
+// ─── Pictures ───────────────────────────────────────────────────────────────
+
+// The samples under a string: a thumbnail and its file, a few across.
+.samples {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.sample {
+    flex: none;
+    width: 168px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.fileName {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--mantine-color-oak-5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thumb {
+    display: block;
+    flex: none;
+    line-height: 0;
+    border-radius: 3px;
+    overflow: hidden;
+    outline-offset: 2px;
+    box-shadow: inset 0 0 0 1px var(--ps-hairline);
+}
+
+.tile {
+    position: relative;
+    display: block;
+    background-repeat: no-repeat;
+    background-color: var(--ps-well);
+}
+
+// The text's box, in brass so it stands off any picture without hiding what is inside it.
+.box {
+    position: absolute;
+    border: 1.5px solid var(--mantine-color-brass-4);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+    border-radius: 1px;
+    pointer-events: none;
+}
+
+.cover {
+    display: block;
+    object-fit: cover;
+    background-color: var(--ps-well);
+}
+
+// ─── The items under an opened string, and the Items tab ───────────────────
+
+.itemList {
+    margin-top: var(--mantine-spacing-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-top: 1px solid var(--ps-hairline);
+}
+
+.item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--mantine-spacing-sm);
+    align-items: start;
+    padding: 8px 0;
+}
+
+.itemTitle {
+    font-size: 13px;
+    color: var(--ps-title);
+    overflow-wrap: anywhere;
+}
+
+.findings {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+}
+
+.finding {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+
+    > :last-child {
+        flex: 1;
+    }
+}
+
+// ─── One finding with its controls (shared with the details drawer) ───────
+
+// Wraps rather than squeezes: in the 420px details drawer the reach, the badge and four
+// controls would otherwise leave the text a few characters wide, broken mid-word. The text
+// keeps a readable width and the rest moves onto the line below it.
+.findingLine {
+    flex: 1;
+    min-height: 32px;
+    min-width: 0;
+    row-gap: 2px;
+
+    &[data-dismissed="true"] .findingText {
+        text-decoration: line-through;
+        text-decoration-color: var(--mantine-color-oxblood-5);
+        opacity: 0.6;
+    }
+}
+
+.findingText {
+    flex: 1 1 14ch;
+    min-width: 14ch;
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ps-text-warm);
+    word-break: break-all;
+    user-select: text;
+}
+
+.mono {
+    font-family: var(--mantine-font-family-monospace);
+}
+
+.badge {
+    flex: none;
+    text-transform: none;
+}
+
+.findingActions {
+    flex: none;
+}
+
+// ─── Loading more ──────────────────────────────────────────────────────────
+
+.more {
+    display: flex;
+    justify-content: center;
+    padding: var(--mantine-spacing-md) 0;
+}
+
+@media (max-width: 640px) {
+    .row {
+        padding-inline: 0;
+    }
+
+    // A swipeable strip rather than a wrap, as the duplicate copies are.
+    .samples {
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        padding-bottom: 4px;
+    }
+
+    .sample {
+        width: 132px;
+        scroll-snap-align: start;
+    }
+}

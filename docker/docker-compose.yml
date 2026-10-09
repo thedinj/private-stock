@@ -1,0 +1,29 @@
+# Local compose — the same image the NAS runs, differing only in mounts and CPU speed.
+#
+#   docker compose -f docker/docker-compose.yml up --build
+
+services:
+    private-stock:
+        build:
+            context: ..
+            dockerfile: docker/Dockerfile
+        image: private-stock:dev
+        restart: unless-stopped
+        ports:
+            - "8842:8842"
+        environment:
+            # The processing window is read against this clock (§7c). Without it the container
+            # runs UTC and a window set to "02:00-08:00" fires at whatever that is locally.
+            TZ: "America/Chicago"
+            PRIVATE_STOCK_LOG_LEVEL: debug
+        volumes:
+            # Media is always read-only unless a library is deliberately made writable for
+            # deletion (§18.1). Start read-only; loosen one when you mean to.
+            #
+            # The mount makes the files visible; adding the library in the admin page is what
+            # makes them catalogued.
+            - ../media:/media/local:ro
+            - private-stock-data:/data
+
+volumes:
+    private-stock-data:

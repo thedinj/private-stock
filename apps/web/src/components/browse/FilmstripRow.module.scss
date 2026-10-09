@@ -1,0 +1,212 @@
+// A shelf label with a strip of its bottles beside it: a tag, a companion, a view, a playlist.
+
+.row {
+    display: grid;
+    grid-template-columns: minmax(160px, 240px) minmax(0, 1fr) auto;
+    grid-template-areas: "label strip actions";
+    align-items: center;
+    gap: var(--mantine-spacing-md);
+    padding-block: var(--mantine-spacing-sm);
+    border-bottom: 1px solid var(--ps-hairline);
+
+    // A performer's portrait leads the row in a column of its own: inside the label it took 88
+    // pixels of a 160-240 pixel column, and the name wrapped and clipped in what was left.
+    &[data-pictured] {
+        grid-template-columns: 88px minmax(160px, 240px) minmax(0, 1fr) auto;
+        grid-template-areas: "picture label strip actions";
+    }
+}
+
+.label {
+    grid-area: label;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+// A performer's own picture (§6 "A tag's picture"): square, 88 pixels, 72 on a phone -- never
+// smaller, where a face stops being one. The face sits a little above the middle of the portrait,
+// so the square is taken from there.
+.portrait {
+    grid-area: picture;
+    display: block;
+    width: 88px;
+    height: 88px;
+    overflow: hidden;
+    border-radius: var(--mantine-radius-xs);
+    background-color: var(--ps-well);
+    border: 1px solid var(--ps-hairline);
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: 50% 35%;
+    }
+}
+
+// The portrait's column where this row has none, kept so the names stay in line.
+.slot {
+    grid-area: picture;
+}
+
+// A source's or keyword's own frame, leading the strip: the tag's, not one of its items.
+.own {
+    border-color: rgba(207, 166, 89, 0.55);
+}
+
+// The name and its heart, the heart riding on the name's first line however far it wraps.
+.nameLine {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.heart {
+    flex: none;
+    // Centred on the first line of a 20px name rather than on the whole clamped block.
+    margin-top: -1px;
+}
+
+// The display face, at the size of a shelf heading: this is the thing the row is about.
+.name {
+    font-family: var(--mantine-font-family-headings);
+    font-weight: 400;
+    font-size: 20px;
+    line-height: 1.2;
+    color: var(--ps-title);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    // Names are whatever somebody typed. Two lines, then clipped, so one essay of a tag
+    // cannot make its row three times the height of the others.
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 140ms ease;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--mantine-color-brass-3);
+        outline: none;
+    }
+}
+
+/**
+ * As many whole frames as fit, and never a sliver of one.
+ *
+ * A flex strip with `overflow: hidden` cuts the last frame wherever the edge happens to fall,
+ * which reads as a layout bug. Here the grid makes as many columns as the width allows, and any
+ * frame past them wraps to a second row that is zero pixels tall -- so the row shows six on a
+ * wide screen and three on a phone without any script measuring anything.
+ */
+.strip {
+    grid-area: strip;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    grid-template-rows: auto;
+    grid-auto-rows: 0;
+    column-gap: 6px;
+    row-gap: 0;
+    overflow: hidden;
+    // Room for the hover lift and glow, which `overflow: hidden` would otherwise clip.
+    padding: 4px;
+    margin: -4px;
+}
+
+.frame {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--mantine-radius-xs);
+    background-color: var(--ps-well);
+    border: 1px solid var(--ps-hairline);
+    box-shadow:
+        inset 0 1px 0 rgba(230, 210, 173, 0.06),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    &:hover,
+    &:focus-visible {
+        border-color: rgba(207, 166, 89, 0.45);
+        box-shadow: var(--ps-hover-glow);
+        transform: translateY(-2px);
+        outline: none;
+    }
+}
+
+.blank {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(145deg, #1c1611, #14100c);
+}
+
+.actions {
+    grid-area: actions;
+}
+
+// A phone: the label and its menu on one line, the strip under them at full width.
+@media (max-width: 48em) {
+    .row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "label actions"
+            "strip strip";
+        row-gap: var(--mantine-spacing-xs);
+    }
+
+    .name {
+        font-size: 18px;
+    }
+
+    // Picture, name and menu on one line, the strip under them.
+    .row[data-pictured] {
+        grid-template-columns: 72px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "picture label actions"
+            "strip strip strip";
+    }
+
+    .portrait {
+        width: 72px;
+        height: 72px;
+    }
+
+    // A thumb's worth on a phone (CLAUDE.md "Responsive"), without growing the glyph.
+    // Mantine sets `--ai-size` inline, so the box is sized directly rather than through it.
+    .heart :global(.mantine-ActionIcon-root) {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        margin-block: -8px;
+    }
+
+    .strip {
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .frame {
+        transition: none;
+
+        &:hover {
+            transform: none;
+        }
+    }
+}

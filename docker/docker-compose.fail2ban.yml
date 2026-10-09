@@ -1,0 +1,63 @@
+# fail2ban over Caddy's access log, as a second overlay (§12).
+#
+#   docker compose -f docker/docker-compose.qnap.yml \
+#                  -f docker/docker-compose.proxy.yml \
+#                  -f docker/docker-compose.fail2ban.yml up -d
+#
+# **Requires the Caddy overlay.** The log this reads is Caddy's, and the address it bans is
+# the one Caddy saw. Without a proxy in front there is no log and no trustworthy address, so
+# this file alone does nothing at all.
+#
+# Why it exists: the app's per-account control is a delay rather than a lockout, because a
+# lockout keyed on an email address is a remote off switch anybody who knows the address can
+# pull. That is the right trade, and its cost is that a patient attacker is slowed for ever
+# rather than stopped. Slowing them still spends a connection, a log line and a bcrypt hash
+# every time. This is the only layer in the stack that can make the attempts stop arriving.
+#
+# It is also the layer that answers the background noise an internet-facing deployment gets
+# regardless of anything this app does — scanners working through a list of paths, which
+# otherwise each cost a Next request.
+
+services:
+    fail2ban:
+        image: crazymax/fail2ban:latest
+        container_name: private-stock-fail2ban
+        restart: unless-stopped
+        depends_on:
+            - caddy
+
+        # The firewall it writes to is the host's. A container on the default bridge has its
+        # own netfilter namespace, so rules written there would apply to nothing that matters
+        # — the bans would appear in `fail2ban-client status` and traffic would keep arriving.
+        network_mode: host
+
+        cap_add:
+            # NET_ADMIN to write the rules; NET_RAW because the nftables action shells out to
+            # tools that want it. Deliberately not `privileged: true` — these two are what the
+            # job needs and the difference is the whole host.
+            - NET_ADMIN
+            - NET_RAW
+
+        environment:
+            TZ: "America/Chicago"
+            F2B_LOG_TARGET: "STDOUT"
+            F2B_LOG_LEVEL: "INFO"
+            # Bans that survive a restart. Without it, restarting the container — which the
+            # `unless-stopped` policy does on its own — quietly forgives everyone.
+            F2B_DB_PURGE_AGE: "7d"
+
+        volumes:
+            # Our filter and jail. Read-only: nothing in the container should be editing the
+            # policy it enforces.
+            - ./fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+            - ./fail2ban/filter.d:/etc/fail2ban/filter.d:ro
+
+            # The log to watch, from the named volume Caddy writes it to. Read-only, because
+            # a log reader has no business truncating the evidence.
+            - caddy-logs:/var/log/caddy:ro
+
+            # The ban database, so bans outlive the container.
+            - fail2ban-db:/var/lib/fail2ban
+
+volumes:
+    fail2ban-db:

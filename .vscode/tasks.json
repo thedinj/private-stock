@@ -1,0 +1,215 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Setup
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "label": "Setup: Install Dependencies",
+            "type": "shell",
+            "command": "pnpm install",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "new" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup: Initialize Database",
+            "type": "shell",
+            "command": "pnpm db:init",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup: Run Database Migrations",
+            "type": "shell",
+            "command": "pnpm db:migrate",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup: Rollback Last Migration",
+            "type": "shell",
+            "command": "pnpm db:migrate:rollback",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Build
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "label": "Build: All Packages",
+            "type": "shell",
+            "command": "pnpm build",
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Build: Shared Packages Only",
+            "type": "shell",
+            "command": "pnpm --filter @private-stock/core --filter @private-stock/db build",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$tsc"]
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Verify
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "label": "Verify: Typecheck",
+            "type": "shell",
+            "command": "pnpm typecheck",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Verify: Lint",
+            "type": "shell",
+            "command": "pnpm lint",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$eslint-stylish"]
+        },
+        {
+            "label": "Verify: Test",
+            "type": "shell",
+            "command": "pnpm test",
+            "group": { "kind": "test", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Verify: Test (integration, needs ffmpeg)",
+            "type": "shell",
+            "command": "pnpm test:integration",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            // What CI runs, so a green run here means a green run there.
+            "label": "Verify: All (typecheck + lint + test)",
+            "dependsOn": ["Verify: Typecheck", "Verify: Lint", "Verify: Test"],
+            "dependsOrder": "sequence",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Format: Write",
+            "type": "shell",
+            "command": "pnpm format",
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "problemMatcher": []
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Development (hot-reload)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "label": "Dev: Web (Hot-reload)",
+            "type": "shell",
+            "command": "pnpm dev",
+            "options": { "cwd": "${workspaceFolder}/apps/web" },
+            "isBackground": true,
+            "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^([^\\s].*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "(Local:|Ready in)"
+                }
+            }
+        },
+        {
+            "label": "Dev: Worker (Hot-reload)",
+            "type": "shell",
+            "command": "pnpm dev",
+            "options": { "cwd": "${workspaceFolder}/apps/worker" },
+            "isBackground": true,
+            "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^([^\\s].*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "private-stock worker"
+                }
+            }
+        },
+        {
+            "label": "Dev: Everything",
+            "dependsOn": ["Dev: Web (Hot-reload)", "Dev: Worker (Hot-reload)"],
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Docker
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        {
+            "label": "Docker: Build Image (local arch)",
+            "type": "shell",
+            "command": "docker build -f docker/Dockerfile -t private-stock:dev .",
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker: Build Multi-arch (amd64 + arm64)",
+            "type": "shell",
+            "command": "docker buildx build --platform linux/amd64,linux/arm64 -f docker/Dockerfile -t private-stock:latest .",
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker: Compose Up",
+            "type": "shell",
+            "command": "docker compose -f docker/docker-compose.yml up --build",
+            "isBackground": true,
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker: Compose Down",
+            "type": "shell",
+            "command": "docker compose -f docker/docker-compose.yml down",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Terminate All Tasks",
+            "command": "echo ${input:terminate}",
+            "type": "shell",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "terminate",
+            "type": "command",
+            "command": "workbench.action.tasks.terminate",
+            "args": "terminateAll"
+        }
+    ]
+}

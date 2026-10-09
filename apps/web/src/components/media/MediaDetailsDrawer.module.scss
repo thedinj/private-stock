@@ -1,0 +1,169 @@
+// The label and the house record, kept one click away from the film.
+
+.list {
+    display: flex;
+    flex-direction: column;
+}
+
+.row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--ps-hairline);
+}
+
+.key {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mantine-color-oak-5);
+    white-space: nowrap;
+}
+
+.value {
+    font-size: 14px;
+    color: var(--ps-text-warm);
+    text-align: right;
+    min-width: 0;
+    // A path is the one value that will not fit, and breaking it anywhere beats a drawer
+    // that scrolls sideways.
+    overflow-wrap: anywhere;
+}
+
+// A line that travels and gives out, rather than a border that stops.
+.rule {
+    height: 1px;
+    background: var(--ps-hairline-fade);
+}
+
+.ledgerRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+}
+
+.dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-color: var(--mantine-color-brass-4);
+}
+
+// Nothing has been attempted yet: hollow, so the recipe is visible in full without claiming
+// the work is done.
+.dot[data-state="pending"] {
+    background-color: transparent;
+    border: 1px solid var(--mantine-color-oak-7);
+}
+
+.dot[data-state="failed"] {
+    background-color: var(--mantine-color-oxblood-6);
+}
+
+// Ran, and correctly produced nothing — a clip too short to sample has no preview, and that
+// is an outcome rather than a fault (§7b).
+.dot[data-state="empty"],
+.dot[data-state="skipped"] {
+    background-color: var(--mantine-color-oak-6);
+}
+
+// On its way, whatever happened last time. After the state rules so it wins over them: the
+// row's words say "queued" or "running", and a dot still showing the old outcome would
+// contradict them. Hollow brass while it waits; filled and breathing while it runs.
+.dot[data-in-flight="queued"] {
+    background-color: transparent;
+    border: 1px solid var(--mantine-color-brass-4);
+}
+
+.dot[data-in-flight="running"] {
+    background-color: var(--mantine-color-brass-4);
+    border: none;
+    animation: working 1.4s ease-in-out infinite;
+}
+
+// Motion is switched off globally under `prefers-reduced-motion`, which leaves a solid dot.
+@keyframes working {
+    50% {
+        opacity: 0.35;
+    }
+}
+
+.ledgerName {
+    flex: 1;
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--mantine-color-oak-3);
+}
+
+.ledgerWhen {
+    font-size: 12px;
+    color: var(--mantine-color-oak-6);
+    white-space: nowrap;
+}
+
+.note {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--mantine-color-oak-3);
+
+    strong {
+        color: var(--ps-text-warm);
+        font-weight: 500;
+    }
+}
+
+/**
+ * The per-stage run control.
+ *
+ * Pushed to the end of its row and revealed on hover or focus, like the frame strip's
+ * controls: the ledger is read far more often than it is acted on, and a column of buttons
+ * down the side of a list of facts turns a record into a dashboard.
+ *
+ * Opacity rather than `display`, so it stays in the tab order — a keyboard user has no
+ * hover to reveal it with, and an element that is not rendered cannot take the focus that
+ * would reveal it.
+ */
+.ledgerRun {
+    /* `.ledgerName` already carries `flex: 1`, so this sits at the end of the row without
+       a margin of its own -- adding one would only open a gap after the date. */
+    opacity: 0;
+    transition: opacity 120ms;
+}
+
+.ledgerRow:hover .ledgerRun,
+.ledgerRow:focus-within .ledgerRun {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .ledgerRun {
+        opacity: 1;
+    }
+}
+
+/**
+ * A string read out of the picture.
+ *
+ * Monospace and selectable, because it is evidence rather than prose: a person checking a
+ * finding needs to see exactly which characters recognition elected — `0` against `O`, `l`
+ * against `1` — and a proportional face hides precisely the distinction they are looking
+ * for. Selectable because the obvious next move on a good finding is to copy it into a tag.
+ *
+ * `break-all` rather than a wrap at word boundaries: a watermark is often one long unbroken
+ * string, and the alternative to breaking it mid-token is a row that pushes its own controls
+ * off the edge of the panel.
+ */
+.foundText {
+    flex: 1;
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ps-text-warm);
+    word-break: break-all;
+    user-select: text;
+}

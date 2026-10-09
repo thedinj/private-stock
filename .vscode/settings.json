@@ -1,0 +1,72 @@
+{
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.rulers": [100],
+    "files.eol": "\n",
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/node_modules": true,
+        "**/dist": true,
+        "**/.next": true,
+        "**/.next-dev": true,
+        "**/.turbo": true,
+        "**/coverage": true
+    },
+    "files.associations": {
+        "*.sql": "sql"
+    },
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "typescript.preferences.importModuleSpecifier": "non-relative",
+    "eslint.workingDirectories": [
+        { "directory": "./packages/core", "changeProcessCWD": true },
+        { "directory": "./packages/db", "changeProcessCWD": true },
+        { "directory": "./apps/web", "changeProcessCWD": true },
+        { "directory": "./apps/worker", "changeProcessCWD": true }
+    ],
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/dist": true,
+        "**/.next": true,
+        "**/.next-dev": true,
+        "**/.turbo": true,
+        "**/coverage": true,
+        "pnpm-lock.yaml": true,
+        "**/data/**": true,
+        "**/.claude/**": true
+    },
+    "vitest.disableWorkspaceWarning": true,
+    // Git Bash for this workspace only — a workspace setting, so it does not touch how
+    // terminals behave in your other projects.
+    //
+    // The profile is defined explicitly rather than relying on autodetection, which is
+    // silent when it fails: VS Code falls back to PowerShell and nothing says why. `-l`
+    // makes it a login shell so ~/.bash_profile is sourced and PATH matches what you get
+    // from a Git Bash window opened outside the editor.
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "terminal.integrated.profiles.windows": {
+        "Git Bash": {
+            "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+            "args": ["-l"],
+            "icon": "terminal-bash"
+        },
+        "PowerShell": {
+            "source": "PowerShell",
+            "icon": "terminal-powershell"
+        }
+    },
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "git.ignoreLimitWarning": true,
+    "debug.javascript.autoAttachFilter": "smart",
+    "debug.internalConsoleOptions": "neverOpen",
+    "debug.terminal.clearBeforeReusing": true
+}

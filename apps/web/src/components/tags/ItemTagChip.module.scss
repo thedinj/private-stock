@@ -1,0 +1,218 @@
+// A tag on an item: a name to follow and a × to take it off, two targets in one chip.
+//
+// Dressed as the library's filter chips are (`ActiveFilterBar`: a light brass badge, the theme's
+// 4px corner, the close glyph), because they are the same object -- a tag -- seen from the other
+// side. A round grey pill here was the only full-radius thing in a row of 4px inputs.
+
+.chip {
+    display: inline-flex;
+    align-items: stretch;
+    max-width: 100%;
+    height: 1.625rem;
+    border-radius: var(--mantine-radius-sm);
+    background: var(--mantine-color-brass-light);
+    color: var(--mantine-color-brass-light-color);
+    border: 1px solid transparent;
+    font-size: var(--mantine-font-size-sm);
+    line-height: 1;
+    transition: opacity 140ms ease;
+
+    // Still on its way to the server: there, but not yet anything to follow.
+    &[data-pending] {
+        opacity: 0.6;
+    }
+
+    // A suggestion has to look like one, or phase 10 quietly becomes indistinguishable from
+    // what a person actually asserted. The badge over the box says so; this says which.
+    &[data-source="ai"] {
+        background: transparent;
+        border: 1px dashed var(--mantine-color-brass-8);
+    }
+}
+
+// Both halves: a tint on hover so the chip reads as something to press, and a ring on keyboard
+// focus. A colour change alone on 26px of text is not a focus indicator anyone can find.
+.name,
+.end {
+    display: flex;
+    align-items: center;
+    color: inherit;
+    transition:
+        color 140ms ease,
+        background-color 140ms ease;
+
+    &:is(button):hover {
+        background: var(--mantine-color-brass-light-hover);
+    }
+
+    &:is(button):focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 2px var(--mantine-color-brass-5);
+    }
+}
+
+.name {
+    min-width: 0;
+    padding-inline: 0.5rem 0.25rem;
+    border-radius: var(--mantine-radius-sm) 0 0 var(--mantine-radius-sm);
+
+    &:is(button):hover,
+    &:is(button):focus-visible {
+        color: var(--mantine-color-brass-2);
+    }
+}
+
+// The text in its own box: an ellipsis needs a block that clips, and the flex parent that centres
+// it vertically is not one -- a long name was cut mid-letter instead.
+.label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.end {
+    flex: none;
+    justify-content: center;
+    width: 1.5rem;
+    padding-right: 0.125rem;
+    border-radius: 0 var(--mantine-radius-sm) var(--mantine-radius-sm) 0;
+
+    &:is(button):hover,
+    &:is(button):focus-visible {
+        color: var(--mantine-color-oxblood-3);
+    }
+}
+
+/**
+ * A tag with a picture (§6 "A tag's picture"): the picture, the name beside it, the × at the end.
+ *
+ * The picture is 88 pixels across, 72 on a phone -- the size Review › Faces draws a face at, and
+ * the smallest this app draws any picture of somebody. A performer is a portrait; anything else
+ * is a frame, at the width of a filmstrip's frame so it is not a sliver.
+ *
+ * Beside, not under: under an 88-pixel portrait the name had about sixty pixels, and most names
+ * were cut off. Beside it, the name wraps to three lines in a card as wide as it needs.
+ */
+.card {
+    --picture-width: 88px;
+
+    display: inline-flex;
+    align-items: stretch;
+    max-width: min(100%, 280px);
+    border-radius: var(--mantine-radius-sm);
+    background: var(--mantine-color-brass-light);
+    color: var(--mantine-color-brass-light-color);
+    border: 1px solid transparent;
+    overflow: hidden;
+    font-size: var(--mantine-font-size-sm);
+    line-height: 1.3;
+
+    &:not([data-portrait]) {
+        --picture-width: 132px;
+    }
+
+    &[data-source="ai"] {
+        background: transparent;
+        border: 1px dashed var(--mantine-color-brass-8);
+    }
+
+    // The × at the top, beside the name's first line, rather than centred down a tall card.
+    .end {
+        align-self: flex-start;
+        height: 1.75rem;
+    }
+}
+
+.cardPicture {
+    flex: none;
+    display: block;
+    width: var(--picture-width);
+    aspect-ratio: 16 / 9;
+    background: var(--ps-well);
+
+    .card[data-portrait] & {
+        aspect-ratio: 4 / 5;
+    }
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 2px var(--mantine-color-brass-5);
+    }
+}
+
+.cardName {
+    flex: 1 1 auto;
+    min-width: 5rem;
+    display: flex;
+    align-items: flex-start;
+    padding: 0.375rem 0.125rem 0.375rem 0.5rem;
+    color: inherit;
+    text-align: left;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--mantine-color-brass-2);
+        outline: none;
+    }
+}
+
+// Whole words, three lines, then clipped: a name is whatever somebody typed.
+.cardLabel {
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+@media (max-width: 48em) {
+    .card {
+        --picture-width: 72px;
+
+        &:not([data-portrait]) {
+            --picture-width: 108px;
+        }
+    }
+}
+
+/**
+ * A finger's reach, as the filter bar's chips have it.
+ *
+ * The chip stays small, because a row of 44px chips under every facet would outweigh the video
+ * they describe, and each half grows an invisible margin to 44px tall on a touch screen. The ×
+ * widens too: it sits right beside the name, and a thumb meant for one must not land on the
+ * other.
+ */
+@media (pointer: coarse) {
+    .chip {
+        height: 2rem;
+    }
+
+    // `min-height: 0` against the global 44px for buttons, which stood each half 44px tall in
+    // a 32px chip and pushed the name below the middle. The reach is the margin below instead.
+    .name,
+    .end,
+    .cardName {
+        position: relative;
+        min-height: 0;
+    }
+
+    .name::after,
+    .end::after {
+        content: "";
+        position: absolute;
+        inset: -0.375rem 0;
+    }
+
+    .end {
+        width: 2.25rem;
+    }
+}

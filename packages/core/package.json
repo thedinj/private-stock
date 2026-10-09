@@ -1,0 +1,44 @@
+{
+    "name": "@private-stock/core",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "description": "Shared domain model, Zod schemas, typed errors, and pure utilities",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./server": {
+            "types": "./dist/server/index.d.ts",
+            "import": "./dist/server/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "clean": "rimraf dist tsconfig.tsbuildinfo",
+        "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "onnxruntime-node": "1.22.0",
+        "zod": "^3.25.76"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.2",
+        "@types/node": "^22.10.5",
+        "@vitest/coverage-v8": "^4.1.11",
+        "eslint": "^9.18.0",
+        "ffmpeg-static": "^5.2.0",
+        "ffprobe-static": "^3.1.0",
+        "rimraf": "^6.1.2",
+        "typescript": "^5.7.2",
+        "typescript-eslint": "^8.53.0",
+        "vitest": "^4.1.11"
+    }
+}

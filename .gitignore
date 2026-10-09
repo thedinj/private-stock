@@ -1,0 +1,86 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js
+.next/
+.next-dev/
+out/
+build/
+
+# Production
+dist/
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+pnpm-debug.log*
+
+# Local env and config
+.env
+.env*.local
+config.json
+secret.key
+
+# Where this machine's NAS lives, for docker/ship.sh (see docker/deploy.env.example)
+docker/deploy.env
+docker/rollout.env
+
+# Saved images waiting to be shipped, and the ones kept for a rollback
+/dist-image/
+/private-stock*.tar.gz
+
+# Turbo
+.turbo
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Runtime data directory (db, artifacts, variants, trash, backups)
+/data/
+/media/
+
+# Generated test fixtures
+/scripts/fixtures/out/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Throwaway Chrome profile for the debugger (see .vscode/launch.json)
+.vscode/.chrome-debug-profile/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+*.stackdump
+
+# Model files fetched by `pnpm models:fetch` (§5e); only the manifest is committed
+/models/*
+!/models/manifest.json
+
+# Impeccable, the design skill: installed per machine, not part of the project
+.claude/skills/impeccable/
+.claude/agents/impeccable-*
+.impeccable.md
+
+# The real QNAP compose file: share paths, time zone, caps (see docker-compose.qnap.example.yml)
+docker/docker-compose.qnap.yml
+
+# Personal runbook for this network's Pi; kept locally
+docs/PI-TO-ETHERNET.md
+
+# Machine-local one-off scripts
+scripts/local/

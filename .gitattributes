@@ -1,0 +1,7 @@
+# Normalise line endings so a Windows dev box and the Linux image agree.
+# entrypoint.sh in particular must stay LF or the container cannot exec it.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.mp4 binary

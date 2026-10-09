@@ -1,0 +1,45 @@
+{
+    "name": "private-stock",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Self-hosted media cataloger and viewer",
+    "workspaces": [
+        "packages/*",
+        "apps/*"
+    ],
+    "scripts": {
+        "dev": "turbo run dev",
+        "build": "turbo run build",
+        "test": "turbo run test",
+        "test:integration": "turbo run test:integration",
+        "lint": "turbo run lint",
+        "typecheck": "turbo run typecheck",
+        "clean": "turbo run clean && rm -rf node_modules",
+        "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+        "db:migrate": "pnpm --filter @private-stock/db db:migrate",
+        "db:migrate:rollback": "pnpm --filter @private-stock/db db:migrate:rollback",
+        "db:init": "pnpm --filter @private-stock/db db:init",
+        "db:baseline": "pnpm --filter @private-stock/db db:baseline",
+        "db:reset": "pnpm --filter @private-stock/db db:reset",
+        "db:diagnose": "pnpm --filter @private-stock/db db:diagnose",
+        "ocr:calibrate": "node scripts/ocr-calibrate.mjs",
+        "models:fetch": "node scripts/fetch-models.mjs",
+        "icons:render": "node scripts/render-icons.mjs",
+        "bench:seed": "pnpm --filter @private-stock/worker bench:seed",
+        "bench": "pnpm --filter @private-stock/worker bench",
+        "bench:embed": "pnpm --filter @private-stock/worker bench:embed"
+    },
+    "devDependencies": {
+        "prettier": "^3.4.2",
+        "turbo": "^2.8.13",
+        "typescript": "^5.7.2"
+    },
+    "engines": {
+        "node": ">=22",
+        "pnpm": ">=10"
+    },
+    "packageManager": "pnpm@10.28.0",
+    "dependencies": {
+        "zod": "^3.25.76"
+    }
+}

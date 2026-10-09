@@ -1,0 +1,175 @@
+# QNAP Container Station.
+#
+# Copy to docker-compose.qnap.yml and make it yours -- that name is git-ignored, because it
+# holds *your* share paths, time zone, PUID/PGID and resource caps, and it is the file ship.sh
+# sends and rollout.sh starts. This example is the author's, with the addresses and folder
+# names replaced.
+#
+#   cp docker/docker-compose.qnap.example.yml docker/docker-compose.qnap.yml
+#
+# Adjust the share paths: /share/CACHEDEV1_DATA/<share> is the usual QTS layout, but check
+# yours with `ls /share` over SSH.
+
+services:
+    private-stock:
+        image: private-stock:latest
+        container_name: private-stock
+        restart: unless-stopped
+
+        ports:
+            # Loopback only, because Caddy is the front door (docker-compose.proxy.yml).
+            #
+            # The address prefix is the whole of it: "8842:8842" binds every interface, so the
+            # app answers anything on the LAN; "127.0.0.1:8842:8842" binds the NAS's loopback,
+            # so only the NAS itself can reach it.
+            #
+            # **This does not cut Caddy off.** Caddy reaches the app as `private-stock:8842`
+            # over the compose network, container to container, which is a different path from
+            # the published port entirely. Publishing is for the host; the bridge is for the
+            # containers.
+            #
+            # Without the prefix there are two ways in, and the plain one is worse in both
+            # directions: it skips the forwarded headers the app needs to identify a caller,
+            # and it is HTTP/1.1, so a browser that finds it is back to six connections and the
+            # queueing in §20 with nothing to say why.
+            #
+            # To reach the app when the proxy itself is broken, tunnel rather than reopening
+            # the port:  ssh -L 8842:127.0.0.1:8842 admin@192.168.1.10
+            #
+            # Drop the prefix to run without any proxy at all. QTS occupies 8080, 8081, 443 and
+            # 8443; 8842 stays clear of all of them.
+            - "127.0.0.1:8842:8842"
+
+        environment:
+            # Files the app writes land with sane QNAP ownership. Find yours with
+            # `id <username>` over SSH; 1000/100 is the common default for the first admin.
+            PUID: "1000"
+            PGID: "100"
+            # Load-bearing since quiet hours (§7c): the processing window is read against the
+            # container's local clock, so a container left on UTC runs its "overnight" window
+            # in the middle of your afternoon. The processing card shows the server's own
+            # clock precisely so that mismatch is visible rather than mysterious.
+            TZ: "America/Chicago"
+            PRIVATE_STOCK_LOG_LEVEL: "info"
+
+            # Request timing and event-loop delay, for the performance work in §20 — see
+            # "When it is slow and you need to know why" in docker/README.md.
+            #
+            # **Temporary.** Remove it once the numbers have been read: a diagnostic that floods
+            # stdout can block the process it is diagnosing, which is why it is opt-in at all.
+            #
+            # It lives in *this* file rather than in the copy on the NAS because
+            # `PS_SEND_COMPOSE=1` in deploy.env makes `ship.sh` overwrite that copy on every
+            # deployment — an edit made over SSH survives until the next `ship.sh` and no longer.
+            PRIVATE_STOCK_REQUEST_LOG: "1"
+
+            # One line per statement slower than this, in both processes — the level below
+            # `[slow]` and `[loop]`, which can say a handler blocked for 19 seconds without
+            # saying which query did it. Temporary in the same way, and for the same reason.
+            PRIVATE_STOCK_SQL_SLOW_MS: "250"
+
+            # SQLite reads with pread instead of a memory map. On this box `/data` shares one
+            # linear HDD volume with the media, whose readahead is 32 MB: a fault on a mapped
+            # page is served by readaround of that size, on the web process's only thread,
+            # behind ffmpeg's reads. Measured with the map on, 10.7 MB of the 127 MB database
+            # stayed resident and a primary-key lookup took 1-4 s (§20). pread of a 4 KB page
+            # on a random pattern triggers no readahead at all.
+            PRIVATE_STOCK_SQLITE_MMAP_MB: "0"
+
+            # How many reverse proxies of your own stand in front. 0 is correct here: this
+            # file publishes the app straight onto the LAN, so `X-Forwarded-For` is whatever
+            # the caller typed and must not be believed.
+            #
+            # docker-compose.proxy.yml sets this to 1 when it puts Caddy in front. Raising it
+            # without a proxy actually being there is the dangerous direction — it makes the
+            # app trust a header the client controls, which is how somebody gets locked out
+            # of their own account by a forged address. See docker/README.md.
+            PRIVATE_STOCK_TRUSTED_PROXY_HOPS: "0"
+
+        volumes:
+            # Media, read-only except for the folders listed below it. Mounting a share makes it *visible* to the app; an admin then
+            # adds it as a library in the admin page, which is what makes it catalogued.
+            # Mounting under /media is only a convention — those directories are offered as
+            # one-click suggestions when adding a library. Any visible path works.
+            #
+            # One mount for the whole tree, rather than one per folder: every subdirectory
+            # shows up as a suggestion, so adding Movies, TV or Sports later is a click in the
+            # admin page instead of an edit here and a container restart.
+            #
+            # It also means "@Recently-Snapshot" is visible, and that is fine — QNAP's own
+            # snapshot tree is a near-complete second copy of the library, so cataloguing it
+            # would hand duplicate detection a phantom match for almost every item. Visible is
+            # not catalogued. Do not add it as a library.
+            - /share/CACHEDEV1_DATA/Multimedia:/media/multimedia:ro
+
+            # Libraries that can be deleted from: one line each, and this list is the only place
+            # that decides it. Deletion is the only write the app ever performs inside a
+            # library (§18.1), and it also needs the library flagged "Deletable" in the admin
+            # page. The app checks for one of these lines when that is switched on and refuses
+            # if there is none, naming the folder.
+            #
+            # Each line lays a writable mount over its folder *at the path the read-only mount
+            # above already gives it*. Docker lets the more specific mount win, so the library
+            # keeps its path -- nothing to repoint -- and every folder not listed here stays
+            # read-only at the kernel, whatever the app believes. Mount one folder per line,
+            # never the whole tree, or that guarantee is gone.
+            #
+            # A container's mounts are fixed when it is created, so a change here takes effect
+            # on the next `./docker/ship.sh --send-compose --rollout`.
+            - /share/CACHEDEV1_DATA/Multimedia/Downloads:/media/multimedia/Downloads:rw
+
+            # Database, artifacts, variants, trash, backups. Put this on a fast volume if
+            # you have one — it holds the sprite sheets every grid scroll reads.
+            - /share/CACHEDEV1_DATA/private-stock-data:/data
+
+        # Container Station will happily let a runaway ffmpeg take the box down, and this box
+        # has little to give: 4 GB total, of which about 1.75 GB is free once the app this
+        # replaces was stopped for good. So the cap is set against what is *available* rather
+        # than what is installed -- the installed figure would be a promise the NAS cannot
+        # keep, and the way that fails is the kernel killing whichever process it likes,
+        # mid-job.
+        #
+        # Deliberately short of the full 1.75 GB: the remainder is page cache, and the sprite
+        # sheets every grid scroll reads are exactly what wants to live there. Raise it after
+        # watching a real scan if the worker turns out to want more.
+        #
+        # 2 of 4 cores, because Plex and QTS are on the same silicon. ffmpeg will use every
+        # core it is given and the web UI shares this container; an unbounded transcode makes
+        # the library unresponsive while it runs. The worker holds each ffmpeg to the threads
+        # its job has a slot for (`threadsPerJob`), which is what keeps the quota from running
+        # out and freezing the web process with it (§20).
+        mem_limit: 1536m
+        cpus: 2.0
+
+        # Never swap the processes out to make room for file cache. Measured at the cap, with
+        # ~195 GB of media streamed through a 1.2 GB page cache, the kernel had swapped 53 MB of
+        # Node heap -- and a swapped-out page of the web process is a stall on its only thread
+        # the next time it is touched. File pages are the ones to give back: they are only
+        # media passing through (§20).
+        mem_swappiness: 0
+
+        # QuickSync/VAAPI. This box is an i3-4170 (Haswell, HD Graphics 4400), which does
+        # H.264 in hardware -- worth having on a 4-core CPU that also runs QTS, where software
+        # encoding is the difference between a library that finishes processing overnight and
+        # one that never catches up.
+        #
+        # Set hwaccel to "vaapi" in the admin settings after first boot. The device existing on
+        # the host and being usable in here are separate questions -- QTS ships it root-only,
+        # and entrypoint.sh hands it to PUID:PGID before dropping privileges -- so prove it as
+        # the user the app actually runs as, with the same device and filter chain
+        # packages/core/src/transcode.ts builds:
+        #
+        #   docker exec -u 1000:100 private-stock ffmpeg -hide_banner         #       -vaapi_device /dev/dri/renderD128         #       -f lavfi -i testsrc=duration=1:size=640x480:rate=30         #       -vf format=nv12,hwupload -c:v h264_vaapi -f null -
+        #
+        # A quicker first look, once the image carries the VA drivers: vainfo names the driver
+        # libva loaded and lists its profiles. No VAEntrypointEncSlice against
+        # VAProfileH264High means this chip will decode in hardware and encode in software,
+        # whatever the setting says.
+        #
+        #   docker exec -u 1000:100 private-stock vainfo
+        #
+        # The admin settings page has a "Test" button beside the dropdown that does all of
+        # this from the UI, against the same arguments the real jobs use. These commands are
+        # the same check from a shell, for when the answer is wanted before the app is up.
+        devices:
+            - /dev/dri:/dev/dri

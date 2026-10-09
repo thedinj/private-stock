@@ -1,0 +1,217 @@
+/**
+ * One duplicate group as a row of the triage sheet (§10c).
+ *
+ * Dense on purpose. The old card showed one group per screen, which across ~870 groups was a
+ * queue people read and abandoned; the sheet is built so a page of fifty can be judged by eye
+ * in a minute. The picture and four numbers decide almost every group, so those stay and
+ * everything else — the path, the full title — moves to a tooltip.
+ */
+.row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--ps-hairline);
+    // A brass edge marks the row the keyboard is on, without moving anything.
+    border-left: 3px solid transparent;
+    scroll-margin-block: 96px;
+
+    &[data-focused="true"] {
+        border-left-color: var(--mantine-color-brass-6);
+        background-color: var(--ps-surface);
+    }
+}
+
+// The tick, in a column of its own so the whole left edge is a 44px target.
+.tick {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 2px;
+    min-height: 44px;
+}
+
+.head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px var(--mantine-spacing-xs);
+    margin-bottom: 6px;
+}
+
+.headEnd {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-xs);
+}
+
+.strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.copy {
+    // A button, so choosing the keeper is one press and works from the keyboard as well.
+    all: unset;
+    box-sizing: border-box;
+    flex: none;
+    width: 176px;
+    padding: 4px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:focus-visible {
+        outline: 2px solid var(--mantine-color-brass-5);
+        outline-offset: 1px;
+    }
+
+    &[aria-disabled="true"] {
+        cursor: default;
+    }
+
+    // The copy that survives is lit, the way the old cards were: a border alone is easy to
+    // miss at a glance across a page, which is exactly the glance this screen is read with.
+    &[data-fate="keep"] {
+        border-color: var(--mantine-color-brass-6);
+        background-color: var(--mantine-color-brass-light);
+    }
+
+    // Faded rather than hidden: the reviewer is still comparing it against the keeper.
+    &[data-fate="trash"] .cover img {
+        opacity: 0.5;
+        filter: grayscale(0.5);
+    }
+}
+
+.cover {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 3px;
+    overflow: hidden;
+    background-color: var(--ps-well);
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+}
+
+// What happens to this copy, said on the picture so it is read with it.
+.fate {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background-color: rgba(0, 0, 0, 0.72);
+    color: var(--ps-text-warm);
+
+    [data-fate="keep"] & {
+        background-color: var(--mantine-color-brass-7);
+        color: var(--mantine-color-dark-9);
+    }
+
+    [data-fate="trash"] & {
+        background-color: var(--mantine-color-oxblood-8);
+        color: var(--mantine-color-oak-0);
+    }
+}
+
+// The key that picks this copy, only on the row the keyboard is on.
+.key {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 18px;
+    padding: 0 4px;
+    border-radius: 2px;
+    font-size: 11px;
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.72);
+    color: var(--ps-text-warm);
+}
+
+// Wraps rather than truncates: the numbers are what the row is judged by, and an ellipsis ate
+// the bitrate — the one that decides a group whose copies share a resolution.
+.stats {
+    margin-top: 4px;
+    font-size: var(--mantine-font-size-xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+}
+
+.note {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+// The item's name, linking to its page; as wide as the copy above it.
+.title {
+    display: block;
+    width: 176px;
+    padding-inline: 6px;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+
+    &:hover {
+        color: var(--ps-text-warm);
+        text-decoration: underline;
+    }
+}
+
+.cautions {
+    margin-top: 6px;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-oxblood-3);
+}
+
+/**
+ * On a phone the copies scroll sideways in a strip rather than wrapping, so every row stays one
+ * picture tall and the page can still be read top to bottom with a thumb.
+ */
+@media (max-width: 640px) {
+    .row {
+        padding-inline: 0;
+    }
+
+    .strip {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        padding-bottom: 4px;
+    }
+
+    .copy,
+    .title {
+        width: 148px;
+    }
+
+    .copy {
+        scroll-snap-align: start;
+    }
+}

@@ -1,0 +1,311 @@
+// The rack: tiles read as bottles laid in oak, lit warm on hover.
+
+.tile {
+    // The warm surface, not Mantine's grey dark-7. `surfaceDark` has been in the theme since
+    // it was written and nothing had ever read it.
+    background-color: var(--ps-surface);
+    border: 1px solid var(--ps-hairline);
+    color: inherit;
+    text-decoration: none;
+    overflow: hidden;
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+
+    &:hover,
+    &:focus-visible {
+        // Candle-warm rather than a blue focus ring, and a lift small enough that a wall of
+        // tiles moving under the cursor does not feel like the grid is shifting.
+        border-color: rgba(207, 166, 89, 0.45);
+        box-shadow:
+            0 0 0 1px rgba(207, 166, 89, 0.35),
+            0 8px 28px -10px rgba(207, 166, 89, 0.4);
+        transform: translateY(-2px);
+        outline: none;
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 2px var(--mantine-color-brass-5);
+    }
+}
+
+.thumb {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: var(--ps-well);
+    // Inset shadow gives the tile depth, as if set into the shelf.
+    box-shadow:
+        inset 0 1px 0 rgba(230, 210, 173, 0.06),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+// Sits exactly over the cover so the cross-fade has nothing to shift.
+.preview {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    // Fades in only once frames arrive, so a slow preview never flashes a black rectangle
+    // over a perfectly good cover.
+    transition: opacity 220ms ease;
+    pointer-events: none;
+}
+
+.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(145deg, #1c1611, #14100c);
+}
+
+// Inset to match the text block below, not to a number of its own: the badges belong to
+// the same column the title does, and 6px against the title's 10px left them visibly
+// outside it.
+.duration {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    opacity: 0.92;
+}
+
+// A look's matching frame, over the cover (§5e): a crop of the sprite sheet, filling the frame.
+// Under the preview, which still plays on hover.
+.moment {
+    position: absolute;
+    inset: 0;
+    // Over the cover, so the sides of the square are the frame's ground rather than a
+    // different picture of the same item.
+    background: var(--ps-well);
+}
+
+// The full height of the tile, as wide as it is tall, centred.
+.momentSquare {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    aspect-ratio: 1 / 1;
+    transform: translateX(-50%);
+}
+
+// Bottom left, opposite the duration and at the same inset: the two badges are the frame's
+// facts, read together. Brass stars, as the rating has always been drawn, on the duration's
+// dark ground so they read on any picture. Faded out under the hover details, which take the
+// foot of the picture and would otherwise be printed over it.
+.rating {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    opacity: 0.92;
+    letter-spacing: 1px;
+    transition: opacity 160ms ease;
+}
+
+.stars {
+    color: var(--mantine-color-brass-4);
+}
+
+.tile:hover .rating,
+.tile:focus-visible .rating {
+    opacity: 0;
+}
+
+// Top right, opposite the selection checkbox. They used to share the top left on the theory
+// that the two were never read at once -- which held only while the checkbox was hidden. On a
+// touch device it never is, and mid-selection a ticked tile keeps it, so the heart vanished
+// under the box on exactly the tiles someone was sorting through.
+.favorite {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tile {
+        transition: none;
+
+        &:hover {
+            transform: none;
+        }
+    }
+
+    // Belt and braces: the budget refuses previews entirely under reduced motion, so this
+    // should never have anything to hide. It costs nothing and covers the case where a
+    // viewer changes the setting while the page is open.
+    .preview {
+        display: none;
+    }
+}
+
+// One line, cut with an ellipsis; the whole title is the element's `title` and the item page's
+// heading.
+//
+// It used to be two, always -- reserved so a one-line title could not pull its metadata up
+// and leave the cards lined up and their contents not. One line keeps that rhythm for free and
+// gives a row of the rack one line of small print fewer to read.
+// The caption under the picture. 10px at the sides, where it lines up with the badges' inset;
+// 6px above and below, because two lines of small print do not need the room of a card body
+// -- at 10px all round the caption was half the height of the picture above it.
+.caption {
+    padding: 6px 10px 7px;
+}
+
+.title {
+    line-height: 1.3;
+}
+
+/**
+ * Tag chips, and the row they sit in.
+ *
+ * `nowrap` with each name clipped rather than wrapped: two chips of unpredictable length
+ * must not be allowed to become two lines on one tile and one line on the next, which is the
+ * ragged grid §14b rejects. A long name is truncated and the title attribute is not offered
+ * — the item page is one click away and has the whole list.
+ */
+.tags {
+    overflow: hidden;
+}
+
+.tag {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 6px;
+    border-radius: var(--mantine-radius-sm);
+    border: 1px solid var(--ps-hairline);
+    color: var(--mantine-color-dimmed);
+}
+
+/**
+ * The grid's details on hover: resolution and the tag chips, along the foot of the picture.
+ *
+ * Clear of the duration badge on the right, over a shade of the ground so the chips read on a
+ * bright frame, and faded rather than displayed so nothing reflows when the pointer arrives.
+ * Never shown without a hover to show it: a phone gets them in Gallery.
+ */
+.hoverInfo {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    padding: 24px 72px 10px 10px;
+    background: linear-gradient(
+        to top,
+        color-mix(in srgb, var(--ps-ground) 85%, transparent),
+        transparent
+    );
+    opacity: 0;
+    transition: opacity 160ms ease;
+    pointer-events: none;
+
+    .tag {
+        color: var(--ps-text-warm);
+        border-color: var(--ps-hairline-strong);
+    }
+}
+
+.tile:hover .hoverInfo,
+.tile:focus-visible .hoverInfo {
+    opacity: 1;
+}
+
+.hoverResolution {
+    flex-shrink: 0;
+    color: var(--ps-text-warm);
+}
+
+/** Never squeezed out by the names it is counting. */
+.more {
+    flex-shrink: 0;
+}
+
+/**
+ * The line under the title, held at one line of small print whether or not it has anything
+ * in it. The date used to fill it on every tile; without it, an item with no performers and
+ * no rating would be a line shorter than its neighbours, and the rack would go ragged.
+ */
+.meta {
+    font-size: var(--mantine-font-size-xs);
+    line-height: var(--mantine-line-height-xs);
+    min-height: 1lh;
+}
+
+/**
+ * The performers under the title: takes what the row has left and clips, so the stars beside
+ * it keep their place and a long cast never becomes a second line.
+ */
+.byline {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/** The stars and the resolution: never squeezed by the names, never the thing that wraps. */
+.fixed {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/**
+ * The selection checkbox.
+ *
+ * Hidden until the tile is hovered or focused, and shown permanently once this tile is
+ * ticked — a grid mid-selection has to show what is in the selection without being pointed
+ * at, which is the whole promise of "a selection you can see". Opacity rather than
+ * `display`, so the box stays in the tab order and can be reached without a mouse.
+ *
+ * Top left; the favourite badge has the top right to itself (see `.favorite`).
+ */
+.check {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    z-index: 2;
+    padding: 2px;
+    border-radius: var(--mantine-radius-sm);
+    background-color: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    transition: opacity 120ms;
+
+    // The click is the wrapper's, never the input's. The wrapper cancels it so the tile's link
+    // does not open, and cancelling a click that landed on a checkbox makes the browser undo
+    // its own toggle *after* React has rendered the new state -- so the box showed unticked
+    // until something else re-rendered the tile, which was the pointer leaving it.
+    & > * {
+        pointer-events: none;
+    }
+}
+
+.tile:hover .check,
+.tile:focus-within .check,
+.check[data-active="true"] {
+    opacity: 1;
+}
+
+/** No hover to reveal it, so it is always there. */
+@media (hover: none) {
+    .check {
+        opacity: 1;
+    }
+}

@@ -1,0 +1,52 @@
+/**
+ * The working row, pinned under the header on a wide screen (§14b, "The cellar's header").
+ *
+ * The kind tabs, search and order share one line rather than stacking as two, and the line
+ * stays on screen as the grid scrolls: refining from the fortieth row used to mean scrolling
+ * back to the top first, which was a cost paid on every visit nobody counted as a click.
+ *
+ * Out through the page's padding to the navbar's edge, so tiles scrolling beneath it do not
+ * show either side of it. The ground at nearly full strength with a blur, rather than a solid
+ * fill: the room's light is fixed to the window, and a solid band would cut a stripe out of it.
+ *
+ * The rule under it is a shadow rather than a border, so the measured height (which the filter
+ * column below is pinned by) is the whole of the row.
+ */
+.toolbar {
+    position: sticky;
+    top: var(--app-shell-header-offset, 0rem);
+    // Just under AppShell (100): level with it, the later element wins and this paints over
+    // the phone nav as it slides across the page.
+    z-index: calc(var(--mantine-z-index-app) - 1);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--mantine-spacing-sm);
+    min-height: 52px;
+    margin-inline: calc(-1 * var(--app-shell-padding));
+    padding-inline: var(--app-shell-padding);
+    background-color: color-mix(in srgb, var(--ps-ground) 88%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 -1px 0 var(--ps-hairline);
+}
+
+/** The rare actions sit at the far end of the row and never push anything about. */
+.toolbarEnd {
+    margin-inline-start: auto;
+}
+
+/**
+ * The filter column, pinned beneath the working row.
+ *
+ * It used to be a scroll area that left with the page, so below the first screen the left
+ * 260px was an empty strip and every refinement started with a trip back up. Pinned, the
+ * filters are wherever the grid is, and the column scrolls on its own when it is long.
+ */
+.filterColumn {
+    position: sticky;
+    top: calc(var(--app-shell-header-offset, 0rem) + var(--cellar-toolbar-h, 0px));
+    height: calc(100dvh - var(--app-shell-header-offset, 0rem) - var(--cellar-toolbar-h, 0px));
+    width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--ps-hairline);
+}

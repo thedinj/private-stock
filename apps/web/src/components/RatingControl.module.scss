@@ -1,0 +1,17 @@
+/**
+ * Where the control's bursts come from (§14b).
+ *
+ * The star anchor has no width, so it adds nothing to the row, and is pulled back over the last
+ * star. The heart's is `FavoriteToggle`'s own.
+ */
+.starAnchor {
+    position: relative;
+    width: 0;
+    height: 1.5rem;
+    // Back across the group's gap and half a star, to the middle of the fifth. Coming only
+    // half a star forward again leaves a net of minus one gap, which cancels the extra gap the
+    // group puts after this item -- so mounting it moves nothing.
+    margin-inline-start: calc(-1 * var(--mantine-spacing-xs) - 0.625rem);
+    margin-inline-end: 0.625rem;
+    align-self: center;
+}

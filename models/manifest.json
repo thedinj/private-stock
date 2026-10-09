@@ -1,0 +1,49 @@
+{
+    "//": "Models built into the image (§5e). Pinned by commit and checksum: `pnpm models:fetch` downloads them into this directory and refuses a file whose sha256 differs. The .onnx files are not committed.",
+    "//text": "The 8-bit text encoder won the blind review (2026-10-06: 23 the same, 2-2 otherwise), so it is the only one carried. The tokenizer's vocabulary and merges are pinned beside the models (§5e).",
+    "//faces": "Faces (§5f): InsightFace's large set, SCRFD-10G and ArcFace R50, chosen by the bake-off (2026-10-07). Licensed by InsightFace for non-commercial use only, which a personal deployment is; byte-identical to the v0.7 buffalo_l release.",
+    "models": [
+        {
+            "id": "clip-b32-vision-uint8",
+            "file": "clip-b32-vision-uint8.onnx",
+            "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/vision_model_quantized.onnx",
+            "sha256": "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
+            "bytes": 89117001
+        },
+        {
+            "id": "clip-b32-text-uint8",
+            "file": "clip-b32-text-uint8.onnx",
+            "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/text_model_quantized.onnx",
+            "sha256": "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a",
+            "bytes": 64504507
+        },
+        {
+            "id": "clip-b32-vocab",
+            "file": "clip-b32-vocab.json",
+            "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/vocab.json",
+            "sha256": "5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363",
+            "bytes": 862328
+        },
+        {
+            "id": "clip-b32-merges",
+            "file": "clip-b32-merges.txt",
+            "url": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/merges.txt",
+            "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+            "bytes": 524619
+        },
+        {
+            "id": "face-det-scrfd-10g",
+            "file": "face-det-scrfd-10g.onnx",
+            "url": "https://huggingface.co/public-data/insightface/resolve/33c1063c49c785b7652d3fd529f86fa4f149392b/models/buffalo_l/det_10g.onnx",
+            "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+            "bytes": 16923827
+        },
+        {
+            "id": "face-rec-arcface-r50",
+            "file": "face-rec-arcface-r50.onnx",
+            "url": "https://huggingface.co/public-data/insightface/resolve/33c1063c49c785b7652d3fd529f86fa4f149392b/models/buffalo_l/w600k_r50.onnx",
+            "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+            "bytes": 174383860
+        }
+    ]
+}

@@ -1,0 +1,27 @@
+// A row of two runs of text: the head gives way, the tail does not.
+.root {
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+}
+
+// `pre` rather than `nowrap`: the head usually ends in the space before the tail, and `nowrap`
+// collapses a trailing space at the end of a box, which ran the two words together whenever
+// the name fitted.
+.head {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+}
+
+// Never squeezed by the head -- but capped, so an unusually long tail takes an ordinary end
+// cut of its own rather than pushing the head to nothing.
+.tail {
+    flex: 0 0 auto;
+    max-width: 80%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+}

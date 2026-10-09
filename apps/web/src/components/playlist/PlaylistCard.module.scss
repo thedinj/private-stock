@@ -1,0 +1,150 @@
+// A playlist, shown rather than listed.
+
+// The frame, and the link that fills it. Two elements because a card can carry a ⋯ menu
+// (§14c), and a button inside a link is two targets in one place: the menu sits beside the link
+// over the card's foot, and the card lights up for either.
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--mantine-radius-sm);
+    overflow: hidden;
+    background-color: var(--ps-surface);
+    border: 1px solid var(--ps-hairline);
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+
+    &:hover,
+    &:focus-within {
+        border-color: rgba(207, 166, 89, 0.45);
+        box-shadow: var(--ps-hover-glow);
+        transform: translateY(-2px);
+    }
+}
+
+.link {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    color: inherit;
+    text-decoration: none;
+    outline: none;
+}
+
+// Bottom right, over the foot; the foot keeps its text clear of it.
+.menu {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+}
+
+.card[data-menu] .body {
+    padding-inline-end: 44px;
+}
+
+// The mosaic.
+//
+// Always two columns and always 16:9, whatever it is filled with, so a wall of cards has one
+// skyline rather than a ragged one. The covers themselves are any shape; `object-fit: cover`
+// makes that the crop's problem instead of the layout's -- provided nothing can grow to fit
+// them. `aspect-ratio` is only a preference while `min-height` is `auto`: a portrait cover's
+// natural height made the panel taller than 16:9 and the card with it. `min-height: 0` makes
+// the ratio binding, and `minmax(0, 1fr)` keeps the tracks from asking for more.
+.mosaic {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+    background-color: var(--ps-well);
+}
+
+.cell {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    min-width: 0;
+    min-height: 0;
+}
+
+// One cover fills the frame; two split it down the middle; three put the first alongside a
+// stacked pair. Four need no help. Written as spans rather than as four separate grids, so
+// every arrangement keeps the same outer box.
+.one .cell:first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+}
+
+.two .cell {
+    grid-row: span 2;
+}
+
+.three .cell:first-child {
+    grid-row: span 2;
+}
+
+// Nothing to show: a new playlist, or one whose covers are still being generated. A drawn
+// panel rather than a grey rectangle — the same sunset the hero falls back to, dimmed.
+.empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(
+        140% 125% at 76% 36%,
+        #6b4626 0%,
+        #533028 34%,
+        #2e2120 66%,
+        #14100d 100%
+    );
+}
+
+.emptyLabel {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mantine-color-oak-5);
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: var(--mantine-spacing-xs);
+}
+
+.name {
+    overflow-wrap: anywhere;
+    font-family: var(--mantine-font-family-headings);
+    // 400, not 600: the display face has one weight and the browser synthesises the rest
+    // (see theme.ts). Size and colour carry the hierarchy here.
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 1.3;
+    color: var(--ps-title);
+}
+
+.meta {
+    // "shared by <somebody's display name>" is the long one, and it is user input.
+    overflow-wrap: anywhere;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--mantine-color-oak-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card {
+        transition: none;
+
+        &:hover {
+            transform: none;
+        }
+    }
+}

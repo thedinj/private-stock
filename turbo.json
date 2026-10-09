@@ -1,0 +1,56 @@
+{
+    "$schema": "https://turbo.build/schema.json",
+    "globalDependencies": ["**/.env.*local", "config.json"],
+    "tasks": {
+        "build": {
+            "dependsOn": ["^build"],
+
+            // Turbo 2 runs tasks in strict env mode: a task sees only a system allowlist
+            // plus the variables named here. Anything else is stripped before the task
+            // starts -- silently, and with a successful build.
+            //
+            // BUILD_STANDALONE is the one that cost an image. docker/Dockerfile sets it so
+            // next.config.ts emits `output: "standalone"`; turbo removed it, Next built an
+            // ordinary tree, and the Dockerfile's COPY of .next/standalone failed with
+            // "not found" two stages later -- nowhere near the cause.
+            //
+            // Naming them here also puts them in the cache key, which is what we want: a
+            // standalone build and an ordinary one must not share a cache entry.
+            //
+            // BUILD_SHA and BUILD_DATE went the same way: passed in by docker/ship.sh, stripped
+            // here, and next.config.ts fell back to asking git -- which the image does not
+            // have -- so the About dialog read "unknown" in production.
+            "env": [
+                "BUILD_STANDALONE",
+                "NEXT_DIST_DIR",
+                "NEXT_TELEMETRY_DISABLED",
+                "BUILD_SHA",
+                "BUILD_DATE"
+            ],
+
+            "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+        },
+
+        "dev": {
+            "cache": false,
+            "persistent": true
+        },
+        "test": {
+            "dependsOn": ["^build"],
+            "outputs": ["coverage/**"]
+        },
+        "test:integration": {
+            "dependsOn": ["^build"],
+            "cache": false
+        },
+        "lint": {
+            "dependsOn": ["^build"]
+        },
+        "typecheck": {
+            "dependsOn": ["^build"]
+        },
+        "clean": {
+            "cache": false
+        }
+    }
+}

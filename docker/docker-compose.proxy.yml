@@ -1,0 +1,73 @@
+# Caddy in front, as an overlay (§12).
+#
+#   docker compose -f docker/docker-compose.qnap.yml -f docker/docker-compose.proxy.yml up -d
+#
+# Kept separate from the app's own compose file rather than folded into it, because the front
+# door is the part of this deployment most likely to already exist. Somebody with a reverse
+# proxy on another box — the Pi that fronts the sibling apps, a router, a tunnel — wants the
+# app and not this, and should be able to have exactly that by leaving this file out.
+#
+# Values come from `docker/.env` (copy `.env.example`). Compose reads it automatically when it
+# sits beside the compose file.
+
+services:
+    private-stock:
+        # The app is published on loopback only, which is what makes this the front door rather
+        # than one of two. That lives in the file being overlaid, because Compose merges port
+        # lists by appending and so cannot take a published port away.
+        #
+        # Done by hand rather than with a `!reset []` override here, because Container
+        # Station's bundled Compose is not always new enough to understand the merge tags and
+        # fails with a parse error rather than a useful one.
+        environment:
+            # One proxy in front. The app reads `X-Forwarded-For` for rate limiting and
+            # `X-Forwarded-Proto` for the cookie's Secure flag, and believes neither unless
+            # this says how many hops to count back. Raise it to 2 if you put something else
+            # in front of Caddy.
+            PRIVATE_STOCK_TRUSTED_PROXY_HOPS: "1"
+
+    caddy:
+        image: caddy:2-alpine
+        container_name: private-stock-caddy
+        restart: unless-stopped
+        depends_on:
+            - private-stock
+
+        ports:
+            # Both ports are variable, and the defaults deliberately avoid the ones QTS takes
+            # (80, 443, 8080, 8081, 8443). Moving QTS's own listeners is the most disruptive
+            # step in this setup and it is not a required one: Let's Encrypt insists on port 80
+            # of the *public address*, which the Pi holds, and the Pi may relay to any port
+            # here. A certificate is for a name, not a port.
+            #
+            # For the standard layout instead, set PS_HTTP_PORT=80 and PS_HTTPS_PORT=443 in
+            # docker/.env and move QTS first.
+            - "${PS_HTTP_PORT:-8880}:${PS_HTTP_PORT:-8880}"
+            - "${PS_HTTPS_PORT:-9443}:${PS_HTTPS_PORT:-9443}"
+            # QUIC. Harmless to leave out if the router will not forward UDP.
+            - "${PS_HTTPS_PORT:-9443}:${PS_HTTPS_PORT:-9443}/udp"
+
+        environment:
+            PS_DOMAIN: "${PS_DOMAIN:?set PS_DOMAIN in docker/.env}"
+            PS_ACME_EMAIL: "${PS_ACME_EMAIL:?set PS_ACME_EMAIL in docker/.env}"
+            PS_UPSTREAM: "${PS_UPSTREAM:-private-stock:8842}"
+
+            # Where the ACME challenge is answered. Must match what the Pi's relay forwards to.
+            PS_HTTP_PORT: "${PS_HTTP_PORT:-8880}"
+
+            # Let's Encrypt. See the snippet of this name in the Caddyfile.
+            PS_TLS: "tls_public"
+
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            # Certificates and ACME account keys. Losing this volume means asking Let's
+            # Encrypt for everything again, and their rate limits are per-week — so it is a
+            # named volume rather than something that vanishes with the container.
+            - caddy-data:/data
+            - caddy-config:/config
+            - caddy-logs:/var/log/caddy
+
+volumes:
+    caddy-data:
+    caddy-config:
+    caddy-logs:

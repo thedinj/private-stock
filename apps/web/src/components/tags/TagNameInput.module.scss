@@ -1,0 +1,49 @@
+// Where `liftAboveKeyboard` stops: clear of the fixed header, with a little air. (The box's own
+// 44px on a touch screen is `globals.scss`'s, as every input's is.)
+@media (pointer: coarse) {
+    .box {
+        scroll-margin-top: calc(var(--app-shell-header-height, 0px) + var(--mantine-spacing-sm));
+    }
+}
+
+// The suggestion list scrolls down, never across.
+//
+// Every wrapper Mantine puts between the dropdown and an option sizes to its content: the
+// options sit in a `display: table`, and the flex boxes around the scroll area keep
+// `min-width: auto`. Each lets a long name widen the list into a sideways scroll instead of
+// truncating inside it, so each is held to the dropdown's width.
+.suggestions {
+    > div,
+    :global(.mantine-ScrollArea-root) {
+        min-width: 0;
+    }
+
+    :global(.mantine-ScrollArea-viewport) > div {
+        display: block !important;
+    }
+}
+
+// A tag's picture beside its name (§6 "A tag's picture"): an item's tag card's size, the
+// smallest a picture of anybody is drawn.
+.picture {
+    flex: none;
+    display: block;
+    width: 108px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: var(--mantine-radius-xs);
+    background-color: var(--ps-well);
+
+    &[data-portrait] {
+        width: 72px;
+        aspect-ratio: 4 / 5;
+    }
+
+    @media (min-width: 48em) {
+        width: 132px;
+
+        &[data-portrait] {
+            width: 88px;
+        }
+    }
+}

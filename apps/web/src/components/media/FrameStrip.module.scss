@@ -1,0 +1,65 @@
+/**
+ * The frame tiles (§13).
+ *
+ * The controls are hidden until the tile is hovered or something inside it takes focus.
+ * Shown always, they sat across the bottom of every thumbnail — five of them under the
+ * generated alternates, wider than the 104px tiles they belonged to — so the row read as a
+ * list of buttons rather than a row of pictures.
+ *
+ * Opacity rather than `display`, because the buttons must stay in the tab order: revealing
+ * them on `:focus-within` is what keeps the fast path reachable without a mouse, and an
+ * element that is not rendered cannot receive the focus that would reveal it.
+ */
+.tile {
+    position: relative;
+    flex-shrink: 0;
+}
+
+/**
+ * Both controls together, in one corner.
+ *
+ * Splitting them to opposite corners put "discard" where a close button goes, which is what
+ * a cross in the top right of a panel means everywhere else — and it meant the cover button
+ * sat in a different place depending on whether a tile happened to be a capture. The `Cover`
+ * badge holds the top left, so this corner is free.
+ */
+.actions {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    opacity: 0;
+    transition: opacity 120ms;
+}
+
+/**
+ * The cover's own mark: the same glyph, filled, and not a button.
+ *
+ * Sized to match the `sm` ActionIcon beside it so the pair sits on one line whichever tile
+ * you are looking at.
+ */
+.state {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--mantine-radius-sm);
+    color: var(--mantine-color-brass-4);
+    background: var(--ps-surface);
+}
+
+.tile:hover .actions,
+.tile:focus-within .actions {
+    opacity: 1;
+}
+
+/**
+ * Coarse pointers have no hover to give.
+ *
+ * On a touchscreen the buttons would be permanently invisible and the fast path would simply
+ * not exist, so there they are always shown — the enlarged view remains the other way in.
+ */
+@media (hover: none) {
+    .actions {
+        opacity: 1;
+    }
+}

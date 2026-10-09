@@ -1,0 +1,18 @@
+// The plate's eyebrow, at the plate's size: an empty state belongs to the same letterhead.
+.eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--mantine-color-brass-4);
+    line-height: 1;
+}
+
+.title {
+    color: var(--ps-title);
+    text-wrap: balance;
+}
+
+.action {
+    margin-top: var(--mantine-spacing-sm);
+}

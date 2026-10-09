@@ -1,0 +1,15 @@
+{
+    "//": "Copy to config.json. Every key is optional; PRIVATE_STOCK_* env vars override it.",
+    "//port": "HTTP listen port. QTS occupies 8080/8081/443/8443.",
+    "port": 8842,
+    "//dataDir": "Database, artifacts, variants, trash, backups. The only directory written to.",
+    "dataDir": "./data",
+    "//mediaDir": "Parent of the media roots. Each subdirectory is discovered as a root.",
+    "mediaDir": "./media",
+    "//logLevel": "error | warn | info | debug",
+    "logLevel": "info",
+    "//trustedProxyHops": "Reverse proxies of your own in front. 0 trusts no forwarded header.",
+    "trustedProxyHops": 0,
+    "//secret": "JWT and media-URL signing key. Leave null to generate <dataDir>/secret.key.",
+    "secret": null
+}

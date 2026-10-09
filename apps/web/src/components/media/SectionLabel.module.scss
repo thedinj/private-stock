@@ -1,0 +1,13 @@
+/**
+ * The section labels under the title -- Frames, Clips, Up next -- in one voice.
+ *
+ * They were three: small dimmed sentence case, small uppercase bold, and a size up. Same
+ * tier, same job, one style.
+ */
+.label {
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mantine-color-dimmed);
+}

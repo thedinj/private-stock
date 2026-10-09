@@ -1,0 +1,22 @@
+/**
+ * A rating row with nothing set, held back until it is pointed at.
+ *
+ * Two rows of five stars at full strength read as two ratings somebody had given, on a panel
+ * where nothing was set. Faded, they are still where they were and still one click; they come
+ * up the moment the pointer or the keyboard reaches them, and stay up once they say something.
+ */
+.quiet {
+    opacity: 0.45;
+    transition: opacity 120ms;
+
+    &:hover,
+    &:focus-within {
+        opacity: 1;
+    }
+}
+
+@media (hover: none) {
+    .quiet {
+        opacity: 1;
+    }
+}

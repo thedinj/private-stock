@@ -1,0 +1,246 @@
+// The room: where you arrive, as opposed to the cellar you go down into.
+
+// Out to the edges of the shell, safe-area insets included.
+//
+// The hero is the only thing in the app that ignores the page padding, and it has to: a
+// picture window with a 16px margin is a picture on a wall. Written against the shell's own
+// padding variable rather than a number so it stays correct when the shell switches from
+// `sm` to `md` at the breakpoint.
+.bleed {
+    margin-top: calc(-1 * var(--app-shell-padding));
+    margin-left: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-left)));
+    margin-right: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-right)));
+}
+
+.hero {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--ps-well);
+    // Tall enough to be a view, never so tall that nothing else is on the screen. On a
+    // 412x916 phone this is 300px, which leaves the first shelf visible under it.
+    height: min(420px, max(300px, 62vw));
+}
+
+.heroImage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+// A drawn sunset for an item whose cover has not been generated yet. Better than a black
+// rectangle, and it never pretends to be a frame from the file.
+.heroFallback {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        140% 125% at 76% 36%,
+        #d08640 0%,
+        #9c5334 26%,
+        #58302e 52%,
+        #23191a 78%,
+        #130f0c 100%
+    );
+}
+
+// Two scrims, not one. The side scrim seats the copy; the foot scrim seats the image in the
+// page, so it does not end on a hard horizontal line above the first shelf.
+.scrimSide {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        var(--ps-ground) 0%,
+        rgba(20, 16, 13, 0.93) 24%,
+        rgba(20, 16, 13, 0.5) 48%,
+        rgba(20, 16, 13, 0) 74%
+    );
+}
+
+// On a phone the copy runs the full width, so a scrim tuned to clear the left third would
+// leave the right half of the title sitting on bare picture.
+@media (max-width: 48em) {
+    .scrimSide {
+        background: linear-gradient(
+            90deg,
+            rgba(20, 16, 13, 0.92) 0%,
+            rgba(20, 16, 13, 0.55) 62%,
+            rgba(20, 16, 13, 0.15) 100%
+        );
+    }
+}
+
+.scrimFoot {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(20, 16, 13, 0) 46%,
+        rgba(20, 16, 13, 0.75) 80%,
+        var(--ps-ground) 100%
+    );
+}
+
+.heroCopy {
+    position: absolute;
+    left: calc(var(--app-shell-padding) + var(--ps-safe-left));
+    right: calc(var(--app-shell-padding) + var(--ps-safe-right));
+    bottom: clamp(16px, 2.4vw, 40px);
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.heroTitle {
+    margin: 0;
+    font-family: var(--mantine-font-family-headings);
+    // 400, not 600: the display face has one weight and the browser synthesises the rest
+    // (see theme.ts). Size and colour carry the hierarchy here.
+    font-weight: 400;
+    font-size: clamp(25px, 5.2vw, 42px);
+    line-height: 1.12;
+    color: var(--ps-title);
+    text-wrap: balance;
+
+    /**
+ * Titles come from filenames, so they break every assumption a title normally gets to make.
+ *
+ * A filename can be three hundred characters with no space in it -- a hash, a release string,
+ * a path flattened into a name -- and a long *word* does not wrap: it runs out of its box and
+ * takes the layout with it. `anywhere` rather than `break-word` because only `anywhere` lets
+ * the container shrink below the unbroken run when it is measuring itself.
+ *
+ * The clamp is the other half. The hero is a fixed-height window with `overflow: hidden`, so
+ * an unclamped title does not overflow visibly -- it pushes the Play button out of the frame
+ * and there is no clue why.
+ */
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.heroLine {
+    font-size: 13px;
+    color: var(--mantine-color-oak-3);
+}
+
+.eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--mantine-color-brass-4);
+}
+
+// A line that travels and gives out, rather than a border that stops.
+.rule {
+    height: 1px;
+    background: var(--ps-hairline-fade);
+}
+
+// A library, offered rather than listed.
+.invite {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+    min-height: 116px;
+    // The same inset a tile uses (`p="xs"`), so a library's name shares a left edge with the
+    // titles in the row above it. It was 20/22/18 — three unrelated numbers in an app that
+    // otherwise uses the Mantine scale.
+    padding: var(--mantine-spacing-xs);
+    border-radius: var(--mantine-radius-sm);
+    background-color: var(--ps-surface);
+    border: 1px solid var(--ps-hairline);
+    color: inherit;
+    text-decoration: none;
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+
+    &:hover,
+    &:focus-visible {
+        border-color: rgba(207, 166, 89, 0.45);
+        box-shadow: var(--ps-hover-glow);
+        transform: translateY(-2px);
+        outline: none;
+    }
+}
+
+// A ghost of what is inside, at the threshold of visibility.
+.inviteGhost {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.16;
+}
+
+.inviteVeil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(33, 26, 21, 0.55) 0%,
+        rgba(33, 26, 21, 0.92) 62%,
+        var(--ps-surface) 100%
+    );
+}
+
+.inviteEdge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(207, 166, 89, 0.5), rgba(207, 166, 89, 0));
+}
+
+.inviteBody {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.inviteName {
+    font-family: var(--mantine-font-family-headings);
+    // 400, not 600: the display face has one weight and the browser synthesises the rest
+    // (see theme.ts). Size and colour carry the hierarchy here.
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--ps-title);
+    // A library is named after its directory, which is subject to the same abuse.
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.inviteCount {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mantine-color-oak-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .invite {
+        transition: none;
+
+        &:hover {
+            transform: none;
+        }
+    }
+}

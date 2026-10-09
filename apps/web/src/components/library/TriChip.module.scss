@@ -1,0 +1,33 @@
+// A drawn glyph in place of text (the None chip's face) sits on the text's centre, not its
+// baseline, where an SVG would otherwise ride high.
+.label svg {
+    vertical-align: middle;
+}
+
+// The name struck through, so "without" reads without the colour (§14e).
+.without {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+// Where the tick would be: the same weight as the tick, so the chip does not jump in width.
+.minus {
+    font-weight: 700;
+    line-height: 1;
+}
+
+// An alternative under "any of": the word where the tick goes, small and in the label's colour
+// so it reads as part of the chip's sentence rather than as a second badge.
+.or {
+    font-size: 0.85em;
+    font-style: italic;
+    line-height: 1;
+}
+
+// Mantine sizes the icon slot for a tick and clips what overflows; the word is wider. Doubled
+// so it outranks Mantine's own single class whichever stylesheet loads last.
+.orWrapper.orWrapper {
+    width: auto;
+    max-width: none;
+    padding-right: calc(var(--chip-spacing) / 2);
+}

@@ -1,0 +1,30 @@
+diff --git a/dist/esm/server/lib/router-utils/filesystem.js b/dist/esm/server/lib/router-utils/filesystem.js
+index 6fe5d4d..c9e5439 100644
+--- a/dist/esm/server/lib/router-utils/filesystem.js
++++ b/dist/esm/server/lib/router-utils/filesystem.js
+@@ -488,7 +488,9 @@ export async function setupFsCheck(opts) {
+                     return itemResult;
+                 }
+             }
+-            getItemsLru == null ? void 0 : getItemsLru.set(itemKey, null);
++            // private-stock patch: a miss is not cached. `if (lruResult)` never returned a cached null,
++            // and each one cost an entry for every distinct request path -- up to 1M of them,
++            // each retaining the whole request URL it was sliced from (fixed upstream in Next 16).
+             return null;
+         },
+         getDynamicRoutes () {
+diff --git a/dist/server/lib/router-utils/filesystem.js b/dist/server/lib/router-utils/filesystem.js
+index 027577b..f7edd6a 100644
+--- a/dist/server/lib/router-utils/filesystem.js
++++ b/dist/server/lib/router-utils/filesystem.js
+@@ -556,7 +556,9 @@ async function setupFsCheck(opts) {
+                     return itemResult;
+                 }
+             }
+-            getItemsLru == null ? void 0 : getItemsLru.set(itemKey, null);
++            // private-stock patch: a miss is not cached. `if (lruResult)` never returned a cached null,
++            // and each one cost an entry for every distinct request path -- up to 1M of them,
++            // each retaining the whole request URL it was sliced from (fixed upstream in Next 16).
+             return null;
+         },
+         getDynamicRoutes () {

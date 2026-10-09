@@ -1,0 +1,180 @@
+# Caddy in front of private-stock (§12).
+#
+# Deliberately a *whole* Caddyfile rather than a `conf.d` fragment like the sibling Pi apps
+# use, because this one runs in its own container beside the app rather than on a host that
+# already has a shared Caddy. If you instead front this from the Pi's existing Caddy, the site
+# block below is still the thing to copy into `/etc/caddy/conf.d/private-stock.caddy` — change
+# `reverse_proxy` to name the NAS (`reverse_proxy 192.168.1.10:8842`) and drop the volumes.
+#
+# Every value comes from the environment so the image stays generic. See `.env.example`.
+{
+	# Where Let's Encrypt sends expiry warnings. Caddy asks for a certificate on first run
+	# and renews it on its own; there is no certbot step and no cron entry.
+	email {$PS_ACME_EMAIL}
+
+	# Where the ACME HTTP-01 challenge is answered, and where the HTTP->HTTPS redirect lives.
+	#
+	# 80 is the default and needs the NAS to have port 80, which on QTS means moving QTS's own
+	# listeners in Control Panel -- the most disruptive step in this whole setup, on a box that
+	# is usually doing other jobs for other people.
+	#
+	# It is also avoidable. A certificate binds to a *name*, and Let's Encrypt only insists on
+	# reaching port 80 of the *public address* -- which the Pi holds and relays from. What the Pi
+	# forwards to is ours to choose, so the NAS can answer on 8880 and leave QTS alone. The site
+	# address below carries its own port for the same reason.
+	http_port {$PS_HTTP_PORT:80}
+
+	# Uncomment while testing to avoid Let's Encrypt's rate limits. Certificates issued from
+	# staging are NOT publicly trusted, so casting will fail until this is commented out
+	# again — which is exactly the failure this whole file exists to avoid, so do not leave
+	# it on.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# Which certificate this deployment uses. `PS_TLS` names one of the two snippets below, and the
+# compose overlay that starts Caddy sets it: `tls_public` from docker-compose.proxy.yml,
+# `tls_lan` from docker-compose.lan.yml.
+#
+# A switch rather than a comment saying which lines to swap, because the file is mounted
+# read-only out of the repository: editing it to run on a LAN meant carrying that edit forever
+# and colliding with it the day a public certificate was wanted.
+
+# Let's Encrypt, for a deployment with a public name (§12).
+#
+# HTTP-01 only, deliberately.
+#
+# Caddy would otherwise also try TLS-ALPN-01, which validates on port 443 — and in this
+# deployment port 443 of the public address belongs to the Pi, so that attempt cannot succeed.
+# Left enabled it is not fatal (Caddy falls back to HTTP-01), but every issuance spends a failed
+# validation first, and Let's Encrypt allows only five of those per hostname per hour. Renewal
+# is a thing that happens unattended every sixty days; it should not have a wasted failure built
+# into it.
+#
+# Naming the issuer explicitly gives up Caddy's ZeroSSL fallback. That is the trade: one
+# predictable path rather than two, for something nobody will be watching when it runs.
+(tls_public) {
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+}
+
+# Caddy's own CA, for a LAN with no public name.
+#
+# This is the whole of what makes HTTP/2 available without a domain, and HTTP/2 is what stops a
+# grid page queueing sixty covers onto six connections (§20). No ACME, so no port 80, no
+# validation and nothing to renew from outside.
+#
+# The cost is that nothing trusts the certificate until told to. Install the root from
+# `/data/caddy/pki/authorities/local/root.crt` on each machine that browses the library.
+#
+# **Cast receivers cannot be told.** A Chromecast or Android TV fetches media itself, with its
+# own TLS stack and no way to add a CA, so casting fails with a black screen while this is on
+# (§11). That is the one thing the public path buys that this one cannot.
+(tls_lan) {
+	tls internal
+}
+
+{$PS_DOMAIN} {
+	# The site address. `PS_DOMAIN` carries a port when the front door is not on 443, which is
+	# how the LAN overlay stays clear of the ports QTS has already taken.
+	#
+	# On the public path a bare domain here is the entire TLS mechanism: Caddy obtains and renews
+	# a Let's Encrypt certificate by itself. The validator reaches it through a relay on the
+	# Pi, which holds port 80 of the public address and forwards only the challenge path here.
+	# See README.md — "Getting a certificate".
+	#
+	# HTTP-01 only, deliberately.
+	#
+	# Caddy would otherwise also try TLS-ALPN-01, which validates on port 443 — and in this
+	# deployment port 443 of the public address belongs to the Pi, so that attempt cannot
+	# succeed. Left enabled it is not fatal (Caddy falls back to HTTP-01), but every issuance
+	# spends a failed validation first, and Let's Encrypt allows only five of those per
+	# hostname per hour. Renewal is a thing that happens unattended every sixty days; it
+	# should not have a wasted failure built into it.
+	#
+	# Naming the issuer explicitly gives up Caddy's ZeroSSL fallback. That is the trade: one
+	# predictable path rather than two, for something nobody will be watching when it runs.
+	import {$PS_TLS}
+
+	reverse_proxy {$PS_UPSTREAM} {
+		# The app reads `X-Forwarded-For` to identify a caller for rate limiting, and only
+		# believes it when `PRIVATE_STOCK_TRUSTED_PROXY_HOPS` says a proxy is in front. This
+		# is the other half of that agreement.
+		#
+		# Set rather than appended, so the header holds exactly one entry — the address Caddy
+		# itself saw — and anything the client sent under that name is discarded rather than
+		# carried along in front of it.
+		#
+		# **Caddy warns that this line is unnecessary on every start. It is not.** The warning
+		# means the default already forwards the header, which is true and beside the point: the
+		# default *appends*, so a client that sends one gets its value kept in front of the real
+		# address. Measured against this exact file -- a request carrying
+		# `X-Forwarded-For: 6.6.6.6` arrives upstream as the peer address alone, and without this
+		# line it would arrive as `6.6.6.6, <peer>`. Do not delete it because Caddy said so.
+		#
+		# If you ever put something else in front of Caddy, this line has to change as well as
+		# the hop count, or the app will see a one-entry chain where it expects two and
+		# identify nobody. That is the safe direction to get it wrong in.
+		header_up X-Forwarded-For {remote_host}
+
+		# The live-updates change feed (§13b) is server-sent events, which a buffering proxy
+		# turns into a connection that delivers nothing until it closes. -1 flushes
+		# immediately. Harmless for ordinary responses.
+		flush_interval -1
+
+		# Idle upstream connections are left at Caddy's default of 2 minutes on purpose: the
+		# app's keep-alive (`KEEP_ALIVE_TIMEOUT` in entrypoint.sh) is longer, so Caddy is always
+		# the side that closes one. The other way round, a request sent on a connection the app
+		# was closing came back as a 502 (§20). Raising this means raising that too.
+	}
+
+	# Text only, stated explicitly rather than left to Caddy's default response matcher.
+	#
+	# Compressing video, WebP or a sprite sheet spends CPU to make the bytes very slightly
+	# larger — they are already compressed — on a box whose CPU is the binding constraint
+	# (§17), and they are the overwhelming majority of what this app serves.
+	#
+	# `match` is a *response* matcher: `Content-Type` is not known when the request arrives,
+	# so the ordinary `@name` request matcher cannot express this.
+	encode {
+		gzip
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	# No `header` block here on purpose.
+	#
+	# The app sets its own security headers in `next.config.ts`, so that they hold however it
+	# is reached — including on the LAN with no proxy at all. Setting them here too is how the
+	# sibling Pi apps ended up serving two different `Strict-Transport-Security` lifetimes and
+	# an `X-Frame-Options` that says SAMEORIGIN in one header and DENY in another.
+
+	log {
+		output file /var/log/caddy/private-stock-access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+
+		# A signed media URL carries its credential in `?t=` (§12d) -- a day's access to one
+		# item, and a cast session makes dozens of these requests. The access log is read by
+		# fail2ban and kept for five rolls; it is not somewhere that credential should sit. The
+		# parameter stays so a log reader can still tell a token request from a cookie one.
+		#
+		# `wrap json` explicitly: fail2ban's filter reads the JSON fields, and the default
+		# encoder is not guaranteed to be JSON.
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace t redacted
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,96 @@
+// Framing a tag's picture: the moment with a box over it, and the picture at the sizes it is drawn.
+
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--mantine-spacing-md);
+    align-items: start;
+}
+
+// As large as the picture and no larger, so the box's percentages are the picture's: a still
+// letterboxed inside a wider element would put the box off the frame it describes.
+.stage {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    justify-self: center;
+    background: var(--ps-well);
+    border-radius: var(--mantine-radius-xs);
+    overflow: hidden;
+    // The box is dragged with a finger on a phone; the page must not scroll under it.
+    touch-action: none;
+    user-select: none;
+}
+
+.still {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 65vh;
+}
+
+// Holds the stage open until the still has a size of its own, then goes.
+.loading {
+    width: min(480px, 80vw);
+    aspect-ratio: 16 / 9;
+    display: grid;
+    place-items: center;
+}
+
+// Everything outside the box is dimmed by its shadow, so the part kept reads as the picture.
+.box {
+    position: absolute;
+    border: 2px solid var(--mantine-color-brass-4);
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55);
+    cursor: move;
+
+    &:focus-visible {
+        outline: 2px solid var(--mantine-color-brass-2);
+        outline-offset: 2px;
+    }
+}
+
+// The corner that sizes the box: 44px to a finger, drawn as a small square in the corner.
+.handle {
+    position: absolute;
+    right: -22px;
+    bottom: -22px;
+    width: 44px;
+    height: 44px;
+    cursor: nwse-resize;
+
+    &::after {
+        content: "";
+        position: absolute;
+        left: 15px;
+        top: 15px;
+        width: 14px;
+        height: 14px;
+        background: var(--mantine-color-brass-4);
+        border-radius: 2px;
+    }
+}
+
+.previews {
+    padding-top: 4px;
+}
+
+.preview {
+    background-color: var(--ps-well);
+    background-repeat: no-repeat;
+    border-radius: var(--mantine-radius-xs);
+    border: 1px solid var(--ps-hairline);
+}
+
+// A phone: the previews under the frame, side by side.
+@media (max-width: 48em) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .previews {
+        flex-direction: row !important;
+        justify-content: center;
+    }
+}

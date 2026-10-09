@@ -1,0 +1,35 @@
+/**
+ * The upkeep pages, one step quieter than the destinations above them (`AppNavbarUpkeep`).
+ *
+ * Smaller and in oak rather than the body colour, so the eye runs down the daily list and stops
+ * before it. The one you are on keeps the active treatment: where you are is still worth
+ * reading, whichever tier it is in.
+ */
+/** Ruled off from the destinations, so the two tiers read as two. */
+.upkeepGroup {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--ps-hairline);
+}
+
+.upkeep {
+    padding-block: 6px;
+
+    &:not([data-active]) {
+        color: var(--mantine-color-dimmed);
+    }
+}
+
+.upkeepLabel {
+    font-size: var(--mantine-font-size-xs);
+}
+
+/**
+ * The "Last search" line, kept to one (§14b). The words are already cut down to a term and a
+ * count, so this only ever catches a very long name -- and the row's title has the whole of it.
+ */
+.oneLine {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

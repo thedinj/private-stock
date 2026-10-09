@@ -1,0 +1,137 @@
+// The scrubber: a brass rule along the cellar shelf, with the filmstrip above it.
+
+.wrapper {
+    position: relative;
+    width: 100%;
+    // Room for the thumbnail to sit above the track without overlapping the controls.
+    padding-block: 10px 6px;
+}
+
+.track {
+    position: relative;
+    width: 100%;
+    // The visible rule is thin, but the hit area is not: a 4px target is unusable with a
+    // finger and awkward with a mouse.
+    height: 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    touch-action: none;
+
+    &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 4px;
+        border-radius: 2px;
+        background-color: rgba(230, 210, 173, 0.16);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--mantine-color-brass-5);
+        outline-offset: 3px;
+    }
+}
+
+.buffered,
+.played {
+    position: absolute;
+    left: 0;
+    height: 4px;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.buffered {
+    background-color: rgba(230, 210, 173, 0.28);
+}
+
+.played {
+    background-color: var(--mantine-color-brass-5);
+}
+
+.handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--mantine-color-brass-4);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+    // `left` is a percentage of the track, so the handle has to be pulled back by half its
+    // own width or it drifts past the end by six pixels.
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.preview {
+    position: absolute;
+    bottom: 100%;
+    // Centred on the pointer, and clamped by the viewport rather than by arithmetic — the
+    // translate keeps it centred while the browser stops it leaving the screen.
+    transform: translateX(-50%);
+    margin-bottom: 6px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.thumbnail {
+    // The sheet is positioned by background-position; repeating would tile a neighbouring
+    // frame into the gap if the rectangle and the element ever disagree.
+    background-repeat: no-repeat;
+    border: 1px solid rgba(207, 166, 89, 0.5);
+    border-radius: 3px;
+    box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.9);
+    max-width: none;
+}
+
+.previewTime {
+    margin-top: 2px;
+    color: var(--mantine-color-brass-3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+@media (max-width: 480px) {
+    // On a phone the thumbnail would cover most of the video it is previewing.
+    .thumbnail {
+        transform: scale(0.7);
+        transform-origin: bottom center;
+    }
+}
+
+/**
+ * The span being marked, on the track.
+ *
+ * Brass rather than the played bar's colour, and translucent, so it reads as a region laid over
+ * playback rather than as a second playhead.
+ */
+.selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--mantine-color-brass-5);
+    opacity: 0.55;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/** Spans already taken, in their own lane under the track. */
+.clipLane {
+    position: relative;
+    height: 4px;
+    margin-top: 3px;
+}
+
+.clipTick {
+    position: absolute;
+    top: 0;
+    height: 4px;
+    min-width: 3px;
+    border-radius: 2px;
+    background: var(--mantine-color-brass-7);
+    opacity: 0.75;
+
+    &:hover {
+        opacity: 1;
+    }
+}

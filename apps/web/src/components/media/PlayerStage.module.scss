@@ -1,0 +1,154 @@
+// The pour: the player, and the light it throws.
+
+/**
+ * The stage, and the light it is lit by.
+ *
+ * Both properties carry the amber the glow has always been, so the CSS is complete on its own
+ * and the page looks right before a single pixel has been sampled -- and stays right if
+ * sampling never starts, which is what happens under reduced motion (`useSpillLight`).
+ *
+ * `--ps-spill` is a bare `r, g, b` list rather than a colour so the alpha can be varied per
+ * layer; `--ps-spill-amp` is how much light there is, so a night scene dims the room instead
+ * of merely tinting it.
+ */
+.stage {
+    position: relative;
+    // Clear of the fixed header when something scrolls the stage into view (`showStage`).
+    scroll-margin-top: calc(var(--app-shell-header-height, 0px) + var(--mantine-spacing-sm));
+    --ps-spill: 208, 134, 64;
+    --ps-spill-amp: 1;
+}
+
+// Light spills off the screen onto the wall behind it.
+//
+// This is the one place the design lets warmth sit *near* the media, and it earns the
+// exception: a lit screen in a dark room genuinely does throw light, and without it the
+// player reads as a black rectangle pasted onto a warm page. It is behind the frame and
+// inert, so nothing about the picture itself is tinted — §14's rule that warmth lives in the
+// chrome and never over the media still holds.
+//
+// **A shadow, not a blurred pseudo-element.** The first version of this was an absolutely
+// positioned `::before` with a negative inset, which put ~50px of glow outside the page's
+// content box on each side — and that counts towards scrollable overflow, so every viewer
+// page had a horizontal scrollbar. An outer `box-shadow` paints identically and is explicitly
+// excluded from the scrollable area, so it cannot do that. Two layers: a tight one that reads
+// as spill from the edges, and a wide faint one that reads as the room.
+.frame {
+    position: relative;
+    z-index: 1;
+    border-radius: var(--mantine-radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--ps-hairline);
+    box-shadow:
+        0 0 80px -16px rgba(var(--ps-spill), calc(0.3 * var(--ps-spill-amp))),
+        0 12px 220px -40px rgba(var(--ps-spill), calc(0.26 * var(--ps-spill-amp)));
+    // Long enough to read as light changing rather than a value being set, short enough that
+    // a cut between shots is not still arriving a second later. The sampler eases as well, so
+    // this only has to cover one 200ms step.
+    transition: box-shadow 240ms linear;
+}
+
+/**
+ * The frame stands aside when the player takes the screen (§14b).
+ *
+ * `z-index: 1` above makes the frame a stacking context, which is right in the page — it is
+ * what keeps the picture above the glow it casts — and wrong for the one moment the player is
+ * laid over the whole window: a `z-index: 200` inside a context of 1 is still below the app
+ * shell, which is how the sidebar ended up painted across a fullscreen film.
+ *
+ * Matched with `:has()` rather than a prop threaded down from the player, because this is a
+ * fact about *this frame* while something inside it is fullscreen, and the player has no
+ * business knowing what it is mounted in. The glow and the hairline go with it: both are
+ * furniture belonging to the page, and neither has a wall to fall on any more.
+ */
+.frame:has([data-fullscreen]) {
+    z-index: auto;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+// On a phone the player goes to the edges. A 12px margin either side of a video is 24px of
+// ground doing nothing, on the one screen with none to spare — and the rounded corners and
+// hairline stop reading as a frame at that size anyway.
+@media (max-width: 48em) {
+    .stage {
+        margin-left: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-left)));
+        margin-right: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-right)));
+    }
+
+    .frame {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+    }
+}
+
+/**
+ * The item's name, in the display face every other screen's heading speaks in.
+ *
+ * It was a bare `h1` in the UI sans at weight 700 -- the one heading in the app not in the
+ * app's voice, and the most important one.
+ *
+ * **Two lines at most.** Names come from filenames, and some run to a paragraph that pushed
+ * the rating and Details off the row. The whole name is the element's `title`, one hover away,
+ * and in full in the Details panel's path.
+ */
+.title {
+    font-family: var(--mantine-font-family-headings);
+    font-weight: var(--mantine-h1-font-weight);
+    font-size: clamp(22px, 4.6vw, 34px);
+    line-height: 1.2;
+    color: var(--ps-title);
+    text-wrap: balance;
+    margin: 0;
+    min-width: 0;
+    flex: 1 1 18rem;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/**
+ * The up-next strip (§14b).
+ *
+ * A single row that scrolls sideways rather than wrapping. Wrapping would turn "a glance at
+ * what is coming" into a second grid that changes the page's height as you move through the
+ * library, and a page whose layout shifts under a running video is worse than one that
+ * scrolls.
+ */
+.upNext {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+}
+
+.upNextItem {
+    flex: 0 0 auto;
+    width: 132px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+    border-radius: var(--mantine-radius-sm);
+
+    img,
+    .upNextBlank {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: var(--mantine-radius-sm);
+        background: var(--ps-well);
+        margin-bottom: 4px;
+    }
+
+    &:hover img,
+    &:focus-visible img {
+        outline: 1px solid var(--ps-hairline-strong);
+    }
+}

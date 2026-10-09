@@ -1,0 +1,51 @@
+/**
+ * The action bar for a selection (§14b).
+ *
+ * Pinned to the bottom of the viewport while scrolling rather than placed above the grid. A
+ * selection is made by scrolling and ticking, so a bar that scrolls away is one you have to go
+ * back for — and inserting it above the tiles would push them down out from under the pointer
+ * that is selecting them, which is worse than either.
+ *
+ * **Sticky, not fixed, so it has a place of its own at the end of the page.** A fixed bar was
+ * laid over the grid, and at the bottom of the library it sat on the last row for good: on a
+ * phone, where it wraps to two or three lines, those tiles' names could not be read however far
+ * you scrolled. A sticky bar is still in the flow, so the page is exactly as much taller as the
+ * bar, the last row scrolls clear of it, and nothing has to measure the bar when it wraps.
+ * It must stay a direct child of the page's own column — sticky is bounded by its parent.
+ *
+ * Centred and only as wide as its contents, so it never covers a whole row of tiles on a
+ * wide screen; on a phone it runs edge to edge and sits on the bottom of the screen, reading
+ * as the edge of the page rather than a card floating over the tiles.
+ */
+.bar {
+    position: sticky;
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    align-self: center;
+    z-index: 200;
+    max-width: 100%;
+    // Here rather than as `p="xs"`: a style prop is inline and the phone layout below could
+    // not add the safe area to it.
+    padding: var(--mantine-spacing-xs);
+    background-color: var(--ps-surface);
+}
+
+@media (max-width: 640px) {
+    .bar {
+        bottom: 0;
+        align-self: stretch;
+        // The wide layout's cap would stop it short of the right edge once the margins widen it.
+        max-width: none;
+        // Out through the page's padding to the screen's edges, and down through the padding
+        // under the last row, so at the end of the page it rests on the bottom edge too.
+        margin-inline: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-left)))
+            calc(-1 * (var(--app-shell-padding) + var(--ps-safe-right)));
+        margin-bottom: calc(-1 * (var(--app-shell-padding) + var(--ps-safe-bottom)));
+        padding-inline: calc(var(--mantine-spacing-xs) + var(--ps-safe-left))
+            calc(var(--mantine-spacing-xs) + var(--ps-safe-right));
+        padding-bottom: calc(var(--mantine-spacing-xs) + var(--ps-safe-bottom));
+        // Not `--paper-radius`: Mantine sets that inline from the `radius` prop.
+        border-radius: 0;
+        border-inline: none;
+        border-bottom: none;
+    }
+}

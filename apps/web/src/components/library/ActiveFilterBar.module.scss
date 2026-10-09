@@ -1,0 +1,47 @@
+/**
+ * A chip's reach, on a finger.
+ *
+ * The chip stays small -- it sits in a line of text beside the count, and a row of 44px pills
+ * there would outweigh the grid it describes -- but on a touch screen its hit area grows to the
+ * 44px every other control keeps (CLAUDE.md, "Responsive from phase 1"). The extra is an
+ * invisible margin above and below, which is where a thumb that misses lands.
+ */
+.chip {
+    position: relative;
+    overflow: visible;
+}
+
+@media (pointer: coarse) {
+    .chip {
+        height: 1.75rem;
+        padding-inline: 0.75rem;
+    }
+
+    .chip::after {
+        content: "";
+        position: absolute;
+        inset: -0.5rem -0.125rem;
+    }
+}
+
+/**
+ * A chip whose label carries a long name: the words either side stay whole, the name between
+ * them gives way in the middle (§14). Capped, so a file's title cannot make one chip the width of
+ * the grid.
+ */
+.named {
+    display: inline-flex;
+    max-width: min(28rem, 70vw);
+    min-width: 0;
+    white-space: pre;
+}
+
+.name {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+// The words around the name never give way to it.
+.fixed {
+    flex: none;
+}

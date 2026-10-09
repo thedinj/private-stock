@@ -1,0 +1,71 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+# A new push to the same branch supersedes the run in flight.
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    TURBO_TELEMETRY_DISABLED: 1
+    NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+    verify:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # Reads `packageManager: pnpm@10.28.0` from the root package.json.
+            - uses: pnpm/action-setup@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            # better-sqlite3 is in pnpm-workspace.yaml's `onlyBuiltDependencies`, which is
+            # what builds the native addon the schema tests need. There is deliberately no
+            # `postinstall` rebuild: it was redundant with that, and it failed every install
+            # run while the app was open, because a running process holds the .node file.
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm typecheck
+            - run: pnpm lint
+
+            # Unit tests, including the migration drift and schema snapshot checks that
+            # keep init.ts and the migration chain in step.
+            - run: pnpm test
+
+    integration:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            # GitHub's Ubuntu runners ship ffmpeg, so the pipelines that shell out to it can
+            # be exercised for real rather than mocked.
+            - name: Verify ffmpeg is available
+              run: ffmpeg -version | head -1
+
+            - run: pnpm install --frozen-lockfile
+
+            # The §5e models, a few hundred MB, cached on the manifest that pins them. The fetch
+            # verifies checksums either way, so a stale cache is caught rather than trusted.
+            - uses: actions/cache@v4
+              with:
+                  path: |
+                      models/*
+                      !models/manifest.json
+                  key: models-${{ hashFiles('models/manifest.json') }}
+            - run: pnpm models:fetch
+
+            - run: pnpm test:integration

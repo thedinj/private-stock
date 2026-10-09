@@ -1,0 +1,29 @@
+node_modules
+**/node_modules
+.next
+**/.next
+**/.next-dev
+dist
+**/dist
+.turbo
+**/.turbo
+coverage
+**/coverage
+.git
+.vscode
+data
+media
+*.db
+*.db-wal
+*.db-shm
+config.json
+secret.key
+.env
+.env*.local
+# Saved image tarballs from ship.sh. Sending them as build context put every past release
+# into each new build (15 GB) and exhausted memory before the build began.
+dist-image
+# Model files: the image fetches its own in a stage keyed on the manifest, so sending
+# the local copies as context would only add a few hundred MB to every build.
+models/*
+!models/manifest.json

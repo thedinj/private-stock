@@ -1,0 +1,21 @@
+/**
+ * The editor on a phone (CLAUDE.md "Responsive"): every control a thumb's worth.
+ *
+ * Done by size variables rather than a `size` prop on each of a dozen controls: Mantine reads an
+ * input's height from `--input-height-sm` at the input itself, so redefining it here reaches
+ * every select, multiselect and number box in the editor and nothing outside it.
+ */
+@media (max-width: 48em) {
+    .editor {
+        --input-height-sm: 44px;
+    }
+
+    // Not the × inside a picked tag: that one belongs to the pill, and at 44px it dwarfed the
+    // name beside it.
+    .editor :global(.mantine-CloseButton-root:not(.mantine-Pill-remove)) {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+}

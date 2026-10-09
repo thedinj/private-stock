@@ -1,0 +1,36 @@
+/**
+ * Where the heart's burst comes from (§14b). It wraps the icon, which clips its own overflow
+ * and so cannot hold one.
+ */
+.anchor {
+    position: relative;
+    display: inline-flex;
+}
+
+/** The heart itself, on the click that made it one: two beats. */
+.beat {
+    display: inline-block;
+    animation: beat 700ms ease-out both;
+}
+
+@keyframes beat {
+    0%,
+    45%,
+    100% {
+        transform: scale(1);
+    }
+
+    18% {
+        transform: scale(1.5);
+    }
+
+    62% {
+        transform: scale(1.25);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .beat {
+        animation: none;
+    }
+}

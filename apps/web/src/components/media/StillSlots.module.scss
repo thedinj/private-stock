@@ -1,0 +1,55 @@
+/**
+ * A picture, and how it arrives.
+ *
+ * Every variant is expressed once, as the state the incoming picture *departs from* — so
+ * `data-active` landing is what animates it, and the single reduced-motion block below collapses
+ * all four at once. A fifth variant added later cannot forget to honour it.
+ *
+ * The same rule applies on the way out, which is free and reads well: the outgoing picture leaves
+ * the way the incoming one came in.
+ */
+.picture {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        opacity 420ms ease,
+        filter 420ms ease,
+        transform 420ms ease;
+}
+
+.picture[data-active] {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+// Light coming up on the picture.
+.picture[data-transition="warm"]:not([data-active]) {
+    filter: brightness(1.12) saturate(1.1);
+}
+
+// A nudge, not a Ken Burns: 1.5% never loses an edge worth keeping.
+.picture[data-transition="drift"]:not([data-active]) {
+    transform: scale(1.015);
+}
+
+.picture[data-transition="veil"]:not([data-active]) {
+    filter: blur(6px);
+}
+
+// Somebody who asked not to be moved gets cuts: a dissolve is decoration, and a cut says the
+// same thing.
+@media (prefers-reduced-motion: reduce) {
+    .picture {
+        transition: none;
+    }
+
+    .picture:not([data-active]) {
+        filter: none;
+        transform: none;
+    }
+}

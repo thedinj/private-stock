@@ -1,0 +1,184 @@
+// A picture on the stage, and the way the next one arrives.
+
+/**
+ * The container: the picture, and the bar under it.
+ *
+ * The same arrangement as the player's, and for the same reason. The first version put the
+ * controls inside the box the pictures are in, which works for a `<video>` because the video is
+ * in normal flow and the bar lands after it — and does not work here, because **both** pictures
+ * are positioned. With nothing in flow, the bar became the only thing sizing the box and drew
+ * itself across the top of the photograph.
+ */
+.viewer {
+    position: relative;
+}
+
+/**
+ * The box the pictures sit in, and the shape it takes.
+ *
+ * **Both pictures are positioned and the box carries its own aspect**, rather than the active
+ * one sizing it. Letting the active picture size the box is the obvious version and it snaps:
+ * the outgoing element would lose `position: static` at the moment the fade begins, which is not
+ * an animatable change, so a landscape photograph followed by a portrait one visibly jumps before
+ * it dissolves. With the aspect on the box, neither element's box changes during the fade.
+ *
+ * `--ps-still-aspect` is written from the active picture's natural size. The 16/9 fallback is
+ * what a picture that has not loaded yet gets, and what "there is no picture" gets.
+ */
+.plate {
+    position: relative;
+    width: 100%;
+    aspect-ratio: var(--ps-still-aspect, 16 / 9);
+    // As the player's: the title row stays on screen on arrival (VideoPlayer.module.scss).
+    max-height: max(40dvh, min(75dvh, calc(100dvh - 17rem)));
+    background-color: var(--ps-well);
+    // The frame reshapes to the picture as the picture arrives. Not load-bearing: a browser that
+    // will not interpolate this reshapes instantly, which is what used to happen anyway.
+    transition: aspect-ratio 420ms ease;
+}
+
+/**
+ * Fullscreen: the picture takes every pixel (§14b).
+ *
+ * The same shape as the player's, for the same reason — what the browser is showing full screen
+ * is the *document*, so this is laid over the page rather than handed the screen, and stepping to
+ * the next item does not remove the fullscreen element from under it. The aspect and the height
+ * cap are both lifted explicitly: three quarters of the viewport is the right rule in the page
+ * and the wrong one here, and a `max-height` that survived into fullscreen is exactly the bug the
+ * player once had.
+ */
+.viewer[data-fullscreen] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--mantine-z-index-modal);
+    display: flex;
+    flex-direction: column;
+    background: #000;
+}
+
+/** Only when there is a show to hold — see the handler for why the cursor follows the action. */
+.plate[data-toggles] {
+    cursor: pointer;
+}
+
+.viewer[data-fullscreen] .plate {
+    flex: 1 1 auto;
+    min-height: 0;
+    aspect-ratio: auto;
+    max-height: none;
+}
+
+/**
+ * Nothing to show: no cover has been made yet, or the file will not decode.
+ *
+ * Still a box of the ordinary shape rather than a collapsed one, because the show walks past this
+ * in a few seconds and a stage that changes height on the way through is worse than a stage with
+ * a sentence in it.
+ */
+.empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--mantine-spacing-lg);
+    text-align: center;
+}
+
+/**
+ * The transport, under the picture and never over it.
+ *
+ * In the page it is furniture below the frame, where the player's bar is and where it cannot
+ * cover the one thing this page is for. In fullscreen there is no "below" worth having, so it
+ * lies over the bottom of the picture and leaves after a few seconds of stillness — the same
+ * bargain the player strikes.
+ */
+.controls {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-sm);
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+}
+
+.viewer[data-fullscreen] .controls {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    padding-bottom: max(var(--mantine-spacing-xs), var(--ps-safe-bottom, 0px));
+    background: linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0.35) 72%, transparent);
+    transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+}
+
+.viewer[data-fullscreen] .controls[data-hidden] {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+}
+
+/** The pointer goes with the bar, as it does over a film. */
+.viewer[data-idle] {
+    cursor: none;
+}
+
+/**
+ * How much of the dwell is left.
+ *
+ * Animated by CSS and never by React state. A photograph has no scrubber, so without this a
+ * picture with a clock running on it reads as frozen — but re-rendering the page thirty times a
+ * second to draw a line is exactly what `positionRef` exists to avoid on the video side.
+ */
+.dwell {
+    flex: 1 1 auto;
+    height: 2px;
+    border-radius: 1px;
+    background-color: color-mix(in srgb, var(--mantine-color-brass-6) 26%, transparent);
+    overflow: hidden;
+}
+
+.dwell::after {
+    content: "";
+    display: block;
+    height: 100%;
+    background-color: var(--mantine-color-brass-6);
+    transform-origin: left center;
+    transform: scaleX(0);
+    animation: elapse var(--ps-dwell, 5000ms) linear forwards;
+}
+
+/**
+ * Held: by the viewer, by a hidden tab, or by a picture that has not decoded yet.
+ *
+ * Paused rather than reset, which is also what keeps this line and the timeout that actually
+ * advances the show telling the same story — they stop and start on the same flag.
+ */
+.dwell[data-held]::after {
+    animation-play-state: paused;
+}
+
+@keyframes elapse {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+
+/**
+ * Somebody who asked not to be moved gets cuts, and keeps the line.
+ *
+ * The transitions go (the pictures' own are in `StillSlots.module.scss`): a dissolve is
+ * decoration, and a cut says the same thing. The dwell line
+ * stays, because it is *information* — the only thing on screen saying how long this picture has
+ * left — and its motion is one slow linear sweep rather than the kind of movement the preference
+ * is about.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .plate,
+    .controls {
+        transition: none;
+    }
+}

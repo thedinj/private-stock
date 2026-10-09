@@ -1,0 +1,169 @@
+/**
+ * The warming overlay (§8b, "Seeing it work").
+ *
+ * Above the fullscreen player, which sits at the modal layer, and above a modal too: a dialog
+ * opened over a film is exactly when somebody might want to see what the film is doing.
+ */
+.hud {
+    position: fixed;
+    top: calc(8px + var(--ps-safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: calc(var(--mantine-z-index-max) + 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: max-content;
+    max-width: calc(100vw - 32px - var(--ps-safe-left) - var(--ps-safe-right));
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ps-text-warm);
+    pointer-events: none;
+}
+
+.chip,
+.panel {
+    pointer-events: auto;
+    background: var(--ps-diag-panel);
+    border: 1px solid var(--ps-hairline-strong);
+    backdrop-filter: blur(6px);
+}
+
+.chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 0 14px;
+    border-radius: 22px;
+    font: inherit;
+    color: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.panel {
+    width: min(460px, calc(100vw - 32px - var(--ps-safe-left) - var(--ps-safe-right)));
+    max-height: min(70vh, 640px);
+    overflow-y: auto;
+    padding: 10px 12px;
+    border-radius: 8px;
+}
+
+.dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ps-diag-off);
+}
+
+.dot[data-tone="ready"],
+.label[data-tone="ready"] {
+    --tone: var(--ps-diag-ready);
+}
+
+.dot[data-tone="pending"],
+.label[data-tone="pending"] {
+    --tone: var(--ps-diag-pending);
+}
+
+.dot[data-tone="off"],
+.label[data-tone="off"] {
+    --tone: var(--ps-diag-off);
+}
+
+.dot[data-tone="miss"],
+.label[data-tone="miss"] {
+    --tone: var(--ps-diag-miss);
+}
+
+.dot {
+    background: var(--tone, var(--ps-diag-off));
+}
+
+.label {
+    color: var(--tone, inherit);
+    font-weight: 700;
+}
+
+.dim {
+    color: var(--mantine-color-dimmed);
+}
+
+.key {
+    color: var(--mantine-color-dimmed);
+}
+
+.line {
+    overflow-wrap: anywhere;
+}
+
+.block {
+    padding: 8px 0;
+    border-top: 1px solid var(--ps-hairline);
+}
+
+.block[data-primary] .blockHead strong {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.blockHead,
+.joinsHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.blockHead .label {
+    margin-left: auto;
+}
+
+.joinsHead {
+    padding-top: 8px;
+    border-top: 1px solid var(--ps-hairline);
+}
+
+.copy {
+    margin-left: auto;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--ps-hairline-strong);
+    border-radius: 4px;
+    font: inherit;
+    color: inherit;
+
+    &:disabled {
+        opacity: 0.4;
+    }
+}
+
+.joins {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.join {
+    padding: 3px 0;
+}
+
+.joinHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/** What the element said after the join, in milliseconds since it. */
+.timeline {
+    padding-left: 15px;
+    font-size: 11px;
+    color: var(--mantine-color-dimmed);
+    overflow-wrap: anywhere;
+}

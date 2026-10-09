@@ -1,0 +1,356 @@
+"use client";
+
+import {
+    keepPreviousData,
+    useInfiniteQuery,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query";
+
+import type {
+    NoSingleFace,
+    ItemSuspectDecision,
+    ItemSuspects,
+    AutoTagDecision,
+    AutoTagPage,
+    AutoTagState,
+    AutoTagSwitch,
+    FaceLikeness,
+    FacePeek,
+    ConfirmedFacesPage,
+    FaceGroupDecision,
+    FaceReviewDecision,
+    FaceReviewPage,
+    FaceReviewResult,
+    FaceReviewTab,
+    LikelyDecision,
+    LikelyPage,
+    OwnFacePick,
+    OwnFacesPage,
+    PerformerFacesResponse,
+    ReviewMedia,
+} from "@private-stock/core";
+
+import { api } from "@/lib/api/client";
+import { queryKeys } from "@/lib/api/queryKeys";
+import { invalidateVocabulary } from "@/lib/api/tags";
+
+/**
+ * A performer's faces and "Likely" list (§5f "Starting from the performer"). See
+ * docs/CACHE_KEYS.md "Faces on a performer's page".
+ */
+
+const base = (tagId: string): string => `/api/tags/${encodeURIComponent(tagId)}`;
+
+/** "Their face", asked for once the section nears the viewport. */
+export const usePerformerFaces = (tagId: string, enabled: boolean) =>
+    useQuery({
+        queryKey: queryKeys.tags.faces(tagId),
+        queryFn: () => api<PerformerFacesResponse>(`${base(tagId)}/faces`),
+        enabled,
+    });
+
+/**
+ * Every face confirmed as them, a page at a time, for choosing their picture: asked for only
+ * while the choosing is open.
+ */
+export const useConfirmedFaces = (tagId: string, enabled: boolean) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.tags.confirmedFaces(tagId),
+        queryFn: ({ pageParam }) =>
+            api<ConfirmedFacesPage>(`${base(tagId)}/faces/confirmed?page=${pageParam}`),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+        enabled,
+    });
+
+/** "Likely", a page at a time: a long list is read down and acted on, not loaded whole. */
+export const useLikely = (tagId: string, enabled: boolean) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.tags.likely(tagId),
+        queryFn: ({ pageParam }) => api<LikelyPage>(`${base(tagId)}/likely?page=${pageParam}`),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+        enabled,
+    });
+
+/**
+ * "That's them" or "Not them" of a group. Both sections move: a confirmed group's items join
+ * "Likely", a refused one's leave it.
+ */
+export const useDecideFaceGroup = (tagId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: FaceGroupDecision) =>
+            api<{ changed: number }>(`${base(tagId)}/faces`, {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+        },
+    });
+};
+
+/**
+ * Tag items from "Likely", or say one is not them. Tagging is a tag edit like any other — the
+ * library's pages, counts and facets move, and the batch joins the undo list — and the page's
+ * own counts and groups move with it.
+ */
+export const useDecideLikely = (tagId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: LikelyDecision) =>
+            api<{ changed: number }>(`${base(tagId)}/likely`, {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: (_, decision) => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+
+            if (decision.verdict === "refuse") {
+                // The name match is refused too: "Find untagged" and its counts move.
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.facets() });
+            } else {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.profileOf(tagId) });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.batches() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
+            }
+        },
+    });
+};
+
+/** Review › Faces, a page at a time (§5f). See docs/CACHE_KEYS.md "Review › Faces". */
+export const useFaceReview = (
+    tab: FaceReviewTab,
+    performer: string | null,
+    prefer: string | null,
+    media: ReviewMedia
+) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.tags.faceReview(tab, performer, prefer, media),
+        queryFn: ({ pageParam }) =>
+            api<FaceReviewPage>(
+                `/api/faces/review?tab=${tab}&page=${pageParam}` +
+                    (performer ? `&performer=${encodeURIComponent(performer)}` : "") +
+                    (prefer ? `&prefer=${encodeURIComponent(prefer)}` : "") +
+                    (media === "all" ? "" : `&media=${media}`)
+            ),
+        // A new preference reorders the list, but the old order is worth showing meanwhile.
+        placeholderData: keepPreviousData,
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+    });
+
+/**
+ * Answer a Review › Faces row. Tagging — accepting, or naming who it is — is a tag edit like any
+ * other and may coin a performer, so it moves everything a vocabulary change does, the review
+ * itself and every performer's faces included. A refusal moves only the faces: the review, and
+ * that performer's two sections.
+ */
+export const useDecideFaceReview = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: FaceReviewDecision) =>
+            api<FaceReviewResult>("/api/faces/review", {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: (_, decision) => {
+            if (decision.verdict === "refuse") {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tags.faces(decision.tagId),
+                });
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tags.likely(decision.tagId),
+                });
+            } else {
+                invalidateVocabulary(queryClient);
+            }
+        },
+    });
+};
+
+/**
+ * How alike a review row's faces are to who it asks about, asked for as the row nears the screen
+ * (the list draws only those). Kept for the visit: the faces do not change under a row.
+ */
+export const useFaceLikeness = (groupId: string, tagId: string | null, faceIds: string[]) => {
+    const ids = faceIds.join(",");
+
+    return useQuery({
+        queryKey: queryKeys.tags.faceLikeness(groupId, tagId, ids),
+        queryFn: () =>
+            api<FaceLikeness>(
+                `/api/faces/review/likeness?groupId=${encodeURIComponent(groupId)}&ids=${encodeURIComponent(ids)}` +
+                    (tagId ? `&tagId=${encodeURIComponent(tagId)}` : "")
+            ),
+        enabled: faceIds.length > 0,
+        staleTime: Infinity,
+    });
+};
+
+/** A closer look at one face: asked for only while it is open. */
+export const useFacePeek = (groupId: string, mediaId: string, enabled: boolean) =>
+    useQuery({
+        queryKey: queryKeys.tags.facePeek(groupId, mediaId),
+        queryFn: () =>
+            api<FacePeek>(
+                `/api/faces/peek?groupId=${encodeURIComponent(groupId)}&mediaId=${encodeURIComponent(mediaId)}`
+            ),
+        enabled,
+        staleTime: Infinity,
+    });
+
+/** "Would tag", a page at a time, in the visit's order. See docs/CACHE_KEYS.md. */
+export const useAutoTags = (state: AutoTagState, seed: number) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.tags.autoTags(state, seed),
+        queryFn: ({ pageParam }) =>
+            api<AutoTagPage>(`/api/faces/auto?state=${state}&seed=${seed}&page=${pageParam}`),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+    });
+
+/**
+ * "Right" or "Wrong" of one item. Right tags it, so it moves what any tagging does; either moves
+ * the review and the performer's faces.
+ */
+export const useDecideAutoTag = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: AutoTagDecision) =>
+            api<{ tagged: number }>("/api/faces/auto", {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: (_, decision) => {
+            if (decision.verdict === "right") {
+                invalidateVocabulary(queryClient);
+            } else {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tags.faces(decision.tagId),
+                });
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tags.likely(decision.tagId),
+                });
+            }
+        },
+    });
+};
+
+/** Let faces tag by themselves, or stop them: the list says which, so it is asked again. */
+export const useSwitchAutoTag = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: AutoTagSwitch) =>
+            api<{ enabled: boolean }>("/api/faces/auto/setting", {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: () =>
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() }),
+    });
+};
+
+/** "Maybe in this item", for administrators. */
+export const useItemSuspects = (mediaId: string, enabled: boolean) =>
+    useQuery({
+        queryKey: queryKeys.media.suspects(mediaId),
+        queryFn: () => api<ItemSuspects>(`/api/media/${encodeURIComponent(mediaId)}/suspects`),
+        enabled,
+    });
+
+/**
+ * "Add" a suggested performer, or "Not them". Adding is a tag edit like any other, so it moves what
+ * any tagging does — the item, its suggestions and the library are all under it. A refusal changes
+ * no tag: the suggestions, and that performer's sections.
+ */
+export const useDecideItemSuspect = (mediaId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: ItemSuspectDecision) =>
+            api<{ changed: number }>(`/api/media/${encodeURIComponent(mediaId)}/suspects`, {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: (_, decision) => {
+            if (decision.verdict === "add") {
+                invalidateVocabulary(queryClient);
+            } else {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.suspects(mediaId) });
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tags.likely(decision.tagId),
+                });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+            }
+        },
+    });
+};
+
+/**
+ * "No single face", or taken back: the performer's face section, their "Likely" and the review
+ * all change; the references are rebuilt behind it.
+ */
+/** "Pick their face": their own items a page at a time, asked for only while it is open. */
+export const useOwnFaces = (tagId: string, enabled: boolean) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.tags.ownFaces(tagId),
+        queryFn: ({ pageParam }) => api<OwnFacesPage>(`${base(tagId)}/faces/own?page=${pageParam}`),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+        enabled,
+    });
+
+/**
+ * "That's them" of one face on one of their items, or taken back. Their faces move — the strip,
+ * the picker under them, the picture's choices — and the review and "Likely" follow once the
+ * reference is rebuilt.
+ */
+export const usePickOwnFace = (tagId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (pick: OwnFacePick) =>
+            api<{ changed: number }>(`${base(tagId)}/faces/own`, {
+                method: "POST",
+                body: JSON.stringify(pick),
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+        },
+    });
+};
+
+export const useSetNoSingleFace = (tagId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: NoSingleFace) =>
+            api<{ noSingleFace: boolean }>(`${base(tagId)}/faces/setting`, {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+        },
+    });
+};

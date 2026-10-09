@@ -1,0 +1,84 @@
+# Caddy in front, on the LAN, with no public name (§12, §20).
+#
+#   docker compose -f docker/docker-compose.qnap.yml -f docker/docker-compose.lan.yml up -d
+#
+# The alternative to docker-compose.proxy.yml, not an addition to it. Use one or the other.
+#
+# **This exists for HTTP/2, not for secrecy.** Plain HTTP means HTTP/1.1, which caps a browser
+# at six connections per origin; a grid page opens far more than six, and the measured cost was
+# 854 seconds of browser queueing against 93 seconds of server time (§20). TLS is the only way
+# to HTTP/2, and Caddy's own CA is the only way to TLS without a domain.
+#
+# What it gives up against the public path: casting, which needs a certificate a TV will trust,
+# and reachability from outside the house. What it avoids: DDNS, Let's Encrypt, the challenge
+# relay, and the fight with QTS over ports 80 and 443.
+#
+# Values come from `docker/.env` (copy `.env.example`), except the two set here.
+
+services:
+    private-stock:
+        # The app is published on loopback only, which is what makes this the front door rather
+        # than one of two. That lives in the file being overlaid, because Compose merges port
+        # lists by appending and so cannot take a published port away.
+        #
+        # Done by hand rather than with a `!reset []` override here, because Container
+        # Station's bundled Compose is not always new enough to understand the merge tags and
+        # fails with a parse error rather than a useful one.
+        environment:
+            # One proxy in front. The app reads `X-Forwarded-For` for rate limiting and
+            # `X-Forwarded-Proto` for the cookie's Secure flag, and believes neither unless
+            # this says how many hops to count back.
+            PRIVATE_STOCK_TRUSTED_PROXY_HOPS: "1"
+
+    caddy:
+        image: caddy:2-alpine
+        container_name: private-stock-caddy
+        restart: unless-stopped
+        depends_on:
+            - private-stock
+
+        ports:
+            # One port, and deliberately not 443.
+            #
+            # QTS occupies 80, 443, 8080, 8081 and 8443 out of the box, and moving its own
+            # listeners in Control Panel is the step most likely to go wrong on a NAS somebody
+            # else also uses. Without ACME there is nothing that *needs* a well-known port —
+            # no HTTP-01 challenge, no redirect from port 80 — so the whole conflict is
+            # avoidable rather than merely survivable.
+            #
+            # HTTP/2 is negotiated during the TLS handshake and does not care which port it
+            # happens on. `PS_DOMAIN` carries the port so Caddy and the browser agree.
+            #
+            # 9443, not 8443: QTS occupies 80, 443, 8080, 8081 **and 8443**. This file said 8443
+            # for one commit, which is a port the NAS would have refused to bind.
+            - "${PS_HTTPS_PORT:-9443}:${PS_HTTPS_PORT:-9443}"
+
+        environment:
+            # Must include the port, e.g. `mediaserver:9443`, and must be the name typed into
+            # the browser: it is both the site address Caddy answers on and the name on the
+            # certificate it issues itself.
+            PS_DOMAIN: "${PS_DOMAIN:?set PS_DOMAIN in docker/.env, with its port}"
+            PS_UPSTREAM: "${PS_UPSTREAM:-private-stock:8842}"
+
+            # Caddy's own CA. See the snippet of this name in the Caddyfile.
+            PS_TLS: "tls_lan"
+
+            # Never used — `tls_lan` asks nobody for a certificate — but the Caddyfile's global
+            # options block names it, and an empty value there is a parse error rather than an
+            # ignored one.
+            PS_ACME_EMAIL: "lan@invalid"
+
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            # The CA's own key and the certificates it signs. Losing this volume is not the
+            # week-long rate-limit problem it is on the public path — Caddy simply makes a new
+            # CA — but every machine that trusted the old root has to be told about the new
+            # one, by hand, again. Keep it.
+            - caddy-data:/data
+            - caddy-config:/config
+            - caddy-logs:/var/log/caddy
+
+volumes:
+    caddy-data:
+    caddy-config:
+    caddy-logs:

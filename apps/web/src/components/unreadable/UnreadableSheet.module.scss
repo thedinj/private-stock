@@ -1,0 +1,95 @@
+/**
+ * Files the probe cannot read (§10g).
+ *
+ * Built like the rows of the OCR review (`OcrReview.module.scss`), its neighbour in the
+ * Upkeep group and the same kind of visit: a queue worked through by eye with a tick on the left.
+ * There is no picture to show, so the reason line takes the place a thumbnail would.
+ */
+
+.tickAll {
+    padding: 0 var(--mantine-spacing-xs) var(--mantine-spacing-xs)
+        calc(var(--mantine-spacing-xs) + 3px);
+    border-bottom: 1px solid var(--ps-hairline);
+}
+
+.row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--ps-hairline);
+    border-left: 3px solid transparent;
+}
+
+// The tick, in a column of its own so the whole left edge is a 44px target.
+.tick {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 2px;
+    min-height: 44px;
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--mantine-spacing-sm);
+    min-width: 0;
+}
+
+.name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// The number the list is sorted by, so it lines up down the right edge.
+.size {
+    flex: none;
+    font-size: 13px;
+    color: var(--ps-text-warm);
+    font-variant-numeric: tabular-nums;
+}
+
+.where {
+    font-size: 12px;
+    color: var(--mantine-color-oak-5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// What ffprobe said, as it said it: monospace, and allowed to wrap anywhere so a long path in
+// the message cannot push the row wider than a phone.
+.reason {
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 12px;
+    color: var(--ps-text-warm);
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px var(--mantine-spacing-sm);
+    margin-top: 2px;
+}
+
+.when {
+    font-size: 12px;
+    color: var(--mantine-color-oak-6);
+    white-space: nowrap;
+}

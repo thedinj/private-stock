@@ -1,0 +1,41 @@
+packages:
+    - packages/*
+    - apps/*
+
+onlyBuiltDependencies:
+    # Native addon: compiled against the local Node ABI at install time.
+    - better-sqlite3
+    - sharp
+    # These two download the ffmpeg/ffprobe binaries in a postinstall script. Without
+    # approval here the package installs with no binary at all, and probing fails at runtime
+    # with a confusing "not found" rather than at install time.
+    - ffmpeg-static
+    - ffprobe-static
+    - esbuild
+    - "@parcel/watcher"
+    - unrs-resolver
+
+ignoredBuiltDependencies:
+    # Deliberately not allowed to run its postinstall. The CPU runtime for every platform ships
+    # inside the package; the script only downloads CUDA libraries, which a NAS without an
+    # NVIDIA GPU never loads and which would add hundreds of MB to every install (§5e).
+    - onnxruntime-node
+
+overrides:
+    # Next pins postcss@8.4.31 exactly, which carries four advisories: an XSS in stringified
+    # `</style>` (GHSA-qx2v-qp2m-jg93) and a family of file reads via sourceMappingURL
+    # (GHSA-r28c-9q8g-f849, GHSA-fxqj-rqcc-2cmp and one more), fully fixed in 8.5.23. Build-time
+    # only -- it runs over our own CSS -- but a clean `pnpm audit` is what makes the next real
+    # advisory visible. Scoped to Next's edge so it resolves to the copy apps/web already depends
+    # on directly. Drop this once Next ships a patched pin.
+    "next>postcss": "^8.5.23"
+
+patchedDependencies:
+    # Next 15's router caches every request path it resolves to "not a file" -- a null with a size
+    # of 1 in a cache bounded at 1M -- and never reads the null back (`if (lruResult)`). Each
+    # entry kept a slice of the whole request URL, so the web process grew by one per distinct
+    # path ever requested: every cover, preview, poster and stream of every item (§20 "The web
+    # process's own memory"). The patch stops caching misses. Fixed upstream in Next 16
+    # (`FS_LRU_MAX_SIZE`, `notFound`); drop this with the upgrade. `nextFsCachePatch.test.ts`
+    # fails if the installed Next has lost it.
+    next@15.5.25: patches/next@15.5.25.patch
