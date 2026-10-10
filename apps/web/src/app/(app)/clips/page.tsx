@@ -45,6 +45,7 @@ import {
     useUrlSearch,
     useUrlView,
 } from "@/lib/urlView";
+import { SearchInput } from "@/components/SearchInput";
 
 /**
  * The clip browser (§14d).
@@ -303,10 +304,10 @@ const ClipsPage: React.FC = () => {
                             w={{ base: "100%", xs: 170 }}
                             aria-label="Sort"
                         />
-                        <TextInput
+                        <SearchInput
                             placeholder="Search names"
                             value={search}
-                            onChange={(event) => setSearch(event.currentTarget.value)}
+                            onChange={setSearch}
                             size="sm"
                             w={{ base: "100%", xs: 180 }}
                             aria-label="Search clip names"

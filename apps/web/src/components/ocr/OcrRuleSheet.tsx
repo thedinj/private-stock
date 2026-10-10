@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, Badge, Button, Group, Loader, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Group, Loader, Select, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -7,6 +7,7 @@ import type { OcrMatchCandidate, OcrMatchRow, OcrMatchStatus } from "@private-st
 
 import { ocrMatchesKey, useOcrMatches, useUndoOcrMatch, type OcrMatchFilters } from "@/lib/api/ocr";
 import { facetLabel } from "@/lib/facetLabels";
+import { SearchInput } from "@/components/SearchInput";
 
 import { Highlighted, plural } from "./OcrMatchParts";
 import { OcrThumb } from "./OcrThumb";
@@ -154,11 +155,11 @@ export const OcrRuleSheet: React.FC<OcrRuleSheetProps> = ({
     return (
         <Stack gap="md">
             <Group gap="sm" wrap="wrap" align="center">
-                <TextInput
+                <SearchInput
                     aria-label="Find text"
                     placeholder="Find text"
                     value={searchText}
-                    onChange={(event) => onSearchText(event.currentTarget.value)}
+                    onChange={onSearchText}
                     style={{ flex: "1 1 220px" }}
                 />
                 <Select

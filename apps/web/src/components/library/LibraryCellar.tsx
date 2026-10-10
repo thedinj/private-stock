@@ -19,7 +19,6 @@ import {
     Select,
     Stack,
     Text,
-    TextInput,
     Tooltip,
 } from "@mantine/core";
 import { useDisclosure, useElementSize, useMediaQuery } from "@mantine/hooks";
@@ -79,6 +78,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
 import { rememberTagNames } from "@/lib/rememberedPages";
 import { rememberReturnTo } from "@/lib/returnTo";
 import { DIRECTION_LABELS, SORT_LABELS } from "@/lib/sortWords";
+import { SearchInput } from "@/components/SearchInput";
 
 import classes from "./LibraryCellar.module.scss";
 
@@ -694,10 +694,10 @@ export const LibraryCellar: React.FC = () => {
     };
 
     const searchBox = (
-        <TextInput
+        <SearchInput
             placeholder="Search"
             value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
+            onChange={setSearch}
             w={wide ? 240 : undefined}
             style={wide ? undefined : { flex: 1, minWidth: 0 }}
             styles={touch ? { input: { height: TOUCH_HEIGHT } } : undefined}

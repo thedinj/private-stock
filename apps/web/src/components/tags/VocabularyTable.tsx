@@ -14,7 +14,6 @@ import {
     Switch,
     Table,
     Text,
-    TextInput,
 } from "@mantine/core";
 
 import type { TagScope } from "@private-stock/core";
@@ -31,6 +30,7 @@ import {
     useUrlSearch,
     useUrlView,
 } from "@/lib/urlView";
+import { SearchInput } from "@/components/SearchInput";
 
 /**
  * One facet of one tagging system's vocabulary, as a table you can work through (§6).
@@ -129,10 +129,10 @@ export const VocabularyTable: React.FC<VocabularyTableProps> = ({
     return (
         <Stack gap="sm">
             <Group gap="sm" wrap="wrap">
-                <TextInput
+                <SearchInput
                     placeholder={`Find a ${one}`}
                     value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    onChange={setSearch}
                     w={{ base: "100%", xs: 220 }}
                 />
 

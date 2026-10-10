@@ -17,7 +17,6 @@ import {
     SimpleGrid,
     Stack,
     Text,
-    TextInput,
 } from "@mantine/core";
 
 import { captureNaturalDirection, type Capture, type CaptureSort } from "@private-stock/core";
@@ -32,6 +31,7 @@ import { useCaptures, useDiscardCaptures, useRenameCapture } from "@/lib/api/cap
 import { captureView } from "@/lib/captureView";
 import { rememberReturn } from "@/lib/returnTo";
 import { useUrlSearch, useUrlView } from "@/lib/urlView";
+import { SearchInput } from "@/components/SearchInput";
 
 /**
  * Your captures, in one place (§9).
@@ -212,10 +212,10 @@ export const CapturesBrowser: React.FC = () => {
                             w={{ base: "100%", xs: 180 }}
                             aria-label="Sort"
                         />
-                        <TextInput
+                        <SearchInput
                             placeholder="Search captions and titles"
                             value={search}
-                            onChange={(event) => setSearch(event.currentTarget.value)}
+                            onChange={setSearch}
                             size="sm"
                             w={{ base: "100%", xs: 220 }}
                             aria-label="Search captions and video titles"

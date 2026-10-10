@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Alert, Button, SegmentedControl, Stack, Switch, TextInput } from "@mantine/core";
+import { Alert, Button, SegmentedControl, Stack, Switch } from "@mantine/core";
 
 import { tagBrowseSortSchema, type TagBrowseSort, type TagScope } from "@private-stock/core";
 
@@ -25,6 +25,7 @@ import {
 } from "@/components/browse/BrowseToolbar";
 import { BROWSE_LAYOUTS, RowsTilesSwitch } from "@/components/browse/RowsTilesSwitch";
 import { PagePlate } from "@/components/shell/PagePlate";
+import { SearchInput } from "@/components/SearchInput";
 
 import { TagBrowseList } from "./TagBrowseList";
 
@@ -109,10 +110,10 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
             <PagePlate eyebrow={eyebrow} title={title} lede={lede} />
 
             <BrowseToolbar>
-                <TextInput
+                <SearchInput
                     placeholder={`Find ${title.toLowerCase()}`}
                     value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    onChange={setSearch}
                     w={wide ? 240 : "100%"}
                     styles={wide ? undefined : { input: { height: BROWSE_TOUCH_HEIGHT } }}
                     aria-label={`Find ${title.toLowerCase()}`}

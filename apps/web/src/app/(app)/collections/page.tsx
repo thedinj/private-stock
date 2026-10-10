@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     Button,
-    CloseButton,
     Group,
     Modal,
     SegmentedControl,
@@ -41,6 +40,7 @@ import {
     useUrlSearch,
     useUrlView,
 } from "@/lib/urlView";
+import { SearchInput } from "@/components/SearchInput";
 
 /**
  * Everything that exposes a subset of the library, in one place (§14c).
@@ -161,18 +161,13 @@ const CollectionsPage: React.FC = () => {
                     },
                 ]}
             />
-            <TextInput
+            <SearchInput
                 placeholder="Find views and playlists"
                 aria-label="Find views and playlists"
                 value={search}
-                onChange={(event) => setSearch(event.currentTarget.value)}
+                onChange={setSearch}
                 w={wide ? 240 : "100%"}
                 styles={wide ? undefined : { input: { height: BROWSE_TOUCH_HEIGHT } }}
-                rightSection={
-                    search ? (
-                        <CloseButton aria-label="Clear the search" onClick={() => setSearch("")} />
-                    ) : null
-                }
             />
             <SegmentedControl
                 value={view.sort}

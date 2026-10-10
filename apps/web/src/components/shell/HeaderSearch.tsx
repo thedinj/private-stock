@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     ActionIcon,
+    CloseButton,
     Combobox,
     Group,
     Kbd,
@@ -253,11 +254,21 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({ compact }) => {
                             >
                                 <CloseGlyph size={16} />
                             </ActionIcon>
-                        ) : !focused && text === "" ? (
+                        ) : text !== "" ? (
+                            <CloseButton
+                                aria-label="Clear the search"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                    setText("");
+                                    combobox.closeDropdown();
+                                    inputRef.current?.focus();
+                                }}
+                            />
+                        ) : !focused ? (
                             <Kbd className={classes.hint}>/</Kbd>
                         ) : null
                     }
-                    rightSectionPointerEvents={compact ? "all" : "none"}
+                    rightSectionPointerEvents={compact || text !== "" ? "all" : "none"}
                     enterKeyHint="search"
                     autoComplete="off"
                     spellCheck={false}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Group, Loader, Modal, ScrollArea, Stack, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 
@@ -11,6 +11,7 @@ import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import type { LibraryView } from "@/lib/libraryQuery";
 import { chipState, cycleChip } from "@/lib/tagLogic";
+import { SearchInput } from "@/components/SearchInput";
 
 import { TriChip } from "./TriChip";
 
@@ -100,10 +101,10 @@ export const FacetModal: React.FC<FacetModalProps> = ({
                     reach a performer who sits past it. Searching the vocabulary reaches every
                     value the facet has, which is what makes the claim of completeness true
                     rather than true up to a limit. */}
-                <TextInput
+                <SearchInput
                     placeholder={`Find in ${label.toLowerCase()}…`}
                     value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    onChange={setSearch}
                     autoFocus
                 />
 

@@ -35,6 +35,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useCreateReel, useReels } from "@/lib/api/reels";
+import { SearchInput } from "@/components/SearchInput";
 
 /**
  * The reel index (§14d).
@@ -133,10 +134,10 @@ const ReelsPage: React.FC = () => {
                     w={{ base: "100%", sm: 190 }}
                     aria-label="Sort"
                 />
-                <TextInput
+                <SearchInput
                     placeholder="Search names"
                     value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    onChange={setSearch}
                     w={{ base: "100%", sm: 240 }}
                 />
             </Group>
