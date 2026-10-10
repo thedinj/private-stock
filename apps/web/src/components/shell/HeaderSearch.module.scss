@@ -1,0 +1,101 @@
+// The header search (§14 "The header search").
+
+// On a wide screen: centred in the header between the wordmark and the status, as wide as a
+// question needs and no wider -- a box the width of the window reads as the page's only job.
+.wide {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+}
+
+.box {
+    width: 100%;
+    max-width: 560px;
+
+    @media (min-width: 75em) {
+        max-width: 640px;
+    }
+}
+
+// A well in the bar rather than a form field on it: the surface sunk a step, a hairline edge that
+// warms to brass when the box is in use.
+.input {
+    height: 38px;
+    min-height: 38px;
+    border-radius: 999px;
+    background-color: var(--ps-well);
+    border: 1px solid var(--ps-hairline);
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease;
+
+    &:hover {
+        border-color: var(--ps-hairline-strong);
+    }
+
+    &:focus,
+    &:focus-within {
+        border-color: var(--mantine-color-brass-6);
+        box-shadow: 0 0 0 3px var(--mantine-color-brass-light);
+    }
+
+    &::placeholder {
+        color: var(--mantine-color-dimmed);
+    }
+
+    // 44px on a coarse pointer, as every control (§14).
+    @media (pointer: coarse) {
+        height: 44px;
+        min-height: 44px;
+    }
+}
+
+// The kind, by its icon alone: a round button inside the box's left end, ruled off from the text.
+.typeButton {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    margin-inline-start: 4px;
+    border-radius: 999px;
+
+    @media (pointer: coarse) {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+.typeItem[data-active] {
+    color: var(--mantine-color-brass-4);
+}
+
+// The `/` that says how to get here from the keyboard. Wide screens only; a phone has no `/` key
+// to speak of.
+.hint {
+    opacity: 0.7;
+    margin-inline-end: 6px;
+}
+
+.dropdown {
+    min-width: 320px;
+}
+
+// On a phone the box takes the whole bar while it is open: the wordmark and the burger are
+// covered rather than squeezed, and come back the moment it closes.
+.overlay {
+    position: absolute;
+    inset: 0;
+    top: var(--ps-safe-top);
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    padding-inline: calc(var(--app-shell-padding) + var(--ps-safe-left))
+        calc(var(--app-shell-padding) + var(--ps-safe-right));
+    background-color: var(--ps-surface);
+
+    .box {
+        max-width: none;
+    }
+}

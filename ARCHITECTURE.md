@@ -1536,6 +1536,13 @@ items, ordered by how much they look like it. Faces keep the same shape when the
 confirmed performer is a facet filter as now, and a "same person as this frame" lens, if one is
 ever wanted, is a second option of the Look section rather than a new place.
 
+**The header search asks for a look too, by name** (2026-10-10). The library's own box stays
+modeless, as above. The box in the header (§14 "The header search") carries a visible kind, and
+"Look" is one of them: it opens a clean library with the words as `lookText`, exactly what the
+panel's "Looks like…" field would have written. What made a switch on the library box wrong was
+one box quietly meaning two things; the header box shows its kind as an icon and says it in its
+placeholder, so it means one thing at a time and says which.
+
 In this mode a tile shows **the frame that matched, with its time**, not the cover: the match is
 the evidence, and the cover of a twenty-minute video rarely shows the glasses. Opening a tile
 opens the item at that moment, and the list row carries the matched time so the tasting can use
@@ -7530,7 +7537,7 @@ Tags · Settings (prefs, saved filters, sessions) · Admin — now Review, Libra
 Household (§12c); the error-log viewer is parked.
 
 **Mantine only**, per basket-bot's rule — no second component library. `@mantine/hooks`
-`useHotkeys` for the keymap, Spotlight for `/` search, and TanStack Virtual under a plain
+`useHotkeys` for the keymap, the header search for `/` (below), and TanStack Virtual under a plain
 CSS-grid tile list for the library (Mantine has no virtualized grid of its own).
 
 **Filter/sort**: URL-encoded query state, shareable and back-button correct — kind, duration,
@@ -7601,6 +7608,51 @@ the scrubber (a `div` with a slider role) all let the keys through, and a text f
 a select and a rich-text `div` still take them. The list names the input types that take _no_
 characters, so anything unrecognised counts as typing: a hotkey that does not fire is obvious at
 once, and a swallowed keystroke inside a field is not.
+
+### The header search
+
+**One box in the header, on every page** (2026-10-10), for starting a question from wherever you
+are. It asks one of five kinds, chosen from the icon at its left: **Library** (a magnifier --
+the library's text, §5c), **Performer** (head and shoulders), **Source** (a clapperboard),
+**Keyword** (a luggage tag) and **Look** (an eye -- §5e; not the overlapping frames of "More like
+this", which starts from a picture rather than words). The glyphs are `Glyph.tsx`'s, drawn at
+16-18px with no label, so each has to read on its own.
+
+- **Enter goes to a page that already existed.** Every kind had one that takes the words in its
+  address, so the box is mostly a router (`searchHref`): Library to `/?view=grid&search=`, Look to
+  `/?view=grid&lookText=`, and the three tag kinds to their browse pages with `?q=`. Library and
+  Look land on a **clean** library -- a new question, not a refinement of the view that was open.
+  Already on the page it sends you to, it replaces that page's search; there is nothing to merge.
+- **The library keeps its own box.** The two are different jobs: the header starts a search, the
+  working row's box refines the one in front of you, keeping its filters. Removing the second
+  would have made "search inside this view" a filter-panel errand.
+- **The kind is remembered, on the device** (`ps:headerSearchType`), like the playback
+  preferences. The risk of a remembered mode is yesterday's Look quietly changing what "jane"
+  means today, so the kind is never hidden: its icon is in the box and the placeholder names it
+  ("Find a performer", "Looks like…").
+- **Names are suggested for the kinds that have them** -- Performer, Source, Keyword -- through
+  the same server matching and the same `tags.search` cache as every tag box (§5b "One rule for
+  names"), pictures at the tag boxes' size, eight at most. Keywords ask both systems, yours first;
+  close spellings appear only when nothing matched as typed in either. Arrowing to a name and
+  pressing Enter, or clicking it, opens that tag's page; Enter on the text lists every match,
+  because "jan" may be three people. Library and Look suggest nothing: text and looks are not
+  names, and a guessed completion of free text would be a second, worse search.
+- **Nothing is asked until the box is in use.** Suggestions wait for focus and typing, debounced
+  as the tag boxes are; the library is searched once, on Enter, not per keystroke (§20 "Typing
+  paid for the tab nobody was reading").
+- **On a wide screen** it is a rounded well centred in the bar, 560px wide (640 from `75em`),
+  sunk into the surface with a hairline that warms to brass in use, and a `/` key cap at its end
+  while idle. **On a phone** it is a magnifier at the bar's end that opens the box over the whole
+  header -- burger and wordmark covered rather than squeezed -- and folds away on close, Escape,
+  a search, or leaving it empty.
+- **`/` focuses it from anywhere** (§14 "Hotkeys"), unless you are typing (`isTypingTarget`) or a
+  dialogue is open: the box is behind it, and focus would leave the dialogue for something you
+  cannot see. It was listed as a hotkey long before anything answered it.
+
+_Rejected: one modeless box with grouped suggestions_ ("Search library for…", "Look like…",
+performers, sources, keywords in one list). One tap fewer and no remembered mode, but Enter on
+the text could only ever mean the library, and the choice of kind would be made again on every
+search rather than once.
 
 ### Sort direction has a per-sort default
 

@@ -21,6 +21,7 @@ import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { AboutModal } from "@/components/shell/AboutModal";
 import { AppNavbar, AppNavbarUpkeep } from "@/components/shell/AppNavbar";
 import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
+import { HeaderSearch } from "@/components/shell/HeaderSearch";
 import { SealMark } from "@/components/shell/SealMark";
 import { UpdateNotice } from "@/components/shell/UpdateNotice";
 import { RequireAuth, useAuth } from "@/lib/api/AuthProvider";
@@ -93,6 +94,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             </Link>
                         </Group>
 
+                        {/* The header search (§14): a box in the middle of the bar on a wide
+                            screen, an icon at its end on a phone. */}
+                        {!isMobile && <HeaderSearch compact={false} />}
+
                         <Group gap="xs" wrap="nowrap">
                             {stats?.scanning && (
                                 <Badge color="brass" variant="light" visibleFrom="xs">
@@ -111,6 +116,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
                                 "Scanning" stays: the catalogue is growing under you, which
                                 changes what you are looking at. */}
+                            {isMobile && <HeaderSearch compact />}
                         </Group>
                     </Group>
                 </AppShell.Header>

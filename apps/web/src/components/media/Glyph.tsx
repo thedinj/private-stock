@@ -286,3 +286,52 @@ export const SomebodyGlyph: React.FC<GlyphProps> = ({ size }) => (
         <path d="M9.3 14.4a3.6 3.6 0 0 0 5.4 0" />
     </Glyph>
 );
+
+/**
+ * The header search's five kinds of question (§14 "The header search"). The kind picked is shown
+ * by its icon alone, so each has to read at 16px without a label beside it.
+ */
+
+/** The library itself, searched by its text: a magnifier, the plain search every box has. */
+export const SearchGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <circle cx="10.5" cy="10.5" r="6.2" />
+        <path d="M15.2 15.2 20 20" />
+    </Glyph>
+);
+
+/** A performer: head and shoulders. */
+export const PerformerGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <circle cx="12" cy="8.5" r="3.8" />
+        <path d="M4.5 20.2a7.5 7.5 0 0 1 15 0" />
+    </Glyph>
+);
+
+/** A source -- the studio or series a film came from: a clapperboard. */
+export const SourceGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <rect x="3.5" y="10" width="17" height="10" rx="1.2" />
+        <path d="M3.5 10V6.2A1.2 1.2 0 0 1 4.7 5h14.6a1.2 1.2 0 0 1 1.2 1.2V10" />
+        <path d="M8.6 5 6.1 10M13.6 5l-2.5 5M18.6 5l-2.5 5" />
+    </Glyph>
+);
+
+/** A keyword: a luggage tag with its eyelet. */
+export const KeywordGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <path d="M3.5 12V4.8a1.3 1.3 0 0 1 1.3-1.3H12l8.3 8.3a1.3 1.3 0 0 1 0 1.8l-7.2 7.2a1.3 1.3 0 0 1-1.8 0z" />
+        <circle cx="8.2" cy="8.2" r="1.4" />
+    </Glyph>
+);
+
+/**
+ * A look (§5e): an eye -- what it looks like, asked in words. Not `LookAlikeGlyph`, which is
+ * "more like this frame" and starts from a picture rather than from words.
+ */
+export const LookGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z" />
+        <circle cx="12" cy="12" r="2.8" />
+    </Glyph>
+);
