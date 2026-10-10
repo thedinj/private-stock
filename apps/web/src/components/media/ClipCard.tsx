@@ -57,7 +57,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
         }}
     >
         <Stack gap={6}>
-            <ClipThumb clip={clip}>
+            <ClipThumb clip={clip} square>
                 {/*
                  * Always drawn, not only on hover: selecting is what this page is *for*, and a
                  * control that appears when the pointer finds it is a control nobody discovers on

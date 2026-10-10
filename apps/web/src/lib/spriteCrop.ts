@@ -26,8 +26,8 @@ export const centreSquare = (rect: SpriteRect): SpriteRect => {
 /**
  * The style that shows `rect` of a sprite sheet filling its box (§14d).
  *
- * **The box must be the rectangle's shape**, or the picture stretches: a clip card takes its
- * tile's aspect, and a look's tile gives a square box `centreSquare`.
+ * **The box must be the rectangle's shape**, or the picture stretches: a clip in a strip takes its
+ * tile's aspect, and a square box — a look's tile, a clip card — is given `centreSquare`.
  *
  * **In percentages, so it scales with whatever box it is given.** A card in a fluid grid has no
  * width until it is laid out; a crop in pixels would need that width in advance, which is the
