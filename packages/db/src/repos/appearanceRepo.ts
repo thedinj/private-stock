@@ -507,3 +507,16 @@ export const itemPeople = (mediaId: string): ItemPersonRow[] =>
               ORDER BY a."faceCount" DESC, a."id"`
         )
         .all(mediaId) as ItemPersonRow[];
+
+/** Every face of the person a face is part of in its item: the face alone where it is in none. */
+export const personOf = (faceId: string): string[] => {
+    const faces = db
+        .prepare(
+            `SELECT f."id" FROM "Face" f
+              WHERE f."appearanceId" = (SELECT "appearanceId" FROM "Face" WHERE "id" = ?)`
+        )
+        .pluck()
+        .all(faceId) as string[];
+
+    return faces.length > 0 ? faces : [faceId];
+};

@@ -3,79 +3,93 @@ import { db } from "../db.js";
 /**
  * Tagging by itself (§5f "Tagging by itself"): the evidence the rule reads, and what it would tag.
  *
- * The rule itself is `autoTags` in core; this reads, per item and performer, what it needs, and
- * keeps what it says.
+ * The rule itself is `autoTags` in core; this reads, per person in an item and performer, what it
+ * needs, and keeps what it says.
  */
 
-/** What one item says about one performer, with its best face. */
+/** What one person in an item says about one performer, with their clearest face. */
 export interface AutoTagCandidate {
     mediaId: string;
     tagId: string;
     faceId: string;
+    kind: "video" | "image";
+    /** Their faces together against the performer's reference. */
     bestScore: number;
+    /** How many of the item's faces are this person. */
     strongFaces: number;
     named: 0 | 1;
     anchorItems: number;
 }
 
 /**
- * Every untagged item with a face whose best match is a performer at `line` with `margin`, the
- * evidence counted: faces at distinct moments at `strongLine`, the best score and its face,
- * whether their name is on the item, how many items their reference rests on. Not where the item
- * was refused for them, or a face on it somebody saw — a refusal carried to a face nobody saw no
- * longer speaks for the whole item (§5f "Decisions you can take back") — or a person already
- * checked the pair, or the item carries them.
+ * Every legible person in an untagged item whose best match is a performer at `line` with
+ * `margin` (§5f "Tagging by itself"), the surest person an item and performer, with what the rule
+ * reads: how often they are seen, their score, whether their name is on the item, how many items
+ * the reference rests on. Not where the item was refused for them, or a face of the person was
+ * confirmed as anybody or refused for them by somebody who saw it, or a person already checked or
+ * the app already tagged the pair, or the item carries them.
  */
-export const candidates = (line: number, strongLine: number, margin: number): AutoTagCandidate[] =>
+export const candidates = (line: number, margin: number): AutoTagCandidate[] =>
     db
         .prepare(
-            `SELECT f."mediaId", fm."tagId",
-                    (SELECT f2."id" FROM "FaceMatch" fm2 JOIN "Face" f2 ON f2."id" = fm2."faceId"
-                      WHERE f2."mediaId" = f."mediaId" AND fm2."tagId" = fm."tagId"
-                      ORDER BY fm2."score" DESC LIMIT 1) AS "faceId",
-                    max(fm."score") AS "bestScore",
-                    count(DISTINCT CASE WHEN fm."score" >= :strongLine
-                                        THEN coalesce(f."atMs", f."vectorIndex") END) AS "strongFaces",
-                    EXISTS (SELECT 1 FROM "MediaMention" mm
-                             WHERE mm."mediaId" = f."mediaId" AND mm."tagId" = fm."tagId"
-                               AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" mr
-                                                WHERE mr."mediaId" = mm."mediaId"
-                                                  AND mr."tagId" = mm."tagId")) AS "named",
-                    a."items" AS "anchorItems"
-               FROM "FaceMatch" fm
-               JOIN "Face" f ON f."id" = fm."faceId"
-               JOIN "FaceAnchor" a ON a."tagId" = fm."tagId"
-               JOIN "Media" m ON m."id" = f."mediaId" AND m."listable" = 1
-              WHERE fm."score" >= :line AND fm."score" - fm."second" >= :margin
-                AND f."scatteredAt" IS NULL
-                AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
-                                 WHERE mt."mediaId" = f."mediaId" AND mt."tagId" = fm."tagId")
-                AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r JOIN "Face" rf ON rf."id" = r."faceId"
-                                 WHERE rf."mediaId" = f."mediaId" AND r."tagId" = fm."tagId"
-                                   AND r."how" IS NOT 'inferred')
-                AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" mr
-                                 WHERE mr."mediaId" = f."mediaId" AND mr."tagId" = fm."tagId")
-                AND NOT EXISTS (SELECT 1 FROM "FaceAutoTag" t
-                                 WHERE t."mediaId" = f."mediaId" AND t."tagId" = fm."tagId"
-                                   AND t."state" <> 'proposed')
-              GROUP BY f."mediaId", fm."tagId"`
+            `SELECT "mediaId", "tagId", "faceId", "kind", "bestScore", "strongFaces", "named", "anchorItems"
+               FROM (
+                 SELECT a."mediaId", a."matchTagId" AS "tagId", a."bestFaceId" AS "faceId", m."kind",
+                        a."score" AS "bestScore", a."faceCount" AS "strongFaces",
+                        EXISTS (SELECT 1 FROM "MediaMention" mm
+                                 WHERE mm."mediaId" = a."mediaId" AND mm."tagId" = a."matchTagId") AS "named",
+                        an."items" AS "anchorItems",
+                        row_number() OVER (PARTITION BY a."mediaId", a."matchTagId"
+                                           ORDER BY a."score" DESC) AS "n"
+                   FROM "FaceAppearance" a
+                   JOIN "FaceAnchor" an ON an."tagId" = a."matchTagId"
+                   JOIN "Media" m ON m."id" = a."mediaId" AND m."listable" = 1
+                  WHERE a."legible" = 1 AND a."score" >= :line AND a."score" - a."second" >= :margin
+                    AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
+                                     WHERE mt."mediaId" = a."mediaId" AND mt."tagId" = a."matchTagId")
+                    AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" ir
+                                     WHERE ir."mediaId" = a."mediaId" AND ir."tagId" = a."matchTagId")
+                    AND NOT EXISTS (SELECT 1 FROM "Face" f
+                                     WHERE f."appearanceId" = a."id"
+                                       AND (f."tagId" IS NOT NULL
+                                            OR EXISTS (SELECT 1 FROM "FaceRefusal" r
+                                                        WHERE r."faceId" = f."id"
+                                                          AND r."tagId" = a."matchTagId"
+                                                          AND r."how" IS NOT 'inferred')))
+                    AND NOT EXISTS (SELECT 1 FROM "FaceAutoTag" t
+                                     WHERE t."mediaId" = a."mediaId" AND t."tagId" = a."matchTagId"
+                                       AND t."state" <> 'proposed')
+               ) WHERE "n" = 1`
         )
-        .all({ line, strongLine, margin }) as AutoTagCandidate[];
+        .all({ line, margin }) as AutoTagCandidate[];
 
-/** Replace what the rule proposes; what was checked or applied stays. One transaction. */
-export const replaceProposals = (rows: readonly Omit<AutoTagCandidate, "anchorItems">[]): void => {
+/** Replace what the rule proposes, as `rule`; what was checked or applied stays. One transaction. */
+export const replaceProposals = (
+    rows: readonly Omit<AutoTagCandidate, "anchorItems" | "kind">[],
+    rule: number
+): void => {
     const insert = db.prepare(
         `INSERT OR IGNORE INTO "FaceAutoTag"
-             ("mediaId", "tagId", "faceId", "score", "strongFaces", "named", "state")
-         VALUES (@mediaId, @tagId, @faceId, @bestScore, @strongFaces, @named, 'proposed')`
+             ("mediaId", "tagId", "faceId", "score", "strongFaces", "named", "state", "rule")
+         VALUES (@mediaId, @tagId, @faceId, @bestScore, @strongFaces, @named, 'proposed', @rule)`
     );
 
     db.transaction(() => {
         db.prepare(`DELETE FROM "FaceAutoTag" WHERE "state" = 'proposed'`).run();
 
-        for (const row of rows) insert.run({ ...row, named: row.named === 1 ? 1 : null });
+        for (const row of rows) insert.run({ ...row, named: row.named === 1 ? 1 : null, rule });
     })();
 };
+
+/** How a rule's own proposals were checked: what lets it tag by itself (§5f). */
+export const trial = (rule: number): { right: number; wrong: number } =>
+    db
+        .prepare(
+            `SELECT coalesce(sum("state" = 'right'), 0) AS "right",
+                    coalesce(sum("state" = 'wrong'), 0) AS "wrong"
+               FROM "FaceAutoTag" WHERE "rule" = ?`
+        )
+        .get(rule) as { right: number; wrong: number };
 
 /** A pair the rule proposed, with what it read. */
 export interface AutoTagRow {

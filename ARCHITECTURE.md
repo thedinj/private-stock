@@ -2570,6 +2570,25 @@ change, and once at start-up.
 
 ### Tagging by itself
 
+**Per person in an item, since 2026-10-10.** The rule below, read from single faces, caught only
+29% of the people people confirmed. It is replaced by one read from appearances (`autoTags`,
+`FaceAutoTag.rule` 2): a person in a **video**, seen at least `AUTO_TAG_MIN_MOMENTS` (3) times, whose
+faces together match them at `AUTO_TAG_LINE` (0.6) with `AUTO_TAG_MARGIN` (0.1) over anybody else,
+their reference resting on `AUTO_TAG_MIN_ITEMS` (5) items; legible; the item not refused for them,
+and no face of the person confirmed as anybody or refused for them by somebody who saw it. It takes
+in 73% of the people confirmed, and no person refused scored above 0.552. **Photographs never** —
+there is no measure of them yet — and a name never tags.
+
+- **A new rule earns tagging by itself.** Its proposals go to Would tag as before; it tags by
+  itself, with the switch on, only once `AUTO_TAG_TRIAL` (30) of _its own_ proposals were checked
+  Right and none Wrong (`autoTagTrusted`, `faceAutoTagRepo.trial`). Until then it proposes, and Would
+  tag says how far the trial has got. Right and Wrong speak for the whole person: all their faces in
+  the item confirmed, or refused.
+- **What the app tagged is in History**, one decision a performer a pass, where **Wrong** takes it
+  off and says not them on those items (counted against it by the brake). "Tagged for you" is gone.
+
+The rest of this section is the first rule, kept for what it found.
+
 **Per item, scored per face** (2026-10-08). Groups merge and drift, so they are the wrong thing to
 decide on; an item is tagged as a performer when its faces say so (`autoTags`):
 
@@ -2598,7 +2617,7 @@ which keeps who turned it on. After every pass the worker tags what the rule pro
 `TagBatch` per performer, in that administrator's undo list, its rows `source = 'ai'`, and the
 pairs marked `applied`.
 
-- **Correctable later.** Review › Faces › Tagged for you lists what faces tagged, newest first;
+- **Correctable later.** Review › Faces › Tagged for you (now History) listed what faces tagged;
   "Not ‹name›" takes the tag off and is "not them" as any untag by hand is (`notThem`): the item's
   faces and name match refused, so it is never tagged again. Taking a face-made tag off anywhere
   else — the item's tags, a bulk untag — does the same, and marks the pair `removed`. Undoing a

@@ -8,6 +8,7 @@
  * landmarks into 512 numbers.
  */
 
+import type { MediaKind } from "./domain.js";
 import { normaliseVector, vectorSimilarity, type Rect } from "./embedding.js";
 import { ValidationError } from "./errors.js";
 
@@ -571,33 +572,51 @@ export const sharedFace = (
 /**
  * Tagging by itself (§5f "Tagging by itself"): when an item is the performer without asking.
  *
- * Per item, from each face's best match (`FaceMatch`): at least `AUTO_TAG_FACES` faces at
- * different moments match them at `AUTO_TAG_LINE`, each `AUTO_TAG_MARGIN` more than anybody else
- * — or, where their name is in the filename, title or burned-in text, one face at
- * `AUTO_TAG_LINE_NAMED`. Their reference must rest on `AUTO_TAG_MIN_ITEMS` items. Nothing on the
- * item may have been refused for them, by face or by name. A name alone never tags.
+ * Per person in an item (an appearance), not per face: a video person seen at least
+ * `AUTO_TAG_MIN_MOMENTS` times whose faces together match them at `AUTO_TAG_LINE`, `AUTO_TAG_MARGIN`
+ * more than anybody else, their reference resting on `AUTO_TAG_MIN_ITEMS` items; nothing on the
+ * item refused for them, and no face of the person refused by somebody who saw it. Photographs
+ * never: there is no measure of them yet. A name never tags.
  *
- * Measured 2026-10-08: no refused face of 147 scored above 0.523, and half the confirmed ones
- * above 0.556 — so the line starts at 0.6, above every refusal with a margin, and is checked in
- * the "Would tag" list before anything is tagged for real.
+ * Measured 2026-10-10, leave-one-item-out: no person people refused scored above 0.552 (failing
+ * the margin), and this rule takes in 73% of the people they confirmed — the rule it replaces, two
+ * strong faces each on their own, 29%.
  */
 export const AUTO_TAG_LINE = 0.6;
 export const AUTO_TAG_MARGIN = 0.1;
-export const AUTO_TAG_FACES = 2;
-export const AUTO_TAG_LINE_NAMED = 0.45;
+export const AUTO_TAG_MIN_MOMENTS = 3;
 export const AUTO_TAG_MIN_ITEMS = 5;
 
-/** What one item says about one performer, for the rule. */
+/** Which rule proposes now: `FaceAutoTag.rule`, so its own tally is told from the last one's. */
+export const AUTO_TAG_RULE = 2;
+
+/**
+ * A rule tags by itself only once this many of its own proposals were checked in "Would tag",
+ * and none of them was wrong. Until then it proposes, and waits.
+ */
+export const AUTO_TAG_TRIAL = 30;
+
+/** What one person in an item says about one performer, for the rule. */
 export interface AutoTagEvidence {
-    /** Faces at distinct moments matching them at `AUTO_TAG_LINE` with the margin. */
-    strongFaces: number;
-    /** The best of its faces' scores for them, with the margin. */
-    bestScore: number;
-    /** Their name is in its filename, title or burned-in text, and not refused. */
-    named: boolean;
-    /** Items their reference rests on. */
+    kind: MediaKind;
+    /** How many of the item's faces are this person. */
+    moments: number;
+    /** Their faces together against the performer's reference, with the margin. */
+    score: number;
+    /** Items the reference rests on. */
     anchorItems: number;
 }
+
+/** Whether the rule tags this item as this performer. */
+export const autoTags = (evidence: AutoTagEvidence): boolean =>
+    evidence.kind === "video" &&
+    evidence.moments >= AUTO_TAG_MIN_MOMENTS &&
+    evidence.score >= AUTO_TAG_LINE &&
+    evidence.anchorItems >= AUTO_TAG_MIN_ITEMS;
+
+/** Whether the rule's own checked proposals let it tag by itself (`AUTO_TAG_TRIAL`). */
+export const autoTagTrusted = (trial: { right: number; wrong: number }): boolean =>
+    trial.right >= AUTO_TAG_TRIAL && trial.wrong === 0;
 
 /**
  * When faces stop tagging by themselves (§5f "Tagging by itself"): once enough has been tagged to
@@ -613,12 +632,6 @@ export const autoTagBraked = (counts: { applied: number; removed: number }): boo
 
     return made >= AUTO_TAG_BRAKE_AFTER && counts.removed / made > AUTO_TAG_BRAKE_SHARE;
 };
-
-/** Whether the rule tags this item as this performer. */
-export const autoTags = (evidence: AutoTagEvidence): boolean =>
-    evidence.anchorItems >= AUTO_TAG_MIN_ITEMS &&
-    (evidence.strongFaces >= AUTO_TAG_FACES ||
-        (evidence.named && evidence.bestScore >= AUTO_TAG_LINE_NAMED));
 
 /** A performer's reference, as the anchors file keeps it. */
 export interface FaceAnchor {

@@ -30,21 +30,16 @@ const percent = (part: number, whole: number): string =>
 
 const why = (entry: AutoTagEntry): string =>
     [
-        entry.strongFaces >= 2
-            ? `${entry.strongFaces} moments look like them`
-            : "a face looks like them",
+        `${entry.strongFaces} moments of one person look like them`,
         entry.named ? "named on the item" : null,
     ]
         .filter(Boolean)
         .join(" · ");
 
-type Mode = "proposed" | "applied";
-
 const AutoTagCard: React.FC<{
     entry: AutoTagEntry;
-    mode: Mode;
     onFailed: (error: unknown) => void;
-}> = ({ entry, mode, onFailed }) => {
+}> = ({ entry, onFailed }) => {
     const decide = useDecideAutoTag();
     const pending = (verdict: "right" | "wrong"): boolean =>
         decide.isPending && decide.variables?.verdict === verdict;
@@ -61,45 +56,34 @@ const AutoTagCard: React.FC<{
                 {entry.face && <FaceCropView crop={entry.face.crop} size={56} />}
                 <Stack gap={0} style={{ minWidth: 0 }}>
                     <Text size="sm" fw={600}>
-                        {mode === "proposed" ? `${entry.name}?` : entry.name}
+                        {entry.name}?
                     </Text>
                     <Text size="xs" c="dimmed">
                         {why(entry)}
                     </Text>
                 </Stack>
             </Group>
-            {mode === "proposed" ? (
-                <Group gap="xs" grow>
-                    <Button
-                        color="brass"
-                        variant="light"
-                        h={44}
-                        disabled={decide.isPending}
-                        loading={pending("right")}
-                        onClick={() => send("right")}
-                    >
-                        Right
-                    </Button>
-                    <Button
-                        variant="default"
-                        h={44}
-                        disabled={decide.isPending}
-                        loading={pending("wrong")}
-                        onClick={() => send("wrong")}
-                    >
-                        Wrong
-                    </Button>
-                </Group>
-            ) : (
+            <Group gap="xs" grow>
+                <Button
+                    color="brass"
+                    variant="light"
+                    h={44}
+                    disabled={decide.isPending}
+                    loading={pending("right")}
+                    onClick={() => send("right")}
+                >
+                    Right
+                </Button>
                 <Button
                     variant="default"
                     h={44}
+                    disabled={decide.isPending}
                     loading={pending("wrong")}
                     onClick={() => send("wrong")}
                 >
-                    Not {entry.name}
+                    Wrong
                 </Button>
-            )}
+            </Group>
         </Stack>
     );
 };
@@ -121,7 +105,7 @@ const AutoTagSwitchCard: React.FC<{ page: AutoTagPage }> = ({ page }) => {
                     label="Tag automatically"
                     description={
                         page.enabled
-                            ? "Faces tag what the rule proposes after each pass. Everything they tag is listed under Tagged for you, and can be undone."
+                            ? "Faces tag what the rule proposes after each pass, once its trial below is passed. Everything they tag is listed in History, where Wrong takes it back."
                             : "Off. Nothing is tagged until it is on — check a sample below first."
                     }
                 />
@@ -133,11 +117,18 @@ const AutoTagSwitchCard: React.FC<{ page: AutoTagPage }> = ({ page }) => {
                     {made > 0 &&
                         ` Tagged by faces: ${made.toLocaleString()}, of which ${page.counts.removed.toLocaleString()} taken back.`}
                 </Text>
+                <Text size="sm">
+                    {page.trial.right >= page.trial.needed && page.trial.wrong === 0
+                        ? "The rule passed its trial: it tags by itself while the switch is on."
+                        : page.trial.wrong > 0
+                          ? `The rule's trial found ${page.trial.wrong.toLocaleString()} wrong: it proposes, and does not tag by itself.`
+                          : `The rule's trial: ${page.trial.right.toLocaleString()} of ${page.trial.needed} checked right. It tags by itself once ${page.trial.needed} are checked with none wrong.`}
+                </Text>
                 {page.braked && (
                     <Alert color="oxblood" variant="light">
                         Stopped: more than one in a hundred of the tags faces made were taken back.
                         Nothing more is tagged until that share falls — or check what was taken back
-                        under Tagged for you.
+                        in History.
                     </Alert>
                 )}
             </Stack>
@@ -145,29 +136,22 @@ const AutoTagSwitchCard: React.FC<{ page: AutoTagPage }> = ({ page }) => {
     );
 };
 
-const INTRO: Record<Mode, string> = {
-    proposed:
-        "What faces would tag by themselves. Check them from the top — the order is random, so " +
-        "whatever you check is a fair sample — and the tally says how often the rule is right.",
-    applied:
-        "What faces tagged by themselves, newest first. Taking one back says it is not them, so " +
-        "it is never tagged again — and counts against tagging by itself.",
-};
+const INTRO =
+    "What faces would tag by themselves: a person in a video, seen at least three times, clearly " +
+    "them. Check them from the top — the order is random, so whatever you check is a fair sample " +
+    "— and the tally says how often the rule is right.";
 
 /**
- * "Would tag" and "Tagged for you" (§5f "Tagging by itself").
- *
- * **Would tag**: what the rule would tag, in a random order the visit keeps, so whatever is checked
- * from the top is a fair sample; "Right" tags the item, "Wrong" refuses it for good; and the switch
- * that lets faces tag by themselves, with the tally that is the case for it.
- *
- * **Tagged for you**: what they tagged, newest first, each with "Not ‹name›" — taken off, refused,
- * and counted: more than one in a hundred taken back stops them.
+ * "Would tag" (§5f "Tagging by itself"): what the rule would tag, in a random order the visit
+ * keeps, so whatever is checked from the top is a fair sample; "Right" tags the item and confirms
+ * the person, "Wrong" refuses the person for good; and the switch that lets faces tag by
+ * themselves, with the trial that must be passed first. What the app tagged is in History, where
+ * "Wrong" takes it back.
  */
-export const AutoTagSheet: React.FC<{ mode: Mode }> = ({ mode }) => {
+export const AutoTagSheet: React.FC = () => {
     // A fresh order each visit; pages of one visit keep it.
     const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
-    const list = useAutoTags(mode, seed);
+    const list = useAutoTags("proposed", seed);
     const [outcome, setOutcome] = useState<string | null>(null);
     const entries = list.data?.pages.flatMap((page) => page.rows) ?? [];
     const first = list.data?.pages[0];
@@ -175,12 +159,12 @@ export const AutoTagSheet: React.FC<{ mode: Mode }> = ({ mode }) => {
     return (
         <Stack gap="md">
             <Text size="sm" c="dimmed">
-                {INTRO[mode]}
+                {INTRO}
             </Text>
 
-            {first && mode === "proposed" && <AutoTagSwitchCard page={first} />}
+            {first && <AutoTagSwitchCard page={first} />}
 
-            {first && mode === "proposed" && (
+            {first && (
                 <Text size="sm">{first.counts.proposed.toLocaleString()} would be tagged.</Text>
             )}
 
@@ -203,9 +187,8 @@ export const AutoTagSheet: React.FC<{ mode: Mode }> = ({ mode }) => {
                 </Alert>
             ) : entries.length === 0 ? (
                 <Text size="sm" c="dimmed">
-                    {mode === "proposed"
-                        ? "Nothing the rule would tag yet. It needs a performer's face from five or more items, and faces that match it closely."
-                        : "Faces have not tagged anything by themselves."}
+                    Nothing the rule would tag yet. It needs a performer&apos;s face from five or
+                    more items, and a person in a video who matches it closely.
                 </Text>
             ) : (
                 <>
@@ -220,7 +203,6 @@ export const AutoTagSheet: React.FC<{ mode: Mode }> = ({ mode }) => {
                             <AutoTagCard
                                 key={`${entry.item.id}:${entry.tagId}`}
                                 entry={entry}
-                                mode={mode}
                                 onFailed={(error) => setOutcome(errorText(error))}
                             />
                         ))}

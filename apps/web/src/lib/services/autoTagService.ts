@@ -1,6 +1,8 @@
 import {
     AuthorizationError,
     NotFoundError,
+    AUTO_TAG_RULE,
+    AUTO_TAG_TRIAL,
     SETTING_KEYS,
     autoTagBraked,
     faceAutoTagSettingSchema,
@@ -11,7 +13,7 @@ import {
     type AutoTagQuery,
 } from "@private-stock/core";
 import {
-    db,
+    appearanceRepo,
     faceAutoTagRepo,
     faceDecisionRepo,
     faceRepo,
@@ -25,7 +27,6 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { faceCrop } from "./faceService";
 import { lookupMedia } from "./mediaService";
-import { notThem } from "./notThem";
 
 /**
  * Tagging by itself, checked first (§5f "Tagging by itself"): the "Would tag" list.
@@ -121,6 +122,7 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
         enabled: setting.enabled,
         since: setting.since,
         braked: setting.enabled && autoTagBraked(counts),
+        trial: { ...faceAutoTagRepo.trial(AUTO_TAG_RULE), needed: AUTO_TAG_TRIAL },
     };
 };
 
@@ -157,19 +159,13 @@ export const decideAutoTag = (decision: AutoTagDecision, auth: AuthContext): { t
         throw new NotFoundError("That suggestion is no longer there. Reload the list.");
     }
 
-    // Tagged by itself and wrong: taken off, and "not them" as any untag by hand is — which also
-    // marks it taken back, the number that brakes tagging by itself.
-    if (row.state === "applied") {
-        if (decision.verdict === "wrong") {
-            db.transaction(() => {
-                tagRepo.unassign(decision.mediaId, tag.id, null);
-                notThem([decision.mediaId], tag.id, auth.userId, "wouldTag");
-                searchRepo.requestReindex([decision.mediaId]);
-            })();
-        }
-
-        return { tagged: 0 };
+    // Only what is proposed is checked here: what the app tagged is taken back in History.
+    if (row.state !== "proposed") {
+        throw new NotFoundError("That suggestion is no longer there. Reload the list.");
     }
+
+    // The person the rule read, all their faces in the item: what is said is said of them.
+    const person = row.faceId ? appearanceRepo.personOf(row.faceId) : [];
 
     const press = {
         actor: "user" as const,
@@ -182,12 +178,14 @@ export const decideAutoTag = (decision: AutoTagDecision, auth: AuthContext): { t
         faceAutoTagRepo.decide(decision.mediaId, decision.tagId, decision.verdict, auth.userId);
 
         if (decision.verdict === "wrong") {
-            faceRepo.refuseMatchedOnItem(decision.mediaId, tag.id, row.faceId, auth.userId);
+            if (row.faceId) {
+                appearanceRepo.refusePerson(person, row.faceId, tag.id, auth.userId);
+            }
 
             return 0;
         }
 
-        if (row.faceId) faceRepo.confirmFace(row.faceId, tag.id, auth.userId);
+        if (row.faceId) appearanceRepo.confirmPerson(person, row.faceId, tag.id, auth.userId);
 
         const { assigned } = tagBatchRepo.applyAssignments({
             userId: auth.userId,

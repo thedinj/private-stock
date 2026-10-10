@@ -22,8 +22,6 @@ const state = vi.hoisted(() => ({
     confirmed: [] as unknown[][],
     assigned: [] as { mediaId: string; tagId: string }[],
     setting: {} as Record<string, unknown>,
-    unassigned: [] as unknown[][],
-    notThem: [] as unknown[][],
 }));
 
 vi.mock("@private-stock/db", () => ({
@@ -43,11 +41,13 @@ vi.mock("@private-stock/db", () => ({
             state.rows.find((row) => row.mediaId === mediaId && row.tagId === tagId),
         decide: (mediaId: string, tagId: string, verdict: string) =>
             state.decided.push([mediaId, tagId, verdict]),
+        trial: () => ({ right: 3, wrong: 1 }),
     },
-    faceRepo: {
-        shownFaces: () => [],
-        refuseMatchedOnItem: (...args: unknown[]) => state.refused.push(args),
-        confirmFace: (...args: unknown[]) => state.confirmed.push(args),
+    faceRepo: { shownFaces: () => [] },
+    appearanceRepo: {
+        personOf: (faceId: string) => [faceId, `${faceId}2`],
+        refusePerson: (...args: unknown[]) => state.refused.push(args),
+        confirmPerson: (...args: unknown[]) => state.confirmed.push(args),
     },
     jobRepo: { enqueueKind: () => undefined },
     settingRepo: {
@@ -59,10 +59,6 @@ vi.mock("@private-stock/db", () => ({
     searchRepo: { requestReindex: () => undefined },
     tagRepo: {
         findById: (id: string) => ({ id, name: "Jane" }),
-        unassign: (...args: unknown[]) => {
-            state.unassigned.push(args);
-            return 1;
-        },
     },
     tagBatchRepo: {
         applyAssignments: (input: { assignments: { mediaId: string; tagId: string }[] }) => {
@@ -77,10 +73,6 @@ vi.mock("./mediaService", () => ({
 }));
 
 vi.mock("./faceService", () => ({ faceCrop: () => null }));
-
-vi.mock("./notThem", () => ({
-    notThem: (...args: unknown[]) => state.notThem.push(args),
-}));
 
 const { autoTagList, decideAutoTag, switchAutoTag } = await import("./autoTagService");
 
@@ -110,8 +102,6 @@ beforeEach(() => {
     state.confirmed = [];
     state.assigned = [];
     state.setting = {};
-    state.unassigned = [];
-    state.notThem = [];
 });
 
 describe("would tag", () => {
@@ -129,6 +119,11 @@ describe("would tag", () => {
             right: 3,
             wrong: 1,
         });
+        expect(autoTagList({ ...query, seed: 7 }, admin).trial).toEqual({
+            right: 3,
+            wrong: 1,
+            needed: 30,
+        });
     });
 
     it("tags and confirms the face on Right; refuses on Wrong; only for administrators", () => {
@@ -136,11 +131,12 @@ describe("would tag", () => {
             tagged: 1,
         });
         expect(state.assigned).toEqual([{ mediaId: "m1", tagId: "jane" }]);
-        expect(state.confirmed).toEqual([["m1-f", "jane", "u1"]]);
+        // The whole person the rule read, the face shown among them.
+        expect(state.confirmed).toEqual([[["m1-f", "m1-f2"], "m1-f", "jane", "u1"]]);
 
         decideAutoTag({ mediaId: "m2", tagId: "jane", verdict: "wrong" }, admin);
 
-        expect(state.refused).toEqual([["m2", "jane", "m2-f", "u1"]]);
+        expect(state.refused).toEqual([[["m2-f", "m2-f2"], "m2-f", "jane", "u1"]]);
         expect(state.decided.map((d) => d[2])).toEqual(["right", "wrong"]);
         expect(() =>
             decideAutoTag(
@@ -168,13 +164,12 @@ describe("would tag", () => {
         );
     });
 
-    it("takes back a tag faces made, as an untag by hand would", () => {
+    it("checks only what is proposed: what the app tagged is taken back in History", () => {
         state.rows = [{ ...row("m1"), state: "applied" }];
 
-        decideAutoTag({ mediaId: "m1", tagId: "jane", verdict: "wrong" }, admin);
-
-        expect(state.unassigned).toEqual([["m1", "jane", null]]);
-        expect(state.notThem).toEqual([[["m1"], "jane", "u1", "wouldTag"]]);
+        expect(() =>
+            decideAutoTag({ mediaId: "m1", tagId: "jane", verdict: "wrong" }, admin)
+        ).toThrow(/no longer there/);
         expect(state.assigned).toEqual([]);
     });
 });

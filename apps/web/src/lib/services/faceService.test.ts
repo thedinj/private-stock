@@ -42,8 +42,6 @@ const state = vi.hoisted(() => ({
     tags: { jane: "Jane", kim: "Kim" } as Record<string, string>,
     scattered: [] as string[],
     noFace: new Set<string>(),
-    /** "Pick their face": face id → [mediaId, confirmed as them]. */
-    own: {} as Record<string, [string, boolean]>,
     notThem: [] as unknown[][],
     /** Face id → [mediaId, group, direction]: a face's vector, as a unit vector in two dims. */
     vectors: {} as Record<string, [string, string, number[]]>,
@@ -120,29 +118,6 @@ vi.mock("@private-stock/db", () => ({
         setNoSingleFace: (tagId: string, noFace: boolean) => {
             if (noFace) state.noFace.add(tagId);
             else state.noFace.delete(tagId);
-        },
-        confirmFace: (faceId: string) => {
-            if (state.own[faceId]) state.own[faceId][1] = true;
-            return 1;
-        },
-        ownFaceItems: (_tagId: string, _roots: string[], limit: number, offset: number) => {
-            const items = [...new Set(Object.values(state.own).map(([mediaId]) => mediaId))];
-
-            return { mediaIds: items.slice(offset, offset + limit), total: items.length };
-        },
-        ownFaces: (_tagId: string, mediaIds: string[]) =>
-            Object.entries(state.own)
-                .filter(([, [mediaId]]) => mediaIds.includes(mediaId))
-                .map(([id, [mediaId, theirs]]) => ({
-                    ...shown(mediaId, "g1"),
-                    id,
-                    theirs: +theirs,
-                })),
-        ownFaceMedia: (faceId: string) => state.own[faceId]?.[0],
-        unconfirmFace: (faceId: string) => {
-            if (!state.own[faceId]?.[1]) return 0;
-            state.own[faceId][1] = false;
-            return 1;
         },
         scatterGroup: (groupId: string) => {
             state.scattered.push(groupId);
@@ -311,7 +286,6 @@ const shown = (mediaId: string, groupId: string) => ({
 const page = { page: 0, limit: 10 };
 
 beforeEach(() => {
-    state.own = {};
     state.groups = [];
     state.inGroups = [];
     state.mentions = [];

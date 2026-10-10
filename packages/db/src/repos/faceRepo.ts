@@ -689,41 +689,6 @@ export const shownFaces = (faceIds: readonly string[]): ShownFace[] =>
         )
         .all(JSON.stringify(faceIds)) as ShownFace[];
 
-/**
- * "Not them", said of an item the rule matched to a performer: the face shown refused as
- * `shown`, the item's other faces whose best match is them as `inferred`. Returns the faces
- * refused.
- */
-export const refuseMatchedOnItem = (
-    mediaId: string,
-    tagId: string,
-    shownFaceId: string | null,
-    userId: string
-): number =>
-    db
-        .prepare(
-            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how", "decisionId")
-             SELECT f."id", :tagId, :userId,
-                    CASE WHEN f."id" = :shown THEN 'shown' ELSE 'inferred' END, :decision
-               FROM "Face" f
-              WHERE f."mediaId" = :mediaId
-                AND (f."id" = :shown
-                     OR EXISTS (SELECT 1 FROM "FaceMatch" fm
-                                 WHERE fm."faceId" = f."id" AND fm."tagId" = :tagId))`
-        )
-        .run({ mediaId, tagId, shown: shownFaceId, userId, decision: activeDecision() }).changes;
-
-/** "That's them", said of one face on screen. Returns whether it was confirmed. */
-export const confirmFace = (faceId: string, tagId: string, userId: string): number =>
-    db
-        .prepare(
-            `UPDATE "Face"
-                SET "tagId" = ?, "decidedByUserId" = ?, "decidedAt" = CURRENT_TIMESTAMP,
-                    "decidedHow" = 'shown', "decisionId" = ?
-              WHERE "id" = ? AND "tagId" IS NULL`
-        )
-        .run(tagId, userId, activeDecision(), faceId).changes;
-
 /** When a performer was said to have no single face (§5f), if they were. */
 export const noSingleFace = (tagId: string): { decidedAt: string } | undefined =>
     db.prepare(`SELECT "decidedAt" FROM "PerformerNoFace" WHERE "tagId" = ?`).get(tagId) as

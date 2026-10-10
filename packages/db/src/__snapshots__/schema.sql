@@ -193,6 +193,7 @@ CREATE TABLE "FaceAutoTag" (
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "rule" INTEGER NOT NULL DEFAULT 1 CHECK("rule" IN (1, 2)),
             PRIMARY KEY ("mediaId", "tagId")
         ) WITHOUT ROWID;
 

@@ -2,9 +2,11 @@ import {
     ANCHOR_MIN_ITEMS,
     AUTO_TAG_LINE,
     AUTO_TAG_MARGIN,
-    LOOKS_LIKE,
+    AUTO_TAG_RULE,
+    AUTO_TAG_TRIAL,
     SETTING_KEYS,
     autoTagBraked,
+    autoTagTrusted,
     autoTags,
     faceAutoTagSettingSchema,
     FACE_ANCHORS_REL_PATH,
@@ -96,8 +98,9 @@ const byTag = <T extends { tagId: string }>(rows: readonly T[]): Map<string, T[]
 };
 
 /**
- * Tag what the rule proposes, if an administrator has let faces tag by themselves and what people
- * took back has not braked it (§5f "Tagging by itself"). One batch per performer, in the undo list
+ * Tag what the rule proposes, if an administrator has let faces tag by themselves, what people
+ * took back has not braked it, and enough of this rule's own proposals were checked right — with
+ * none wrong — in "Would tag" (§5f "Tagging by itself"). One batch per performer, in the undo list
  * of whoever turned it on, written as `source = 'ai'` — which nothing that proposes or builds a
  * reference reads back. Returns the items tagged.
  */
@@ -113,6 +116,17 @@ const applyAutoTags = (proposals: readonly { mediaId: string; tagId: string }[])
     if (autoTagBraked(faceAutoTagRepo.counts())) {
         console.log(
             "Faces are not tagging by themselves: too much of what they tagged was taken back"
+        );
+        return 0;
+    }
+
+    // A rule earns tagging by itself: enough of its own proposals checked right, none wrong.
+    const trial = faceAutoTagRepo.trial(AUTO_TAG_RULE);
+
+    if (!autoTagTrusted(trial)) {
+        console.log(
+            `Faces are proposing, not tagging: ${trial.right} of ${AUTO_TAG_TRIAL} checked right, ` +
+                `${trial.wrong} wrong`
         );
         return 0;
     }
@@ -312,18 +326,16 @@ export const runFaceAnchors = async (): Promise<void> => {
     appearanceRepo.replaceAll(appearances);
 
     // What the rule would tag now, for the "Would tag" list (§5f "Tagging by itself").
-    const proposals = faceAutoTagRepo
-        .candidates(LOOKS_LIKE, AUTO_TAG_LINE, AUTO_TAG_MARGIN)
-        .filter((row) =>
-            autoTags({
-                strongFaces: row.strongFaces,
-                bestScore: row.bestScore,
-                named: row.named === 1,
-                anchorItems: row.anchorItems,
-            })
-        );
+    const proposals = faceAutoTagRepo.candidates(AUTO_TAG_LINE, AUTO_TAG_MARGIN).filter((row) =>
+        autoTags({
+            kind: row.kind,
+            moments: row.strongFaces,
+            score: row.bestScore,
+            anchorItems: row.anchorItems,
+        })
+    );
 
-    faceAutoTagRepo.replaceProposals(proposals);
+    faceAutoTagRepo.replaceProposals(proposals, AUTO_TAG_RULE);
 
     const applied = applyAutoTags(proposals);
 

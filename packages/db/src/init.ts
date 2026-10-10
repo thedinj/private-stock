@@ -1330,7 +1330,9 @@ export function initializeDatabase(db: Database): void {
         -- Tagging by itself (§5f): what the rule would tag, and what became of it — 'proposed'
         -- (rewritten every run), 'right' or 'wrong' (checked in the "Would tag" list), 'applied',
         -- 'removed' (applied and taken back).
-        -- A row checked or applied stays, so the rule never proposes it again.
+        -- A row checked or applied stays, so the rule never proposes it again. "rule": which rule
+        -- proposed it -- 1 from single faces, 2 from a person in an item -- so a new rule's own
+        -- tally of what was checked right is told apart before it may tag by itself.
         CREATE TABLE IF NOT EXISTS "FaceAutoTag" (
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
@@ -1343,6 +1345,7 @@ export function initializeDatabase(db: Database): void {
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "rule" INTEGER NOT NULL DEFAULT 1 CHECK("rule" IN (1, 2)),
             PRIMARY KEY ("mediaId", "tagId")
         ) WITHOUT ROWID;
 

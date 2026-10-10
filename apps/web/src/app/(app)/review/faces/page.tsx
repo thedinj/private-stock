@@ -23,7 +23,6 @@ import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
  * - **Unnamed**: "Who is this?" — the largest groups no performer is proposed for.
  * - **Would tag**: what faces would tag by themselves, checked before they are allowed to, and
  *   the switch that allows them.
- * - **Tagged for you**: what they tagged, to take back what is wrong.
  * - **History**: every face decision, yours and the app's, each undoable (§5f "Decisions you can
  *   take back").
  *
@@ -34,7 +33,7 @@ import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
 const facesView = defineView("/review/faces", {
     tab: enumField(
         "tab",
-        ["suggestions", "matches", "unnamed", "wouldTag", "taggedForYou", "history"],
+        ["suggestions", "matches", "unnamed", "wouldTag", "history"],
         "suggestions"
     ),
     // A performer's page links here narrowed to them.
@@ -65,7 +64,6 @@ const FacesReview: React.FC = () => {
                     <Tabs.Tab value="suggestions">Suggestions</Tabs.Tab>
                     <Tabs.Tab value="unnamed">Unnamed</Tabs.Tab>
                     <Tabs.Tab value="wouldTag">Would tag</Tabs.Tab>
-                    <Tabs.Tab value="taggedForYou">Tagged for you</Tabs.Tab>
                     <Tabs.Tab value="history">History</Tabs.Tab>
                 </Tabs.List>
 
@@ -100,11 +98,7 @@ const FacesReview: React.FC = () => {
                 </Tabs.Panel>
 
                 <Tabs.Panel value="wouldTag">
-                    <AutoTagSheet mode="proposed" />
-                </Tabs.Panel>
-
-                <Tabs.Panel value="taggedForYou">
-                    <AutoTagSheet mode="applied" />
+                    <AutoTagSheet />
                 </Tabs.Panel>
 
                 <Tabs.Panel value="history">

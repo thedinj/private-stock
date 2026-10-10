@@ -35,6 +35,7 @@ const state = vi.hoisted(() => ({
     faces: [] as { id: string; mediaId: string; vectorIndex: number }[],
     candidates: [] as Record<string, unknown>[],
     counts: { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 },
+    trial: { right: 30, wrong: 0 },
     setting: {} as Record<string, unknown>,
     decided: [] as string[][],
     batches: [] as { assignments: unknown[]; source: string; userId: string }[],
@@ -57,6 +58,7 @@ vi.mock("@private-stock/db", () => ({
         candidates: () => state.candidates,
         replaceProposals: () => undefined,
         counts: () => state.counts,
+        trial: () => state.trial,
         decide: (mediaId: string, tagId: string, verdict: string) =>
             state.decided.push([mediaId, tagId, verdict]),
     },
@@ -153,6 +155,7 @@ beforeEach(() => {
     state.faces = [];
     state.written = null;
     state.candidates = [];
+    state.trial = { right: 30, wrong: 0 };
     state.counts = { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 };
     state.setting = {};
     state.decided = [];
@@ -236,8 +239,9 @@ describe("face references", () => {
             mediaId,
             tagId,
             faceId: `${mediaId}-0`,
+            kind: "video",
             bestScore: 0.7,
-            strongFaces: 2,
+            strongFaces: 3,
             named: 0,
             anchorItems: 6,
         });
@@ -268,6 +272,33 @@ describe("face references", () => {
                 expect.objectContaining({ actor: "app", verdict: "is", surface: "auto" }),
                 expect.objectContaining({ actor: "app", verdict: "is", surface: "auto" }),
             ]);
+        });
+
+        it("proposes, and does not tag, until its own trial is passed with none wrong", async () => {
+            state.setting = { enabled: true, byUserId: "admin-1" };
+            state.trial = { right: 29, wrong: 0 };
+
+            await runFaceAnchors();
+
+            expect(state.batches).toEqual([]);
+
+            state.trial = { right: 40, wrong: 1 };
+
+            await runFaceAnchors();
+
+            expect(state.batches).toEqual([]);
+        });
+
+        it("never tags a photograph, or a person seen fewer than three times", async () => {
+            state.setting = { enabled: true, byUserId: "admin-1" };
+            state.candidates = [
+                { ...proposal("photo", "jane"), kind: "image" },
+                { ...proposal("brief", "jane"), strongFaces: 2 },
+            ];
+
+            await runFaceAnchors();
+
+            expect(state.batches).toEqual([]);
         });
 
         it("stops when too much of what it tagged was taken back", async () => {

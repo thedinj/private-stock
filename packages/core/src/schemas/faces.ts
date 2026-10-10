@@ -331,6 +331,11 @@ export const autoTagPageSchema = z.object({
         applied: z.number(),
         removed: z.number(),
     }),
+    /**
+     * The rule's trial (§5f "Tagging by itself"): how many of its own proposals were checked right
+     * and wrong, and how many right with none wrong let it tag by itself.
+     */
+    trial: z.object({ right: z.number(), wrong: z.number(), needed: z.number() }),
     /** Whether faces tag by themselves, since when — and whether what was taken back stopped it. */
     enabled: z.boolean(),
     since: z.string().nullable(),

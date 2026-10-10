@@ -13,6 +13,7 @@ import {
     eyeDistance,
     groupStateFor,
     autoTagBraked,
+    autoTagTrusted,
     autoTags,
     bestMatch,
     decodeFaceAnchors,
@@ -282,25 +283,29 @@ describe("one face, one score", () => {
 });
 
 describe("tagging by itself", () => {
-    const evidence = { strongFaces: 0, bestScore: 0, named: false, anchorItems: 6 };
+    const evidence = { kind: "video" as const, moments: 3, score: 0.65, anchorItems: 6 };
 
-    it("tags on two strong faces, or one fair face with the name, never on a name alone", () => {
-        expect(autoTags({ ...evidence, strongFaces: 2, bestScore: 0.7 })).toBe(true);
-        expect(autoTags({ ...evidence, strongFaces: 1, bestScore: 0.7 })).toBe(false);
-        expect(autoTags({ ...evidence, named: true, bestScore: 0.5 })).toBe(true);
-        expect(autoTags({ ...evidence, named: true, bestScore: 0.4 })).toBe(false);
+    it("tags a person in a video seen often enough and clearly them, never a photograph", () => {
+        expect(autoTags(evidence)).toBe(true);
+        expect(autoTags({ ...evidence, moments: 2 })).toBe(false);
+        expect(autoTags({ ...evidence, score: 0.59 })).toBe(false);
+        expect(autoTags({ ...evidence, kind: "image" })).toBe(false);
+    });
+
+    it("needs a reference resting on enough items", () => {
+        expect(autoTags({ ...evidence, anchorItems: 4 })).toBe(false);
+    });
+
+    it("tags by itself only once enough of its own proposals were checked right, none wrong", () => {
+        expect(autoTagTrusted({ right: 29, wrong: 0 })).toBe(false);
+        expect(autoTagTrusted({ right: 30, wrong: 0 })).toBe(true);
+        expect(autoTagTrusted({ right: 60, wrong: 1 })).toBe(false);
     });
 
     it("brakes once enough was tagged and more than one in a hundred was taken back", () => {
         expect(autoTagBraked({ applied: 99, removed: 1 })).toBe(false);
         expect(autoTagBraked({ applied: 98, removed: 2 })).toBe(true);
         expect(autoTagBraked({ applied: 10, removed: 5 })).toBe(false);
-    });
-
-    it("needs a reference resting on enough items", () => {
-        expect(autoTags({ ...evidence, strongFaces: 3, bestScore: 0.8, anchorItems: 4 })).toBe(
-            false
-        );
     });
 });
 
