@@ -771,14 +771,6 @@ export const setNoSingleFace = (tagId: string, noFace: boolean, userId: string):
     }
 };
 
-/** Where every face's vector is, for scoring them all against the references. */
-export const everyFaceRef = (): { id: string; mediaId: string; vectorIndex: number }[] =>
-    db.prepare(`SELECT "id", "mediaId", "vectorIndex" FROM "Face" ORDER BY "mediaId"`).all() as {
-        id: string;
-        mediaId: string;
-        vectorIndex: number;
-    }[];
-
 /** Every face a person confirmed as a library performer: what references are built from first. */
 export const confirmedFaceRefs = (): {
     tagId: string;

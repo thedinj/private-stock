@@ -9,6 +9,7 @@ import {
     faceAutoTagSettingSchema,
     FACE_ANCHORS_REL_PATH,
     SAME_FACE_ACROSS_ITEMS,
+    appearancesInItem,
     bestMatch,
     encodeFaceAnchors,
     performerCentre,
@@ -16,7 +17,10 @@ import {
     vectorSimilarity,
     type FaceAnchor,
 } from "@private-stock/core";
+import { randomUUID } from "node:crypto";
+
 import {
+    appearanceRepo,
     changeLogRepo,
     db,
     faceAutoTagRepo,
@@ -26,6 +30,8 @@ import {
     settingRepo,
     tagBatchRepo,
     tagRepo,
+    type AppearanceSourceFace,
+    type NewAppearance,
 } from "@private-stock/db";
 
 import { writeInPlace } from "../embed/pictures.js";
@@ -229,32 +235,68 @@ export const runFaceAnchors = async (): Promise<void> => {
         since = await breathe(since);
     }
 
-    // Every face against every reference.
+    // Every face against every reference; and every item's people, scored the same way
+    // (§5f "A person in a video") — one pass, so each faces file is read once.
     const matches: { faceId: string; tagId: string; score: number; second: number }[] = [];
+    const appearances: NewAppearance[] = [];
+    const round = (value: number): number => Math.round(value * 1000) / 1000;
 
-    if (anchors.length > 0) {
-        let current: string | null = null;
-        let vectors: Float32Array[] | null = null;
-
-        for (const face of faceRepo.everyFaceRef()) {
-            if (face.mediaId !== current) {
-                current = face.mediaId;
-                vectors = await readFaceVectors(face.mediaId);
-                since = await breathe(since);
-            }
-
+    const scoreItem = (
+        faces: readonly AppearanceSourceFace[],
+        vectors: Float32Array[] | null
+    ): void => {
+        const readable = faces.flatMap((face) => {
             const vector = vectors?.[face.vectorIndex];
-            const match = vector ? bestMatch(vector, anchors) : null;
+
+            return vector ? [{ face, vector }] : [];
+        });
+
+        for (const { face, vector } of readable) {
+            const match = anchors.length > 0 ? bestMatch(vector, anchors) : null;
 
             if (match && match.score >= KEEP_MATCH) {
                 matches.push({
                     faceId: face.id,
                     tagId: match.tagId,
-                    score: Math.round(match.score * 1000) / 1000,
-                    second: Math.round(match.second * 1000) / 1000,
+                    score: round(match.score),
+                    second: round(match.second),
                 });
             }
         }
+
+        const people = readable.filter(({ face }) => face.scattered === 0);
+
+        if (people.length === 0) return;
+
+        for (const person of appearancesInItem(
+            people.map(({ face, vector }) => ({ vector, eyes: face.eyes, score: face.score })),
+            people[0].face.kind
+        )) {
+            const match = anchors.length > 0 ? bestMatch(person.centre, anchors) : null;
+
+            appearances.push({
+                id: randomUUID(),
+                mediaId: people[0].face.mediaId,
+                faceIds: person.members.map((index) => people[index].face.id),
+                bestFaceId: people[person.best].face.id,
+                legible: person.legible,
+                matchTagId: match?.tagId ?? null,
+                score: match ? round(match.score) : null,
+                second: match ? round(match.second) : null,
+            });
+        }
+    };
+
+    let item: AppearanceSourceFace[] = [];
+
+    for (const face of [...appearanceRepo.sourceFaces(), null]) {
+        if (item.length > 0 && (face === null || face.mediaId !== item[0].mediaId)) {
+            scoreItem(item, await readFaceVectors(item[0].mediaId));
+            item = [];
+            since = await breathe(since);
+        }
+
+        if (face) item.push(face);
     }
 
     await writeInPlace(dataFile(FACE_ANCHORS_REL_PATH), encodeFaceAnchors(dims, anchors));
@@ -267,6 +309,7 @@ export const runFaceAnchors = async (): Promise<void> => {
         })),
         matches
     );
+    appearanceRepo.replaceAll(appearances);
 
     // What the rule would tag now, for the "Would tag" list (§5f "Tagging by itself").
     const proposals = faceAutoTagRepo
@@ -292,7 +335,8 @@ export const runFaceAnchors = async (): Promise<void> => {
     console.log(
         `Face references: ${anchors.length} performer(s), ` +
             `${anchors.filter((a) => a.confirmedItems === 0).length} from their tags alone; ` +
-            `${matches.length} face(s) matched; ${proposals.length} item(s) the rule would tag` +
+            `${matches.length} face(s) matched; ${appearances.length} person(s) in items; ` +
+            `${proposals.length} item(s) the rule would tag` +
             (applied > 0 ? `, ${applied} tagged` : "")
     );
 };

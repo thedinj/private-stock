@@ -20,7 +20,7 @@ import {
 } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
-import { faceCrop } from "./faceService";
+import { reviewFace } from "./faceService";
 import { notThem } from "./notThem";
 import { batchUndone } from "./ocrMatchHooks";
 
@@ -40,25 +40,14 @@ const requireAdmin = (auth: AuthContext): void => {
 /** How many faces an entry shows of what it decided. */
 const SHOWN = 4;
 
+/** These faces as a list shows them, in the order given. */
 const shown = (faceIds: readonly string[]): FaceReviewFace[] => {
     const byId = new Map(faceRepo.shownFaces(faceIds).map((face) => [face.id, face]));
 
-    return faceIds.flatMap((id): FaceReviewFace[] => {
+    return faceIds.flatMap((id) => {
         const face = byId.get(id);
-        const crop = face ? faceCrop(face) : null;
 
-        return face && crop
-            ? [
-                  {
-                      id: face.id,
-                      crop,
-                      mediaId: face.mediaId,
-                      kind: face.kind,
-                      atMs: face.atMs,
-                      box: { x: face.x, y: face.y, w: face.w, h: face.h },
-                  },
-              ]
-            : [];
+        return face ? reviewFace(face) : [];
     });
 };
 

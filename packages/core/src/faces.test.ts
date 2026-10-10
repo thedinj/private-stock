@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    LEGIBLE_EYES,
+    appearancesInItem,
     FACE_SIDE,
     alignment,
     chooseFaces,
@@ -342,5 +344,36 @@ describe("whether a group is somebody's", () => {
 
     it("proposes nobody for a group somebody named as someone else", () => {
         expect(groupStateFor({ ...none, taggedAsThem: 5, confirmedOthers: 1 })).toBeNull();
+    });
+});
+
+describe("appearances", () => {
+    const unit = (x: number, y: number) => normaliseVector(Float32Array.from([x, y, 0]));
+    const face = (vector: Float32Array, eyes = 30, score = 0.9) => ({ vector, eyes, score });
+
+    it("gathers a video's faces into its people, each with their clearest face", () => {
+        const people = appearancesInItem(
+            [
+                face(unit(1, 0), 20),
+                face(unit(1, 0.1), 40),
+                face(unit(0, 1)),
+                face(unit(0.05, 1)),
+                face(unit(-1, 0)),
+            ],
+            "video"
+        );
+
+        expect(people.map((person) => person.members)).toEqual([
+            [0, 1],
+            [2, 3],
+        ]);
+        expect(people[0].best).toBe(1);
+    });
+
+    it("keeps a photograph's single face, and says when the clearest is too small to read", () => {
+        const [person] = appearancesInItem([face(unit(1, 0), LEGIBLE_EYES - 1)], "image");
+
+        expect(person.members).toEqual([0]);
+        expect(person.legible).toBe(false);
     });
 });

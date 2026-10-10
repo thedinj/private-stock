@@ -510,3 +510,79 @@ export type FaceHistoryPage = z.infer<typeof faceHistoryPageSchema>;
  */
 export const faceUndoSchema = z.object({ wrong: z.boolean().default(false) });
 export type FaceUndo = z.infer<typeof faceUndoSchema>;
+
+/**
+ * Suggestions (§5f "Suggestions"): people in items — one person in one item, an appearance — that
+ * look clearly like a performer, by performer. What replaces Matches.
+ */
+export const suggestionPerformersQuerySchema = z.object({ media: mediaKindSchema.optional() });
+export type SuggestionPerformersQuery = z.infer<typeof suggestionPerformersQuerySchema>;
+
+export const suggestionPerformersSchema = z.object({
+    performers: z.array(
+        z.object({
+            tagId: z.string(),
+            name: z.string(),
+            pictureUrl: z.string().nullable(),
+            count: z.number(),
+        })
+    ),
+});
+export type SuggestionPerformers = z.infer<typeof suggestionPerformersSchema>;
+
+export const suggestionsQuerySchema = z.object({
+    tagId: z.string().min(1).max(64),
+    media: mediaKindSchema.optional(),
+    /** The page after this suggestion: its score and id, as `next` gave them. */
+    after: z.string().min(1).max(120).optional(),
+    limit: z.coerce.number().int().min(1).max(60).default(24),
+});
+export type SuggestionsQuery = z.infer<typeof suggestionsQuerySchema>;
+
+export const suggestionSchema = z.object({
+    /** The appearance: one person in one item. */
+    id: z.string(),
+    mediaId: z.string(),
+    kind: mediaKindSchema,
+    title: z.string(),
+    /** How many of the item's faces are this person. */
+    moments: z.number(),
+    /** Their clearest face: what the card shows. */
+    face: faceReviewFaceSchema,
+    /** A few more of their faces in the item, for a closer look. */
+    others: z.array(faceReviewFaceSchema),
+    /** Every face of theirs in the item: what a decision is about. */
+    faceIds: z.array(z.string()),
+    score: z.number(),
+    /** The item's own text names them too. */
+    named: z.boolean(),
+});
+export type Suggestion = z.infer<typeof suggestionSchema>;
+
+export const suggestionsPageSchema = z.object({
+    performer: z.object({ id: z.string(), name: z.string(), pictureUrl: z.string().nullable() }),
+    suggestions: z.array(suggestionSchema),
+    next: z.string().nullable(),
+});
+export type SuggestionsPage = z.infer<typeof suggestionsPageSchema>;
+
+/**
+ * Saying who people in items are, a page of cards at once: one decision. `is` tags the items and
+ * confirms the person's faces; `isNot` refuses them for the performer — that person only, not the
+ * item, which may hold them elsewhere. Cards left unsure are not sent.
+ */
+export const suggestionDecisionSchema = z.object({
+    tagId: z.string().min(1).max(64),
+    people: z
+        .array(
+            z.object({
+                mediaId: z.string().min(1).max(64),
+                faceIds: z.array(z.string().min(1).max(64)).min(1).max(24),
+                shownFaceId: z.string().min(1).max(64),
+                verdict: z.enum(["is", "isNot"]),
+            })
+        )
+        .min(1)
+        .max(60),
+});
+export type SuggestionDecision = z.infer<typeof suggestionDecisionSchema>;

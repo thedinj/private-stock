@@ -158,6 +158,7 @@ CREATE TABLE "Face" (
             "scatteredAt" DATETIME,
             "scatteredByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decisionId" TEXT CHECK(length("decisionId") <= 64),
+            "appearanceId" TEXT CHECK(length("appearanceId") <= 64),
             UNIQUE ("mediaId", "vectorIndex")
         );
 
@@ -167,6 +168,17 @@ CREATE TABLE "FaceAnchor" (
             "confirmedItems" INTEGER NOT NULL,
             "sharedItems" INTEGER NOT NULL,
             "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+CREATE TABLE "FaceAppearance" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "faceCount" INTEGER NOT NULL,
+            "bestFaceId" TEXT NOT NULL CHECK(length("bestFaceId") <= 64),
+            "legible" INTEGER CHECK("legible" IN (1)),
+            "matchTagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
+            "score" REAL,
+            "second" REAL
         );
 
 CREATE TABLE "FaceAutoTag" (
@@ -1165,6 +1177,11 @@ CREATE INDEX "idx_DupeMember_mediaId" ON "DupeMember" ("mediaId");
 
 CREATE INDEX "idx_ErrorLog_createdAt" ON "ErrorLog" ("createdAt");
 
+CREATE INDEX "idx_FaceAppearance_match"
+            ON "FaceAppearance" ("matchTagId", "score" DESC) WHERE "matchTagId" IS NOT NULL;
+
+CREATE INDEX "idx_FaceAppearance_media" ON "FaceAppearance" ("mediaId");
+
 CREATE INDEX "idx_FaceAutoTag_state" ON "FaceAutoTag" ("state", "tagId");
 
 CREATE INDEX "idx_FaceDecision_created" ON "FaceDecision" ("createdAt" DESC);
@@ -1178,6 +1195,8 @@ CREATE INDEX "idx_FaceRefusal_decision"
             ON "FaceRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
 CREATE INDEX "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");
+
+CREATE INDEX "idx_Face_appearance" ON "Face" ("appearanceId") WHERE "appearanceId" IS NOT NULL;
 
 CREATE INDEX "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
 

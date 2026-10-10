@@ -2334,6 +2334,53 @@ to an unseen face vetoed tagging the whole item by itself, unseen.
   batch. On production that was 290 confirming presses (2,007 items), 26 refusing ones, 3 can't-tell
   or not-one-person, and 386 of the app's batches (537 items), in under a second.
 
+### A person in a video
+
+**A face is the wrong thing to ask about** (2026-10-10). The stage keeps up to twelve faces an
+item, and on videos with a face confirmed on screen a median 92% of them are that one person:
+asking "which of these crops is them" asked one question twelve times, and a library-wide group
+made the same person into several rows and several people into one.
+
+- **An appearance is one person in one item** (`FaceAppearance`): the item's faces gathered at
+  `APPEARANCE_NEAR` (0.30 — the grouping's 0.35 split one person in 57 of 576 such videos, 0.30 in
+  37; looser began to take in faces refused as them), with its clearest face (largest × surest)
+  and whether that face is **legible** (`LEGIBLE_EYES` 16 px, `LEGIBLE_SCORE` 0.6: a line for being
+  read, not for being right — refused faces pass it as often as confirmed ones; 20 px and 0.7 hid a
+  quarter of what people confirmed). In a video a person is seen at least twice
+  (`APPEARANCE_MIN_VIDEO_FACES`); a photograph's single face is its person. Faces taken out of
+  grouping as "not one person" are nobody's person.
+- **Scored as a person**: the centre of its faces against every reference, best match and runner
+  up kept, written whole by the `faceAnchors` run in the same pass that scores faces — each faces
+  file read once. Nothing is filed against an appearance: decisions land on its faces, so a run
+  may make them anew, with new ids, and lose nothing. The migration queues the first run.
+
+### Suggestions
+
+**Replaces Matches** (2026-10-10). Matches asked about a group because a group was mostly tagged
+as somebody, and only then scored its faces — so rows came mostly doubtful: of 169 faces refused on
+screen, 2 had the refused performer as their best match. Suggestions asks only what the score
+backs:
+
+- **An appearance is suggested for its best match** when it is legible, at `SUGGEST_LINE` 0.55
+  with `SUGGEST_MARGIN` 0.1 over anybody else — or `SUGGEST_NAMED_LINE` 0.45 where the item's text
+  names them — on an item not carrying them and not refused for them (`ItemRefusal`), with none of
+  its faces confirmed as anybody or refused for them by somebody who saw it. Scored per
+  appearance, leave-one-item-out on production: 83% of the appearances people confirmed pass, and
+  none of the 170 they refused (their highest scored 0.552, and failed the margin). Per face the
+  same line kept fewer than half of the confirmed faces. About a thousand suggestions at the start,
+  most of them photographs.
+- **A performer at a time**: everyone with suggestions, most first; then one card for each person
+  in each item, the surest first, every card ticked as them. A press makes a card not them, another
+  unsure — left undecided, asked again later. "Look" shows the frame and their other moments in the
+  item; "Play it here" the item. One save is one decision (History): those that are them tag their
+  items, as one batch, and confirm all their faces in the item (the one shown `shown`, the rest
+  `inferred`), withdrawing any earlier refusal of them — the later word; those that are not are
+  refused for the performer — the person, not the item, which may hold the performer elsewhere.
+- **It holds still**: decided cards stay where they were, saying so; the list is read again only
+  on Refresh, or the next visit.
+- **Matches stays for now**, off the tab list, behind a link in Suggestions, and goes once
+  Suggestions has carried the work for a while.
+
 ### Performers with no single face
 
 **Some performers have no one face** (2026-10-09): theirs never shows — masked, their own point of

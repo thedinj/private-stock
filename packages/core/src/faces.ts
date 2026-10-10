@@ -847,3 +847,78 @@ export const groupStateFor = (evidence: GroupEvidence): "confirmed" | "proposed"
         ? "proposed"
         : null;
 };
+
+/**
+ * Appearances (§5f "A person in a video"): one person in one item — what is shown and asked
+ * about, rather than each face the stage happened to keep. Within one item a looser line than
+ * across the library is safe: the faces share the item's light and grain, and look-alikes rarely
+ * share a scene. 0.30 rather than the grouping's 0.35, which split one person in 57 of 576 videos
+ * with a confirmed face (37 at 0.30); looser still began to take in faces refused as them.
+ */
+export const APPEARANCE_NEAR = 0.3;
+
+/** A person in a video is seen at least twice: a single face there is too little to ask about. */
+export const APPEARANCE_MIN_VIDEO_FACES = 2;
+
+/**
+ * Legible enough to show (§5f "A person in a video"): an appearance is shown only if its best
+ * face is this large and this sure. A line for being read, not for being right — refused faces
+ * pass it as often as confirmed ones — at 16 px it keeps 90% of what people confirmed on screen,
+ * where 20 px and 0.7 hid a quarter of it.
+ */
+export const LEGIBLE_EYES = 16;
+export const LEGIBLE_SCORE = 0.6;
+
+/**
+ * Suggested (§5f "Suggestions"): an appearance whose people's centre is this like a performer's
+ * reference, and this much more than like anybody else. Scored per appearance, not per face: at
+ * this line 83% of the appearances people confirmed pass and none of the 170 they refused, where
+ * per face it kept fewer than half the confirmed faces.
+ */
+export const SUGGEST_LINE = 0.55;
+export const SUGGEST_MARGIN = 0.1;
+
+/** Suggested at a lower line where the item's own text names them too. */
+export const SUGGEST_NAMED_LINE = 0.45;
+
+/** A face of an item, for gathering it into the item's people. */
+export interface AppearanceFace {
+    vector: Float32Array;
+    eyes: number;
+    score: number;
+}
+
+/** One person in one item: which of its faces, the clearest of them, and their direction. */
+export interface Appearance {
+    members: number[];
+    best: number;
+    centre: Float32Array;
+    legible: boolean;
+}
+
+/**
+ * An item's people (§5f "A person in a video"): its faces gathered at `APPEARANCE_NEAR`, each
+ * person with their clearest face — the largest and surest — and the direction of all of them.
+ * In a video a person seen once is left out; a photograph's single face is its person.
+ */
+export const appearancesInItem = (
+    faces: readonly AppearanceFace[],
+    kind: "video" | "image"
+): Appearance[] =>
+    peopleInItem(
+        faces.map((face) => face.vector),
+        APPEARANCE_NEAR
+    )
+        .filter((person) => kind === "image" || person.members.length >= APPEARANCE_MIN_VIDEO_FACES)
+        .map((person) => {
+            const best = person.members.reduce((a, b) =>
+                faces[b].eyes * faces[b].score > faces[a].eyes * faces[a].score ? b : a
+            );
+
+            return {
+                members: person.members,
+                best,
+                centre: normaliseVector(person.sum),
+                legible: faces[best].eyes >= LEGIBLE_EYES && faces[best].score >= LEGIBLE_SCORE,
+            };
+        });

@@ -17,6 +17,7 @@ export * as tagPictureRepo from "./tagPictureRepo.js";
 export * as faceRepo from "./faceRepo.js";
 export * as faceAutoTagRepo from "./faceAutoTagRepo.js";
 export * as faceDecisionRepo from "./faceDecisionRepo.js";
+export * as appearanceRepo from "./appearanceRepo.js";
 export * as mentionRepo from "./mentionRepo.js";
 export * as searchRepo from "./searchRepo.js";
 export * as mediaTextRepo from "./mediaTextRepo.js";
@@ -92,3 +93,4 @@ export type {
     ApplyClipBatchInput,
 } from "./tagBatchRepo.js";
 export type { DecisionRow, DecisionSurface, NewDecision } from "./faceDecisionRepo.js";
+export type { AppearanceSourceFace, NewAppearance, SuggestionRow, SuggestLines } from "./appearanceRepo.js";

@@ -19,6 +19,9 @@ import type {
     FaceReviewResult,
     FaceReviewTab,
     FaceHistoryPage,
+    SuggestionDecision,
+    SuggestionPerformers,
+    SuggestionsPage,
     FaceUndo,
     LikelyDecision,
     LikelyPage,
@@ -390,6 +393,56 @@ export const useUndoFaceDecision = () => {
             api<{ undone: true }>(`/api/faces/history/${encodeURIComponent(id)}/undo`, {
                 method: "POST",
                 body: JSON.stringify(input),
+            }),
+        onSuccess: () => {
+            invalidateVocabulary(queryClient);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
+        },
+    });
+};
+
+const mediaParam = (media: ReviewMedia): string => (media === "all" ? "" : `media=${media}`);
+
+/** Suggestions' performers, most first (§5f "Suggestions"): asked again whenever shown. */
+export const useSuggestionPeople = (media: ReviewMedia) =>
+    useQuery({
+        queryKey: queryKeys.faceReview.suggestionPeople(media),
+        queryFn: () =>
+            api<SuggestionPerformers>(`/api/faces/suggestions/people?${mediaParam(media)}`),
+        refetchOnMount: "always",
+    });
+
+/**
+ * One performer's suggestions, a page at a time. Holds still while it is worked: a decision
+ * settles its cards in place, and nothing fetches it again until a new `visit`.
+ */
+export const useSuggestions = (tagId: string, media: ReviewMedia, visit: number) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.faceReview.suggestions(tagId, media, visit),
+        queryFn: ({ pageParam }) =>
+            api<SuggestionsPage>(
+                `/api/faces/suggestions?tagId=${encodeURIComponent(tagId)}&${mediaParam(media)}` +
+                    (pageParam ? `&after=${encodeURIComponent(pageParam)}` : "")
+            ),
+        initialPageParam: null as string | null,
+        getNextPageParam: (last) => last.next,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    });
+
+/**
+ * Say who the people on a page of cards are. Tagging is a tag edit like any other, so it moves
+ * what any does; History lists it. The cards themselves are settled in place by the page.
+ */
+export const useDecideSuggestions = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: SuggestionDecision) =>
+            api<{ tagged: number; refused: number }>("/api/faces/suggestions", {
+                method: "POST",
+                body: JSON.stringify(decision),
             }),
         onSuccess: () => {
             invalidateVocabulary(queryClient);

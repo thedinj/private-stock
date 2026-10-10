@@ -376,7 +376,7 @@ export const performerFaces = (tagId: string, auth: AuthContext): PerformerFaces
  * Confirmations changed, so a performer's best face, and with it their picture, may have (§6 "A
  * tag's picture"). The job waits two minutes, so a review session's decisions are one pass.
  */
-const confirmationsChanged = (): void => {
+export const confirmationsChanged = (): void => {
     jobRepo.enqueueKind("tagPictures", 200, 120);
     // And every reference and best match with it (§5f "One face, one score").
     jobRepo.enqueueKind("faceAnchors", 200, 120);
@@ -725,7 +725,8 @@ const UNNAMED_MIN_ITEMS = 2;
  */
 const UNNAMED_RETURN_AFTER = 3;
 
-const reviewFace = (face: ShownFace): FaceReviewFace[] => {
+/** A face as every list shows it: its crop, or nothing where it has none. */
+export const reviewFace = (face: ShownFace): FaceReviewFace[] => {
     const crop = faceCrop(face);
 
     return crop

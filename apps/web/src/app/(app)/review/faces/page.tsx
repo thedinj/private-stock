@@ -7,6 +7,7 @@ import { reviewMedia } from "@private-stock/core";
 
 import { AutoTagSheet } from "@/components/faces/AutoTagSheet";
 import { FaceHistorySheet } from "@/components/faces/FaceHistorySheet";
+import { SuggestionsSheet } from "@/components/faces/SuggestionsSheet";
 import { FaceReviewSheet } from "@/components/faces/FaceReviewSheet";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
@@ -15,7 +16,10 @@ import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
  * Faces (§5f "One review, two sources"): the face groups with something to decide, across the
  * library. A performer's own page is where their face is confirmed; this is for the rest.
  *
- * - **Matches**: groups that are, or might be, a performer, on items not tagged with them yet.
+ * - **Suggestions**: people in items who look clearly like a performer, a performer at a time,
+ *   one card for each person in each item (§5f "Suggestions").
+ * - **Matches**: groups that are, or might be, a performer, on items not tagged with them yet —
+ *   the old review, off the tab list and behind a link in Suggestions until it goes.
  * - **Unnamed**: "Who is this?" — the largest groups no performer is proposed for.
  * - **Would tag**: what faces would tag by themselves, checked before they are allowed to, and
  *   the switch that allows them.
@@ -28,7 +32,11 @@ import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
  * first is a fair sample of what the rule would do, and narrowing it would no longer be one.
  */
 const facesView = defineView("/review/faces", {
-    tab: enumField("tab", ["matches", "unnamed", "wouldTag", "taggedForYou", "history"], "matches"),
+    tab: enumField(
+        "tab",
+        ["suggestions", "matches", "unnamed", "wouldTag", "taggedForYou", "history"],
+        "suggestions"
+    ),
     // A performer's page links here narrowed to them.
     performer: textField("performer"),
     media: enumField("media", reviewMedia, "video"),
@@ -54,12 +62,22 @@ const FacesReview: React.FC = () => {
                 keepMounted={false}
             >
                 <Tabs.List mb="lg">
-                    <Tabs.Tab value="matches">Matches</Tabs.Tab>
+                    <Tabs.Tab value="suggestions">Suggestions</Tabs.Tab>
                     <Tabs.Tab value="unnamed">Unnamed</Tabs.Tab>
                     <Tabs.Tab value="wouldTag">Would tag</Tabs.Tab>
                     <Tabs.Tab value="taggedForYou">Tagged for you</Tabs.Tab>
                     <Tabs.Tab value="history">History</Tabs.Tab>
                 </Tabs.List>
+
+                <Tabs.Panel value="suggestions">
+                    <SuggestionsSheet
+                        performer={view.performer || null}
+                        onPerformer={(performer) => apply({ performer: performer ?? "" })}
+                        media={view.media}
+                        onMedia={(media) => apply({ media })}
+                        onGroups={() => apply({ tab: "matches", performer: "" })}
+                    />
+                </Tabs.Panel>
 
                 <Tabs.Panel value="matches">
                     <FaceReviewSheet

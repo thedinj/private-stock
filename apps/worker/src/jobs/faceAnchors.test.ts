@@ -24,6 +24,12 @@ const dataDir = mkdtempSync(path.join(tmpdir(), "ps-faceanchors-"));
 
 const state = vi.hoisted(() => ({
     decisions: [] as unknown[],
+    appearances: [] as {
+        mediaId: string;
+        faceIds: string[];
+        matchTagId: string | null;
+        score: number | null;
+    }[],
     confirmed: [] as { tagId: string; mediaId: string; vectorIndex: number }[],
     tagged: [] as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[],
     faces: [] as { id: string; mediaId: string; vectorIndex: number }[],
@@ -63,11 +69,23 @@ vi.mock("@private-stock/db", () => ({
         },
     },
     searchRepo: { requestReindex: () => undefined },
+    appearanceRepo: {
+        sourceFaces: () =>
+            state.faces.map((face) => ({
+                ...face,
+                eyes: 30,
+                score: 0.9,
+                kind: "video",
+                scattered: 0,
+            })),
+        replaceAll: (rows: typeof state.appearances) => {
+            state.appearances = [...rows];
+        },
+    },
     changeLogRepo: { recordMany: () => undefined },
     faceRepo: {
         confirmedFaceRefs: () => state.confirmed,
         taggedFaceRefs: () => state.tagged,
-        everyFaceRef: () => state.faces,
         replaceAnchors: (
             anchors: NonNullable<typeof state.written>["anchors"],
             matches: NonNullable<typeof state.written>["matches"]
@@ -138,6 +156,7 @@ beforeEach(() => {
     state.counts = { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 };
     state.setting = {};
     state.decided = [];
+    state.appearances = [];
     state.decisions = [];
     state.batches = [];
 });
@@ -169,6 +188,27 @@ describe("face references", () => {
         );
 
         expect(file.map((a) => a.tagId)).toEqual(["jane"]);
+    });
+
+    it("gathers each item's people, and scores each against the references", async () => {
+        item("a1", [1, 5]);
+        item("a2", [1, 6]);
+        item("a3", [1, 7]);
+        // Jane twice, a stranger twice, and somebody seen once.
+        item("both", [1, 1, 9, 9, 8]);
+        for (const id of ["a1", "a2", "a3"]) tag("jane", id, 2);
+
+        await runFaceAnchors();
+
+        const people = state.appearances.filter((person) => person.mediaId === "both");
+
+        expect(people.map((person) => person.faceIds)).toEqual([
+            ["both-0", "both-1"],
+            ["both-2", "both-3"],
+        ]);
+        expect(people[0].matchTagId).toBe("jane");
+        expect(people[0].score).toBeGreaterThan(0.9);
+        expect(people[1].score ?? 0).toBeLessThan(0.3);
     });
 
     it("keeps out a tags' face that is not the one people confirmed", async () => {

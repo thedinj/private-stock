@@ -285,6 +285,19 @@ export const queryKeys = {
             media,
             visit,
         ],
+        /**
+         * Suggestions' performers, with how many each (§5f "Suggestions"). Asked for again whenever
+         * it is shown: a decision on a performer's page changes their count.
+         */
+        suggestionPeople: (media: ReviewMedia) => ["faceReview", "suggestionPeople", media],
+        /** One performer's suggestions, every page loaded; `visit` as for `list`. */
+        suggestions: (tagId: string, media: ReviewMedia, visit: number) => [
+            "faceReview",
+            "suggestions",
+            tagId,
+            media,
+            visit,
+        ],
         /** How alike a review row's faces are to who it asks about (§5f), by the faces shown. */
         likeness: (groupId: string, tagId: string | null, faceIds: string) => [
             "faceReview",

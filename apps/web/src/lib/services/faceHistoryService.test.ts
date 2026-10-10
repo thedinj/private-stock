@@ -45,7 +45,7 @@ vi.mock("@private-stock/db", () => ({
 
 vi.mock("./notThem", () => ({ notThem: (...args: unknown[]) => state.notThem.push(args) }));
 vi.mock("./ocrMatchHooks", () => ({ batchUndone: () => undefined }));
-vi.mock("./faceService", () => ({ faceCrop: () => null }));
+vi.mock("./faceService", () => ({ reviewFace: () => [] }));
 
 const { faceHistory, undoFaceDecision } = await import("./faceHistoryService");
 

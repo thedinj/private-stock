@@ -18,16 +18,19 @@ import type { TickState } from "./FaceReviewRow";
  * that person. Most "is that them?" is settled here; "Play it here" is for the rest.
  */
 export const FacePeek: React.FC<{
-    groupId: string;
+    /** The group the face is in: its other moments are fetched from it. */
+    groupId?: string;
+    /** Or the same person's other moments, already known — an appearance's (§5f). */
+    others?: FaceReviewFace[];
     face: FaceReviewFace;
     state: TickState;
     /** Whether "unsure" is offered: not while naming someone else. */
     threeWay: boolean;
     onSet: (state: TickState) => void;
     onPlay: () => void;
-}> = ({ groupId, face, state, threeWay, onSet, onPlay }) => {
+}> = ({ groupId, others, face, state, threeWay, onSet, onPlay }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
-    const others = useFacePeek(groupId, face.mediaId, true);
+    const fetched = useFacePeek(groupId ?? "", face.mediaId, others === undefined && !!groupId);
     const { frame, rect } = face.crop;
     const width = isPhone ? 260 : 380;
     // The square around the face, as fractions of the frame.
@@ -37,7 +40,7 @@ export const FacePeek: React.FC<{
         width: `${(rect.width / frame.width) * 100}%`,
         height: `${(rect.height / frame.height) * 100}%`,
     };
-    const more = (others.data?.faces ?? []).filter((other) => other.id !== face.id);
+    const more = (others ?? fetched.data?.faces ?? []).filter((other) => other.id !== face.id);
 
     return (
         <Stack gap="xs" w={width}>
@@ -70,7 +73,7 @@ export const FacePeek: React.FC<{
                 </Text>
             )}
 
-            {others.isPending ? (
+            {others === undefined && fetched.isPending ? (
                 <Loader size="xs" />
             ) : more.length > 0 ? (
                 <Stack gap={4}>
