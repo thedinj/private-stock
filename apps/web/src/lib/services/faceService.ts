@@ -5,7 +5,6 @@ import {
     NotFoundError,
     ValidationError,
     FACE_DOUBT,
-    AUTO_TAG_LINE,
     LOOKS_LIKE,
     LOOSE_GROUP,
     LOOKS_LIKE_MARGIN,
@@ -24,9 +23,6 @@ import {
     type FaceMatchState,
     type FaceReviewDecision,
     type FaceReviewFace,
-    type ItemSuspect,
-    type ItemSuspectDecision,
-    type ItemSuspects,
     type NoSingleFace,
     type FaceReviewPage,
     type FaceReviewQuery,
@@ -56,7 +52,6 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { artifactUrl } from "./artService";
 import { lookupMedia } from "./mediaService";
-import { notThem } from "./notThem";
 import { faceAnchors } from "./faceAnchors";
 import { faceVectorReader } from "./faceVectors";
 import { spriteThumbFor } from "./spriteThumb";
@@ -1085,135 +1080,4 @@ export const facePeek = (query: FacePeekQuery, auth: AuthContext): FacePeek => {
             .itemFacesInGroup(query.groupId, query.mediaId, auth.accessibleRootIds, PEEK_FACES)
             .flatMap(reviewFace),
     };
-};
-
-/** Fewest suggestions worth the room, most first. */
-const SUSPECTS = 6;
-
-/**
- * "Maybe in this item" (§5f "In the viewer"): library performers the item does not carry whose
- * face looks like one in it — best match them at `LOOKS_LIKE`, `LOOKS_LIKE_MARGIN` clear of anybody
- * else — or whose name it shows, with nothing refused. The surest first: strong faces, then the
- * best likeness, then the name alongside. Administrators only, as every face decision is: adding
- * one tags the library.
- */
-export const itemSuspects = (mediaId: string, auth: AuthContext): ItemSuspects => {
-    requireAdmin(auth);
-
-    if (lookupMedia([mediaId], auth).items.length === 0) {
-        throw new NotFoundError("Item not found");
-    }
-
-    const byTag = new Map<
-        string,
-        {
-            face: ShownFace | null;
-            score: number | null;
-            strongFaces: Set<string>;
-            mentions: MentionField[];
-        }
-    >();
-    const entry = (tagId: string) => {
-        let found = byTag.get(tagId);
-
-        if (!found) {
-            found = { face: null, score: null, strongFaces: new Set(), mentions: [] };
-            byTag.set(tagId, found);
-        }
-
-        return found;
-    };
-
-    for (const face of faceRepo.suspectFaces(mediaId)) {
-        if (face.score < LOOKS_LIKE || face.score - face.second < LOOKS_LIKE_MARGIN) continue;
-
-        const suspect = entry(face.tagId);
-
-        // Ordered by score, so the first is the best.
-        if (!suspect.face) {
-            suspect.face = face;
-            suspect.score = face.score;
-        }
-
-        if (face.score >= AUTO_TAG_LINE) suspect.strongFaces.add(String(face.atMs ?? face.id));
-    }
-
-    for (const { tagId, field } of mentionRepo.untaggedPerformersNamedOn(mediaId)) {
-        const suspect = entry(tagId);
-
-        if (!suspect.mentions.includes(field)) suspect.mentions.push(field);
-    }
-
-    const suspects = [...byTag.entries()].flatMap(([tagId, suspect]): ItemSuspect[] => {
-        const tag = tagRepo.findById(tagId);
-
-        return tag
-            ? [
-                  {
-                      tagId,
-                      name: tag.name,
-                      face: suspect.face ? (reviewFace(suspect.face)[0] ?? null) : null,
-                      score:
-                          suspect.score === null ? null : Math.round(suspect.score * 1000) / 1000,
-                      strongFaces: suspect.strongFaces.size,
-                      mentions: suspect.mentions,
-                  },
-              ]
-            : [];
-    });
-
-    return {
-        suspects: suspects
-            .sort(
-                (a, b) =>
-                    b.strongFaces - a.strongFaces ||
-                    (b.score ?? 0) - (a.score ?? 0) ||
-                    b.mentions.length - a.mentions.length
-            )
-            .slice(0, SUSPECTS),
-    };
-};
-
-/**
- * "Add" a suggested performer to the item — one batch the undo list can withdraw, the face shown
- * confirmed as theirs — or "Not them", which is an untag by hand's refusal: the item's faces and
- * its name match, so nothing suggests or tags them here again.
- */
-export const decideItemSuspect = (
-    mediaId: string,
-    decision: ItemSuspectDecision,
-    auth: AuthContext
-): { changed: number } => {
-    requireAdmin(auth);
-
-    const tag = libraryPerformer(decision.tagId);
-
-    if (lookupMedia([mediaId], auth).items.length === 0) {
-        throw new NotFoundError("Item not found");
-    }
-
-    if (decision.verdict === "refuse") {
-        db.transaction(() => notThem([mediaId], tag.id, auth.userId, "item"))();
-
-        return { changed: 1 };
-    }
-
-    const { assigned } = faceDecisionRepo.record(pressBy(auth, "is", tag.id, "item"), () => {
-        if (decision.faceId) faceRepo.confirmFace(decision.faceId, tag.id, auth.userId);
-
-        const result = tagBatchRepo.applyAssignments({
-            userId: auth.userId,
-            scope: null,
-            summary: `${tag.name} on 1 item, from "Maybe in this item"`,
-            assignments: [{ mediaId, tagId: tag.id }],
-        });
-
-        searchRepo.requestReindex([mediaId]);
-
-        return result;
-    }).result;
-
-    confirmationsChanged();
-
-    return { changed: assigned };
 };

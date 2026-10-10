@@ -350,36 +350,6 @@ export const autoTagSwitchSchema = z.object({ enabled: z.boolean() });
 export type AutoTagSwitch = z.infer<typeof autoTagSwitchSchema>;
 
 /**
- * "Maybe in this item" (§5f "In the viewer"): library performers an item does not carry, whose face
- * looks like a face in it, or whose name it shows — with the face, to jump to and compare.
- */
-export const itemSuspectSchema = z.object({
-    tagId: z.string(),
-    name: z.string(),
-    /** Their best-matching face in the item, if a face put them here. */
-    face: faceReviewFaceSchema.nullable(),
-    /** That face's likeness to their reference. */
-    score: z.number().nullable(),
-    /** Faces at different moments that match them strongly (`AUTO_TAG_LINE`). */
-    strongFaces: z.number(),
-    /** Where their name is on the item. */
-    mentions: z.array(z.enum(mentionFields)),
-});
-export type ItemSuspect = z.infer<typeof itemSuspectSchema>;
-
-export const itemSuspectsSchema = z.object({ suspects: z.array(itemSuspectSchema) });
-export type ItemSuspects = z.infer<typeof itemSuspectsSchema>;
-
-/** "Add" them to the item, or "Not them". */
-export const itemSuspectDecisionSchema = z.object({
-    tagId: z.string().min(1).max(64),
-    verdict: z.enum(["add", "refuse"]),
-    /** The face shown with them: confirmed as theirs on "Add". */
-    faceId: z.string().min(1).max(64).nullable().default(null),
-});
-export type ItemSuspectDecision = z.infer<typeof itemSuspectDecisionSchema>;
-
-/**
  * History (§5f "Decisions you can take back"): every face decision, newest first — by a person or
  * by the app tagging by itself — each with what it wrote, and undoable.
  */
@@ -566,3 +536,51 @@ export const performerPeopleDecisionSchema = z.object({
         .max(60),
 });
 export type PerformerPeopleDecision = z.infer<typeof performerPeopleDecisionSchema>;
+
+/**
+ * People in this item (§5f "People in this item"): every person in it, each with what is known —
+ * confirmed by you or tagged by the app, suggested, or nobody yet — and the performers its own
+ * text names who are not on it. What replaces "Maybe in this item".
+ */
+export const itemPeopleSchema = z.object({
+    people: z.array(
+        z.object({
+            card: personCardSchema,
+            state: z.enum(["confirmed", "suggested", "unknown"]),
+            /** Who: confirmed as, or suggested. */
+            performer: z.object({ id: z.string(), name: z.string() }).nullable(),
+            /** Confirmed, and the item's tag was made by the app's own matching. */
+            byApp: z.boolean(),
+            /** The item already carries them. */
+            tagged: z.boolean(),
+        })
+    ),
+    named: z.array(
+        z.object({
+            tagId: z.string(),
+            name: z.string(),
+            fields: z.array(z.enum(mentionFields)),
+        })
+    ),
+});
+export type ItemPeople = z.infer<typeof itemPeopleSchema>;
+
+const itemPerson = z.object({
+    faceIds: z.array(z.string().min(1).max(64)).min(1).max(24),
+    shownFaceId: z.string().min(1).max(64),
+});
+
+/**
+ * What the item's page says of a person in it, or of a performer its text names: one decision.
+ * `is` tags the item if it does not carry them and confirms the person's faces; `isNot` refuses
+ * the person for them, taking back a confirmation; `name` is `is` for a name typed, coined if new;
+ * `addNamed` tags a performer the text names; `refuseNamed` is "not them" on the item.
+ */
+export const itemPeopleDecisionSchema = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("is"), tagId: z.string().min(1).max(64), person: itemPerson }),
+    z.object({ action: z.literal("isNot"), tagId: z.string().min(1).max(64), person: itemPerson }),
+    z.object({ action: z.literal("name"), name: tagNameSchema, person: itemPerson }),
+    z.object({ action: z.literal("addNamed"), tagId: z.string().min(1).max(64) }),
+    z.object({ action: z.literal("refuseNamed"), tagId: z.string().min(1).max(64) }),
+]);
+export type ItemPeopleDecision = z.infer<typeof itemPeopleDecisionSchema>;

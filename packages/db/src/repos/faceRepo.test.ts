@@ -739,26 +739,6 @@ describe("a performer's faces", () => {
         expect(faceRepo.anchorOf("jane")).toBeUndefined();
     });
 
-    it("finds an item's faces matched to performers it does not carry, not refused", () => {
-        setUp([{ id: "a", groups: ["g1", "g1", "g1"], performers: ["kim"] }]);
-        const [f0, f1, f2] = faces("a").map((f) => f.id);
-
-        faceRepo.replaceAnchors(
-            [],
-            [
-                { faceId: f0, tagId: "jane", score: 0.6, second: 0.2 },
-                { faceId: f1, tagId: "jane", score: 0.7, second: 0.2 },
-                // She is tagged on it already.
-                { faceId: f2, tagId: "kim", score: 0.8, second: 0.2 },
-            ]
-        );
-        refuse(f0, "jane");
-
-        expect(faceRepo.suspectFaces("a").map((row) => [row.id, row.tagId, row.score])).toEqual([
-            [f1, "jane", 0.7],
-        ]);
-    });
-
     it("leaves a performer with no single face out of every face question, and back when undone", () => {
         setUp([
             // Kim has no single face; Jane is on screen with her in b.

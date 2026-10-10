@@ -307,3 +307,27 @@ describe("a performer's Faces tab", () => {
         ]);
     });
 });
+
+describe("people in this item", () => {
+    it("says who each person was matched to, who they are confirmed as, and what was refused", () => {
+        const faces = person("a", "jane", 0.8);
+
+        expect(appearanceRepo.itemPeople("a")).toEqual([
+            expect.objectContaining({
+                matchTagId: "jane",
+                confirmedTagId: null,
+                refusedMatch: 0,
+                legible: 1,
+                moments: 2,
+            }),
+        ]);
+
+        appearanceRepo.refusePerson(faces, faces[0], "jane", "someone");
+
+        expect(appearanceRepo.itemPeople("a")[0].refusedMatch).toBe(1);
+
+        appearanceRepo.confirmPerson(faces, faces[0], "kim", "someone");
+
+        expect(appearanceRepo.itemPeople("a")[0].confirmedTagId).toBe("kim");
+    });
+});

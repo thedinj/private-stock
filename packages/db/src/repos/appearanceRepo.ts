@@ -474,3 +474,36 @@ export const restorePerson = (faceIds: readonly string[], tagId: string): number
               WHERE "tagId" = ? AND "faceId" IN (SELECT value FROM json_each(?))`
         )
         .run(tagId, JSON.stringify(faceIds)).changes;
+
+/** One person in an item as its page shows them: what they were matched to, and what is decided. */
+export interface ItemPersonRow {
+    id: string;
+    bestFaceId: string;
+    moments: number;
+    legible: 0 | 1;
+    matchTagId: string | null;
+    score: number | null;
+    second: number | null;
+    /** The performer any of their faces is confirmed as, if one is. */
+    confirmedTagId: string | null;
+    /** Whether a face of theirs somebody saw was refused for the match. */
+    refusedMatch: 0 | 1;
+}
+
+/** The people in one item (§5f "People in this item"), the most seen first. */
+export const itemPeople = (mediaId: string): ItemPersonRow[] =>
+    db
+        .prepare(
+            `SELECT a."id", a."bestFaceId", a."faceCount" AS "moments", a."legible" IS NOT NULL AS "legible",
+                    a."matchTagId", a."score", a."second",
+                    (SELECT f."tagId" FROM "Face" f
+                      WHERE f."appearanceId" = a."id" AND f."tagId" IS NOT NULL
+                      GROUP BY f."tagId" ORDER BY count(*) DESC LIMIT 1) AS "confirmedTagId",
+                    EXISTS (SELECT 1 FROM "Face" f JOIN "FaceRefusal" r ON r."faceId" = f."id"
+                             WHERE f."appearanceId" = a."id" AND r."tagId" = a."matchTagId"
+                               AND r."how" IS NOT 'inferred') AS "refusedMatch"
+               FROM "FaceAppearance" a
+              WHERE a."mediaId" = ?
+              ORDER BY a."faceCount" DESC, a."id"`
+        )
+        .all(mediaId) as ItemPersonRow[];

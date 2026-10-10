@@ -93,4 +93,10 @@ export type {
     ApplyClipBatchInput,
 } from "./tagBatchRepo.js";
 export type { DecisionRow, DecisionSurface, NewDecision } from "./faceDecisionRepo.js";
-export type { AppearanceSourceFace, NewAppearance, SuggestionRow, SuggestLines } from "./appearanceRepo.js";
+export type {
+    AppearanceSourceFace,
+    ItemPersonRow,
+    NewAppearance,
+    SuggestionRow,
+    SuggestLines,
+} from "./appearanceRepo.js";

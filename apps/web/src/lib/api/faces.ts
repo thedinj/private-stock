@@ -4,8 +4,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 
 import type {
     NoSingleFace,
-    ItemSuspectDecision,
-    ItemSuspects,
+    ItemPeople,
+    ItemPeopleDecision,
     AutoTagDecision,
     AutoTagPage,
     AutoTagState,
@@ -242,38 +242,32 @@ export const useSwitchAutoTag = () => {
     });
 };
 
-/** "Maybe in this item", for administrators. */
-export const useItemSuspects = (mediaId: string, enabled: boolean) =>
+/** People in this item (§5f), for administrators. */
+export const useItemPeople = (mediaId: string, enabled: boolean) =>
     useQuery({
-        queryKey: queryKeys.media.suspects(mediaId),
-        queryFn: () => api<ItemSuspects>(`/api/media/${encodeURIComponent(mediaId)}/suspects`),
+        queryKey: queryKeys.media.people(mediaId),
+        queryFn: () => api<ItemPeople>(`/api/media/${encodeURIComponent(mediaId)}/people`),
         enabled,
     });
 
 /**
- * "Add" a suggested performer, or "Not them". Adding is a tag edit like any other, so it moves what
- * any tagging does — the item, its suggestions and the library are all under it. A refusal changes
- * no tag: the suggestions, and that performer's sections.
+ * Say who a person in the item is, or is not, or tag or refuse a performer its text names. Tagging
+ * is a tag edit like any other, so it moves what any does — the item and who is in it among it;
+ * either way History lists it.
  */
-export const useDecideItemSuspect = (mediaId: string) => {
+export const useDecideItemPeople = (mediaId: string) => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (decision: ItemSuspectDecision) =>
-            api<{ changed: number }>(`/api/media/${encodeURIComponent(mediaId)}/suspects`, {
+        mutationFn: (decision: ItemPeopleDecision) =>
+            api<{ changed: number }>(`/api/media/${encodeURIComponent(mediaId)}/people`, {
                 method: "POST",
                 body: JSON.stringify(decision),
             }),
-        onSuccess: (_, decision) => {
-            if (decision.verdict === "add") {
-                invalidateVocabulary(queryClient);
-            } else {
-                void queryClient.invalidateQueries({ queryKey: queryKeys.media.suspects(mediaId) });
-                void queryClient.invalidateQueries({
-                    queryKey: queryKeys.tags.likely(decision.tagId),
-                });
-                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
-            }
+        onSuccess: () => {
+            invalidateVocabulary(queryClient);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.people(mediaId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
         },
     });
 };

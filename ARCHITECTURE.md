@@ -2115,7 +2115,7 @@ holds all three, strongest first, under "To check":
 
 The seam is what a decision is about rather than where it is made: a person in an item
 (Suggestions, across every performer in Review, or narrowed to one on their Organise page), an
-item ("Maybe in this item", in the viewer), or what is already decided about a performer (their
+item ("People in this item", in the viewer), or what is already decided about a performer (their
 Faces tab, below). The cards are the same component and the same reads wherever they appear.
 (Until 2026-10-10 the unit was a face group, and the face tab was "Their face"; see "Their
 faces".)
@@ -2127,13 +2127,16 @@ faces".)
   up (§5d).
 - **Review › Faces** keeps the two tabs below: **Matches** for groups with a proposal, across every
   performer, and **Unnamed**, "Who is this?", for the largest groups with none.
-- **In the viewer: "Maybe in this item"** (built 2026-10-08). Library performers the item does not
-  carry whose face looks like one in it — best match them at `LOOKS_LIKE`, `LOOKS_LIKE_MARGIN`
-  clear of anybody else — or whose name it shows, nothing refused; the surest first, at most six.
-  Each shows its best face, which takes the player to that moment, with "Add" (one batch the undo
-  list can withdraw, the face confirmed as `shown`) and "Not them" (`notThem`, as an untag by hand).
-  Above the item's tags, for administrators. Who is on screen _now_, during playback, is not built:
-  it is a way of watching more than of organising.
+- **In the viewer: "People in this item"** (2026-10-10, replacing "Maybe in this item" of
+  2026-10-08). Every person in the item (appearance), with what is known of them: confirmed — by
+  you, or tagged by the app from their face — suggested at the lines Suggestions uses, or nobody
+  yet. One control each: "That's ‹name›" (tags the item if it does not carry them, and confirms all
+  the person's faces there), "Not ‹name›" (refuses the person for them, taking back a
+  confirmation), and "Name…" / "Someone else…" for somebody new or other, coined if new. Below,
+  the performers the item's own text names who are not on it, with "Add" and "Not them" (`notThem`,
+  as an untag by hand). Pressing a face goes to its moment. Each is one decision in History. Above
+  the item's tags, for administrators. Who is on screen _now_, during playback, is not built: it
+  is a way of watching more than of organising.
 
 **As built (2026-10-07)** — `apps/web/src/lib/services/faceService.ts`, `components/faces/`:
 
@@ -2396,7 +2399,7 @@ become their reference, and then a name the auto-tagger applies.
   performer is that other performer's single-performer item, and one tagged only with them says
   nothing (`singlePerformer`, `performerGroupIds`); faces confirmed as them propose no pair;
 - so nothing is proposed, looked like or tagged by a face for them; "Likely", "Find untagged" and
-  "Maybe in this item" suggest them by name only;
+  "People in this item" suggest them by name only;
 - their page says so in place of their faces, with "Undo". What was confirmed for them is kept,
   ignored, so undoing it restores everything, and their reference is rebuilt at once.
 

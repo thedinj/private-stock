@@ -52,7 +52,7 @@ const NEAR_NAMES = 4;
  * already a name but is close to some (the vocabulary's own search, typos included), those are
  * offered beside it, and the button says it is adding someone new.
  */
-const NameBox: React.FC<{
+export const NameBox: React.FC<{
     action: (name: string) => string;
     busy: boolean;
     disabled: boolean;

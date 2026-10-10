@@ -44,8 +44,6 @@ const state = vi.hoisted(() => ({
     noFace: new Set<string>(),
     /** "Pick their face": face id → [mediaId, confirmed as them]. */
     own: {} as Record<string, [string, boolean]>,
-    suspectFaces: [] as Record<string, unknown>[],
-    namedOn: [] as { tagId: string; field: string }[],
     notThem: [] as unknown[][],
     /** Face id → [mediaId, group, direction]: a face's vector, as a unit vector in two dims. */
     vectors: {} as Record<string, [string, string, number[]]>,
@@ -117,7 +115,6 @@ vi.mock("@private-stock/db", () => ({
             state.confirmedOn.push([groupId, tagId, mediaIds]);
             return mediaIds.length;
         },
-        suspectFaces: () => state.suspectFaces,
         noSingleFace: (tagId: string) =>
             state.noFace.has(tagId) ? { decidedAt: "2026-10-09 10:00:00" } : undefined,
         setNoSingleFace: (tagId: string, noFace: boolean) => {
@@ -177,7 +174,6 @@ vi.mock("@private-stock/db", () => ({
     tagPictureRepo: { effectiveFor: () => new Map() },
     mentionRepo: {
         untaggedMentions: () => state.mentions,
-        untaggedPerformersNamedOn: () => state.namedOn,
         refuse: (tagId: string, mediaIds: string[]) => {
             state.mentionRefused.push([tagId, mediaIds]);
             return mediaIds.length;
@@ -231,8 +227,6 @@ vi.mock("./spriteThumb", () => ({
 
 const {
     setNoSingleFace,
-    decideItemSuspect,
-    itemSuspects,
     faceLikeness,
     facePeek,
     confirmedFacesPage,
@@ -338,8 +332,6 @@ beforeEach(() => {
     state.vectors = {};
     state.scattered = [];
     state.noFace = new Set();
-    state.suspectFaces = [];
-    state.namedOn = [];
     state.notThem = [];
 });
 
@@ -807,54 +799,6 @@ describe("Review › Faces", () => {
         expect(() => reviewFaces({ tab: "matches", ...page }, { ...admin, scopes: [] })).toThrow(
             /administrator/
         );
-    });
-});
-
-describe("maybe in this item", () => {
-    const matched = (
-        mediaId: string,
-        tagId: string,
-        atMs: number,
-        score: number,
-        second = 0.1
-    ) => ({
-        ...shown(mediaId, "g1"),
-        id: `${mediaId}-${atMs}`,
-        atMs,
-        tagId,
-        score,
-        second,
-    });
-
-    it("suggests who a face looks like or the item names, surest first, never a near thing", () => {
-        state.suspectFaces = [
-            matched("m1", "jane", 1000, 0.72),
-            matched("m1", "jane", 5000, 0.65),
-            matched("m1", "kim", 2000, 0.5),
-            // Barely more like her than like somebody else.
-            matched("m1", "jane", 9000, 0.6, 0.55),
-        ];
-        state.namedOn = [{ tagId: "kim", field: "filename" }];
-
-        const { suspects } = itemSuspects("m1", admin);
-
-        expect(suspects.map((s) => [s.tagId, s.strongFaces, s.score, s.mentions])).toEqual([
-            ["jane", 2, 0.72, []],
-            ["kim", 0, 0.5, ["filename"]],
-        ]);
-        expect(suspects[0].face?.atMs).toBe(1000);
-        expect(() => itemSuspects("m1", { ...admin, scopes: [] })).toThrow(/administrator/);
-    });
-
-    it("adds as an undoable batch with the face confirmed, or refuses as an untag does", () => {
-        expect(
-            decideItemSuspect("m1", { tagId: "jane", verdict: "add", faceId: "m1-1000" }, admin)
-        ).toEqual({ changed: 1 });
-        expect(state.assigned).toEqual([{ mediaId: "m1", tagId: "jane" }]);
-
-        decideItemSuspect("m1", { tagId: "jane", verdict: "refuse", faceId: null }, admin);
-
-        expect(state.notThem).toEqual([[["m1"], "jane", "u1", "item"]]);
     });
 });
 

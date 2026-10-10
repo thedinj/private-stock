@@ -105,10 +105,10 @@ export const queryKeys = {
         all: () => ["media"],
         detail: (mediaId: string) => ["media", mediaId],
         /**
-         * "Maybe in this item" (§5f): under the item's detail, so whatever refreshes the item —
-         * a tag edit above all — refreshes who it suggests.
+         * People in this item (§5f): under the item's detail, so whatever refreshes the item —
+         * a tag edit above all — refreshes who is said to be in it.
          */
-        suspects: (mediaId: string) => ["media", mediaId, "suspects"],
+        people: (mediaId: string) => ["media", mediaId, "people"],
         transcode: (mediaId: string) => ["media", mediaId, "transcode"],
         /** Its other copies, for the delete confirmation (§10d). Under the detail, so the
             `media.all()` every trash invalidates reaches it. */

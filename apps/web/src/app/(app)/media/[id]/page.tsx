@@ -27,7 +27,7 @@ import type { MediaDetail } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { MediaDetailsDrawer } from "@/components/media/MediaDetailsDrawer";
-import { SuspectsPanel } from "@/components/faces/SuspectsPanel";
+import { PeopleInItemPanel } from "@/components/faces/PeopleInItemPanel";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
 import { LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
@@ -1162,7 +1162,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 page, and a draft must not follow you onto the next one. */}
             {/* Who else might be in it (§5f "In the viewer"): for administrators, whose answers
                 tag the library. Above the tags it would add to; nothing when nobody is suggested. */}
-            {hasScope("admin") && <SuspectsPanel mediaId={data.id} onSeek={seekAndShow} />}
+            {hasScope("admin") && <PeopleInItemPanel mediaId={data.id} onSeek={seekAndShow} />}
 
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" verticalSpacing="lg">
                 <TagEditor

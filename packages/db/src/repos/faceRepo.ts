@@ -724,30 +724,6 @@ export const confirmFace = (faceId: string, tagId: string, userId: string): numb
         )
         .run(tagId, userId, activeDecision(), faceId).changes;
 
-/**
- * An item's faces whose best match is a library performer the item does not carry — not refused
- * for them, not set aside as in no one's group — with the match: what "Maybe in this item" reads.
- */
-export const suspectFaces = (
-    mediaId: string
-): (ShownFace & { tagId: string; score: number; second: number })[] =>
-    db
-        .prepare(
-            `SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h",
-                    fm."tagId", fm."score", fm."second"
-               FROM "FaceMatch" fm
-               JOIN "Face" f ON f."id" = fm."faceId"
-               JOIN "Media" m ON m."id" = f."mediaId"
-               JOIN "Tag" t ON t."id" = fm."tagId" AND t."kind" = 'performer' AND t."ownerId" IS NULL
-              WHERE f."mediaId" = ? AND f."scatteredAt" IS NULL
-                AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
-                                 WHERE r."faceId" = f."id" AND r."tagId" = fm."tagId")
-                AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
-                                 WHERE mt."mediaId" = f."mediaId" AND mt."tagId" = fm."tagId")
-              ORDER BY fm."score" DESC`
-        )
-        .all(mediaId) as (ShownFace & { tagId: string; score: number; second: number })[];
-
 /** When a performer was said to have no single face (§5f), if they were. */
 export const noSingleFace = (tagId: string): { decidedAt: string } | undefined =>
     db.prepare(`SELECT "decidedAt" FROM "PerformerNoFace" WHERE "tagId" = ?`).get(tagId) as
