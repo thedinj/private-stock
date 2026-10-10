@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
 import { Stack, Tabs } from "@mantine/core";
 
 import { reviewMedia } from "@private-stock/core";
@@ -38,6 +38,8 @@ const facesView = defineView("/review/faces", {
 
 const FacesReview: React.FC = () => {
     const [view, apply] = useUrlView(facesView);
+    // Whether this visit went into a performer from the list, so "Everyone" can be Back.
+    const drilledIn = useRef(false);
 
     return (
         <Stack gap="lg">
@@ -65,7 +67,20 @@ const FacesReview: React.FC = () => {
                 <Tabs.Panel value="suggestions">
                     <SuggestionsSheet
                         performer={view.performer || null}
-                        onPerformer={(performer) => apply({ performer: performer ?? "" })}
+                        onPerformer={(performer) => {
+                            if (performer) {
+                                // A step into one performer: Back returns to everyone.
+                                drilledIn.current = true;
+                                apply({ performer }, { push: true });
+                            } else if (drilledIn.current) {
+                                // Undo the step rather than stacking another entry on it.
+                                drilledIn.current = false;
+                                window.history.back();
+                            } else {
+                                // Arrived narrowed to them, from their page: nothing to go back to.
+                                apply({ performer: "" });
+                            }
+                        }}
                         media={view.media}
                         onMedia={(media) => apply({ media })}
                     />

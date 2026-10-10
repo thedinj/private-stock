@@ -189,24 +189,29 @@ const baseQuery = (): URLSearchParams => {
  *
  * `apply` merges a patch into the view and replaces the address -- `replace`, not `push`, so a
  * search does not leave a history entry per keystroke and Back leaves the page rather than
- * stepping back through its filters.
+ * stepping back through its filters. `{ push: true }` is for the one kind of change that is a
+ * step somebody expects Back to undo: going into one thing from a list of them.
  */
 export const useUrlView = <F extends Fields>(
     definition: ViewDefinition<F>
-): [ViewOf<F>, (patch: Partial<ViewOf<F>>) => void] => {
+): [ViewOf<F>, (patch: Partial<ViewOf<F>>, options?: { push?: boolean }) => void] => {
     const router = useRouter();
     const query = useSearchParams().toString();
 
     const view = useMemo(() => definition.parse(new URLSearchParams(query)), [definition, query]);
 
     const apply = useCallback(
-        (patch: Partial<ViewOf<F>>) => {
+        (patch: Partial<ViewOf<F>>, options?: { push?: boolean }) => {
             const base = baseQuery();
             const next = { ...definition.parse(base), ...patch };
             const href = definition.href(next, base);
 
             pending = { from: currentAddress(), to: href };
-            router.replace(href, { scroll: false });
+            if (options?.push) {
+                router.push(href, { scroll: false });
+            } else {
+                router.replace(href, { scroll: false });
+            }
         },
         [definition, router]
     );
