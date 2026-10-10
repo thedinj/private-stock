@@ -25,7 +25,7 @@ import {
 } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
-import { faceCrop } from "./faceService";
+import { reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 
 /**
@@ -39,6 +39,9 @@ import { lookupMedia } from "./mediaService";
  *
  * Administrators only, as every face decision is.
  */
+
+/** How many more of a person's faces a card offers for a closer look. */
+const OTHERS = 3;
 
 const requireAdmin = (auth: AuthContext): void => {
     if (!auth.scopes.includes("admin")) {
@@ -78,9 +81,26 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
             auth
         ).items.map((item) => [item.id, item])
     );
+    // Each card's face and a few more moments of the same person, for "Look".
+    const people = new Map(
+        page.flatMap((row) =>
+            row.faceId
+                ? [
+                      [
+                          row.faceId,
+                          appearanceRepo
+                              .personOf(row.faceId)
+                              .filter((id) => id !== row.faceId)
+                              .slice(0, OTHERS),
+                      ] as const,
+                  ]
+                : []
+        )
+    );
     const faces = new Map(
         faceRepo
-            .shownFaces(page.flatMap((row) => (row.faceId ? [row.faceId] : [])))
+            .shownFaces([...people].flatMap(([faceId, others]) => [faceId, ...others]))
+            .flatMap(reviewFace)
             .map((face) => [face.id, face])
     );
 
@@ -89,7 +109,6 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
             const item = tiles.get(row.mediaId);
             const tag = tagRepo.findById(row.tagId);
             const face = row.faceId ? faces.get(row.faceId) : undefined;
-            const crop = face ? faceCrop(face) : null;
 
             return item && tag
                 ? [
@@ -97,17 +116,10 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
                           item,
                           tagId: tag.id,
                           name: tag.name,
-                          face:
-                              face && crop
-                                  ? {
-                                        id: face.id,
-                                        crop,
-                                        mediaId: face.mediaId,
-                                        kind: face.kind,
-                                        atMs: face.atMs,
-                                        box: { x: face.x, y: face.y, w: face.w, h: face.h },
-                                    }
-                                  : null,
+                          face: face ?? null,
+                          others: face
+                              ? (people.get(face.id) ?? []).flatMap((id) => faces.get(id) ?? [])
+                              : [],
                           score: row.score,
                           strongFaces: row.strongFaces,
                           named: row.named === 1,

@@ -88,6 +88,8 @@ export const autoTagEntrySchema = z.object({
     name: z.string(),
     /** The face that matched them best, to check it by. */
     face: faceReviewFaceSchema.nullable(),
+    /** The same person's other moments in the item, for the closer look. */
+    others: z.array(faceReviewFaceSchema),
     score: z.number(),
     strongFaces: z.number(),
     named: z.boolean(),

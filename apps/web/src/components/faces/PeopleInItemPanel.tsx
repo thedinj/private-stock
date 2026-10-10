@@ -133,22 +133,25 @@ const PersonRow: React.FC<{
                             </Button>
                         )}
                     </Group>
-                    {naming && (
-                        <NameBox
-                            autoFocus
-                            busy={busy("name")}
-                            disabled={false}
-                            action={(name) => `That's ${name}`}
-                            onName={(name) =>
-                                decide.mutate(
-                                    { action: "name", name, person: facesOf },
-                                    { onSuccess: () => setNaming(false) }
-                                )
-                            }
-                        />
-                    )}
                 </Stack>
             </Group>
+            {/* The row's full width, not the column beside the face: a name needs the room. */}
+            {naming && (
+                <Box mt="xs">
+                    <NameBox
+                        autoFocus
+                        busy={busy("name")}
+                        disabled={false}
+                        action={(name) => `That's ${name}`}
+                        onName={(name) =>
+                            decide.mutate(
+                                { action: "name", name, person: facesOf },
+                                { onSuccess: () => setNaming(false) }
+                            )
+                        }
+                    />
+                </Box>
+            )}
         </Paper>
     );
 };

@@ -14,13 +14,15 @@ import {
     Text,
 } from "@mantine/core";
 
-import type { AutoTagEntry, AutoTagPage } from "@private-stock/core";
+import type { AutoTagEntry, AutoTagPage, FaceReviewFace } from "@private-stock/core";
 
 import { MediaTile } from "@/components/MediaTile";
 import { useAutoTags, useDecideAutoTag, useSwitchAutoTag } from "@/lib/api/faces";
 import { GRID_GAP, GRID_TRACKS } from "@/lib/gridGeometry";
 
 import { FaceCropView } from "./FaceCropView";
+import { FaceViewDrawer } from "./FaceViewDrawer";
+import { LookButton } from "./LookButton";
 
 const errorText = (error: unknown): string =>
     error instanceof Error ? error.message : "That change could not be saved.";
@@ -39,7 +41,8 @@ const why = (entry: AutoTagEntry): string =>
 const AutoTagCard: React.FC<{
     entry: AutoTagEntry;
     onFailed: (error: unknown) => void;
-}> = ({ entry, onFailed }) => {
+    onPlay: (face: FaceReviewFace) => void;
+}> = ({ entry, onFailed, onPlay }) => {
     const decide = useDecideAutoTag();
     const pending = (verdict: "right" | "wrong"): boolean =>
         decide.isPending && decide.variables?.verdict === verdict;
@@ -54,7 +57,7 @@ const AutoTagCard: React.FC<{
             <MediaTile item={entry.item} />
             <Group gap="xs" wrap="nowrap" align="center">
                 {entry.face && <FaceCropView crop={entry.face.crop} size={56} />}
-                <Stack gap={0} style={{ minWidth: 0 }}>
+                <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                     <Text size="sm" fw={600}>
                         {entry.name}?
                     </Text>
@@ -62,6 +65,9 @@ const AutoTagCard: React.FC<{
                         {why(entry)}
                     </Text>
                 </Stack>
+                {entry.face && (
+                    <LookButton face={entry.face} others={entry.others} onPlay={onPlay} />
+                )}
             </Group>
             <Group gap="xs" grow>
                 <Button
@@ -145,7 +151,8 @@ const INTRO =
  * "Would tag" (§5f "Tagging by itself"): what the rule would tag, in a random order the visit
  * keeps, so whatever is checked from the top is a fair sample; "Right" tags the item and confirms
  * the person, "Wrong" refuses the person for good; and the switch that lets faces tag by
- * themselves, with the trial that must be passed first. What the app tagged is in History, where
+ * themselves, with the trial that must be passed first. "Look" on a card is the frame and the
+ * person's other moments, and "Play it here", for a closer look than the tile gives. What the app tagged is in History, where
  * "Wrong" takes it back.
  */
 export const AutoTagSheet: React.FC = () => {
@@ -153,6 +160,7 @@ export const AutoTagSheet: React.FC = () => {
     const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
     const list = useAutoTags("proposed", seed);
     const [outcome, setOutcome] = useState<string | null>(null);
+    const [viewing, setViewing] = useState<FaceReviewFace | null>(null);
     const entries = list.data?.pages.flatMap((page) => page.rows) ?? [];
     const first = list.data?.pages[0];
 
@@ -204,6 +212,7 @@ export const AutoTagSheet: React.FC = () => {
                                 key={`${entry.item.id}:${entry.tagId}`}
                                 entry={entry}
                                 onFailed={(error) => setOutcome(errorText(error))}
+                                onPlay={setViewing}
                             />
                         ))}
                     </Box>
@@ -221,6 +230,8 @@ export const AutoTagSheet: React.FC = () => {
                     )}
                 </>
             )}
+
+            <FaceViewDrawer face={viewing} onClose={() => setViewing(null)} />
         </Stack>
     );
 };

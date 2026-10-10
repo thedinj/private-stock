@@ -72,7 +72,7 @@ vi.mock("./mediaService", () => ({
     lookupMedia: (ids: string[]) => ({ items: ids.map((id) => ({ id, title: id })) }),
 }));
 
-vi.mock("./faceService", () => ({ faceCrop: () => null }));
+vi.mock("./faceService", () => ({ reviewFace: () => [] }));
 
 const { autoTagList, decideAutoTag, switchAutoTag } = await import("./autoTagService");
 

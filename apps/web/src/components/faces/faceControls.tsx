@@ -28,6 +28,13 @@ export const nextTick = (state: TickState, threeWay: boolean): TickState =>
 const NEAR_NAMES = 4;
 
 /**
+ * The suggestions are as wide as the box by default, and a performer's has a portrait and a count
+ * beside the name: in a narrow box that left the name a few letters. Never narrower than this,
+ * nor wider than the screen.
+ */
+const SUGGESTIONS = { styles: { dropdown: { minWidth: "min(320px, calc(100vw - 32px))" } } };
+
+/**
  * A performer's name, typed or picked, and the button that tags with it.
  *
  * A typed name nobody has used coins a performer, which is cheap here and dear later — two
@@ -71,6 +78,7 @@ export const NameBox: React.FC<{
                     placeholder="Who is this?"
                     aria-label="Performer name"
                     autoFocus={autoFocus}
+                    comboboxProps={SUGGESTIONS}
                     style={{ flex: "1 1 220px", minWidth: 0 }}
                 />
                 <Button

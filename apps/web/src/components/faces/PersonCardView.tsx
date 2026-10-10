@@ -1,15 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Anchor, Box, Group, Paper, Popover, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Box, Group, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
 
 import type { FaceReviewFace } from "@private-stock/core";
 
-import { useCloseOnBack } from "@/lib/useCloseOnBack";
-
 import { FaceCropView } from "./FaceCropView";
-import { FacePeek } from "./FacePeek";
 import type { TickState } from "./faceControls";
+import { LookButton } from "./LookButton";
 
 /**
  * One person in one item, as every face surface shows them (§5f "A person in a video"): their
@@ -54,10 +51,6 @@ export const PersonCardView: React.FC<{
     peekState?: { state: TickState; threeWay: boolean; onSet: (state: TickState) => void };
     onPlay: (face: FaceReviewFace) => void;
 }> = ({ face, others, size, mark, look, caption, label, onPress, peekState, onPlay }) => {
-    const [peeking, setPeeking] = useState(false);
-
-    useCloseOnBack(peeking, () => setPeeking(false));
-
     return (
         <Paper withBorder radius="md" p={4} style={{ opacity: onPress ? 1 : 0.5 }}>
             <Stack gap={0} align="center">
@@ -112,51 +105,7 @@ export const PersonCardView: React.FC<{
                     <Text size="xs" c="dimmed" truncate>
                         {caption}
                     </Text>
-                    <Popover
-                        opened={peeking}
-                        onChange={setPeeking}
-                        position="bottom"
-                        withArrow
-                        shadow="md"
-                        withinPortal
-                    >
-                        <Popover.Target>
-                            <Anchor
-                                component="button"
-                                type="button"
-                                size="xs"
-                                c="dimmed"
-                                onClick={() => setPeeking((open) => !open)}
-                                style={{ minHeight: 44, minWidth: 44 }}
-                            >
-                                Look
-                            </Anchor>
-                        </Popover.Target>
-                        <Popover.Dropdown
-                            onClick={(event) => {
-                                // A tap on the picture, or anywhere but a control, closes it.
-                                if (
-                                    !(event.target as Element).closest(
-                                        "button, a, input, label, [role='radiogroup']"
-                                    )
-                                ) {
-                                    setPeeking(false);
-                                }
-                            }}
-                        >
-                            <FacePeek
-                                others={others}
-                                face={face}
-                                state={peekState?.state}
-                                threeWay={peekState?.threeWay ?? false}
-                                onSet={peekState?.onSet}
-                                onPlay={() => {
-                                    setPeeking(false);
-                                    onPlay(face);
-                                }}
-                            />
-                        </Popover.Dropdown>
-                    </Popover>
+                    <LookButton face={face} others={others} peekState={peekState} onPlay={onPlay} />
                 </Group>
             </Stack>
         </Paper>
