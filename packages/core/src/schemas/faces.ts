@@ -58,38 +58,6 @@ export const confirmedFacesPageSchema = z.object({
 export type ConfirmedFacesPage = z.infer<typeof confirmedFacesPageSchema>;
 
 /**
- * "Pick their face" (§5f "Picking their face"): a performer's own items, a page at a time, each
- * with its faces — one a person — for saying which is them where nothing else could tell.
- */
-export const ownFacesQuerySchema = z.object({
-    page: z.coerce.number().int().min(0).default(0),
-    limit: z.coerce.number().int().min(1).max(24).default(8),
-});
-export type OwnFacesQuery = z.infer<typeof ownFacesQuerySchema>;
-
-export const ownFacesItemSchema = z.object({
-    mediaId: z.string(),
-    faces: z.array(faceReviewFaceSchema),
-    /** The face on it confirmed as them, if one is. */
-    theirs: z.string().nullable(),
-});
-export type OwnFacesItem = z.infer<typeof ownFacesItemSchema>;
-
-export const ownFacesPageSchema = z.object({
-    items: z.array(ownFacesItemSchema),
-    hasMore: z.boolean(),
-    total: z.number(),
-});
-export type OwnFacesPage = z.infer<typeof ownFacesPageSchema>;
-
-/** "That's them" of one face on one of their items, or taken back. */
-export const ownFacePickSchema = z.object({
-    faceId: z.string().min(1).max(64),
-    theirs: z.boolean(),
-});
-export type OwnFacePick = z.infer<typeof ownFacePickSchema>;
-
-/**
  * Why a group is on a performer's page: somebody said these faces are them (`confirmed`), or
  * the items they are on are tagged with them (`proposed`).
  */
@@ -104,56 +72,9 @@ export type FaceGroupState = z.infer<typeof faceGroupStateSchema>;
 export const faceMatchStateSchema = z.enum(["confirmed", "proposed", "resembles"]);
 export type FaceMatchState = z.infer<typeof faceMatchStateSchema>;
 
-/** One face group on a performer's page, behind "Show face groups". */
-export const performerFaceGroupSchema = z.object({
-    groupId: z.string(),
-    state: faceGroupStateSchema,
-    /** The largest and surest of its faces: what "That's them" confirms, and nothing else. */
-    faces: z.array(faceReviewFaceSchema),
-    faceCount: z.number(),
-    itemCount: z.number(),
-    /** Items the group is on that do not carry the performer yet: what confirming leads to. */
-    untaggedCount: z.number(),
-});
-export type PerformerFaceGroup = z.infer<typeof performerFaceGroupSchema>;
-
-/**
- * "Their face" (§5f): the faces somebody has confirmed as them, as one strip whichever groups
- * they are in — a group is how the matcher saw them, not something to think in — and how many
- * groups are still to be checked, which Review › Faces asks about. The groups themselves, for
- * taking back a confirmation, are listed apart.
- */
-export const performerFacesResponseSchema = z.object({
-    /**
-     * Said to have no single face (§5f): face matching leaves them out, and the section says so
-     * in place of their faces. Null otherwise.
-     */
-    noSingleFace: z.object({ since: z.string() }).nullable(),
-    /** Their largest and surest confirmed faces, one an item. */
-    confirmed: z.array(faceReviewFaceSchema),
-    /** Items with a face confirmed as them. */
-    confirmedItems: z.number(),
-    /**
-     * Where nobody has confirmed a face: the face their tagged items share, as the references
-     * found it — the surest first, one an item. Empty once anything is confirmed.
-     */
-    fromTags: z.array(faceReviewFaceSchema),
-    groups: z.array(performerFaceGroupSchema),
-});
-export type PerformerFacesResponse = z.infer<typeof performerFacesResponseSchema>;
-
 /** "No single face", said of a performer, or taken back (§5f). */
 export const noSingleFaceSchema = z.object({ noSingleFace: z.boolean() });
 export type NoSingleFace = z.infer<typeof noSingleFaceSchema>;
-
-/** "That's them" or "Not them", said of a whole group. */
-export const faceGroupDecisionSchema = z.object({
-    groupId: z.string().min(1).max(64),
-    verdict: z.enum(["confirm", "refuse"]),
-    /** The faces shown with it: the ones a confirmation is about. */
-    faceIds: z.array(z.string().min(1).max(64)).max(24).default([]),
-});
-export type FaceGroupDecision = z.infer<typeof faceGroupDecisionSchema>;
 
 /**
  * One item on a performer's "Likely" list, with the evidence for it (§5f): a face in one of
@@ -586,3 +507,62 @@ export const suggestionDecisionSchema = z.object({
         .max(60),
 });
 export type SuggestionDecision = z.infer<typeof suggestionDecisionSchema>;
+
+/**
+ * A performer's Faces tab (§5f "Their faces"): their confirmed people, their own items with
+ * nobody confirmed to pick from, and the people ruled out — every one a card, each correctable.
+ */
+export const personCardSchema = z.object({
+    /** What the card is: an appearance, or an item's person as decided. */
+    id: z.string(),
+    mediaId: z.string(),
+    kind: mediaKindSchema,
+    title: z.string(),
+    moments: z.number(),
+    face: faceReviewFaceSchema,
+    others: z.array(faceReviewFaceSchema),
+    /** Every face of theirs on the item the card speaks for. */
+    faceIds: z.array(z.string()),
+});
+export type PersonCard = z.infer<typeof personCardSchema>;
+
+export const performerPeopleQuerySchema = z.object({
+    section: z.enum(["confirmed", "items", "ruledOut"]),
+    /** Ruled out: also the faces refused along with others, nobody saw. */
+    all: z.coerce.boolean().default(false),
+    page: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(60).default(24),
+});
+export type PerformerPeopleQuery = z.infer<typeof performerPeopleQuerySchema>;
+
+export const performerPeoplePageSchema = z.object({
+    /** Confirmed and ruled out: a card an item. Their items: an item's people, to pick one. */
+    groups: z.array(
+        z.object({ mediaId: z.string(), title: z.string(), people: z.array(personCardSchema) })
+    ),
+    hasMore: z.boolean(),
+    total: z.number(),
+    /** Said to have no single face (§5f): face matching leaves them out. */
+    noSingleFace: z.object({ since: z.string() }).nullable(),
+});
+export type PerformerPeoplePage = z.infer<typeof performerPeoplePageSchema>;
+
+/**
+ * What a performer's Faces tab says, a page of cards at once: one decision, except a restore.
+ * `takeBack` — confirmed but not them; `pick` — this person on their item is them; `restore` —
+ * ruled out by mistake, undecided again.
+ */
+export const performerPeopleDecisionSchema = z.object({
+    action: z.enum(["takeBack", "pick", "restore"]),
+    people: z
+        .array(
+            z.object({
+                mediaId: z.string().min(1).max(64),
+                faceIds: z.array(z.string().min(1).max(64)).min(1).max(24),
+                shownFaceId: z.string().min(1).max(64),
+            })
+        )
+        .min(1)
+        .max(60),
+});
+export type PerformerPeopleDecision = z.infer<typeof performerPeopleDecisionSchema>;

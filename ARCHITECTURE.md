@@ -2107,19 +2107,19 @@ Review › Faces and the grid's "Find untagged" — and nobody could tell which 
 kind of evidence has one way of being decided, and since 2026-10-09 the performer's Organise page
 holds all three, strongest first, under "To check":
 
-| evidence                 | how it is decided                                          |
-| ------------------------ | ---------------------------------------------------------- |
-| a face and the name both | "Likely", item by item                                     |
-| a face alone             | Review › Faces' Matches rows, beside the rest of its group |
-| the name alone           | "Find untagged", in the grid                               |
+| evidence                 | how it is decided                                |
+| ------------------------ | ------------------------------------------------ |
+| a face and the name both | "Likely", item by item                           |
+| a face alone             | Suggestions: a card for each person in each item |
+| the name alone           | "Find untagged", in the grid                     |
 
-The seam is what a decision is about rather than where it is made: a group (Matches, across every
-performer in Review, or narrowed to one on their Organise page), an item ("Maybe in this item", in
-the viewer), or a person (their Organise page: seeding a performer just added, taking back a wrong
-confirmation). The rows are the same component and the same reads wherever they appear.
+The seam is what a decision is about rather than where it is made: a person in an item
+(Suggestions, across every performer in Review, or narrowed to one on their Organise page), an
+item ("Maybe in this item", in the viewer), or what is already decided about a performer (their
+Faces tab, below). The cards are the same component and the same reads wherever they appear.
+(Until 2026-10-10 the unit was a face group, and the face tab was "Their face"; see "Their
+faces".)
 
-- **Their face.** The face groups the tagged items propose for this performer, as strips of crops,
-  each confirmable ("yes") or refusable ("not her"). The decision lands on the faces shown (above).
 - **Likely**, below the items already tagged: untagged items that are probably this performer,
   **gathering all the evidence** — a face matching a confirmed one, the name in a filename, title
   or the burned-in text (`MediaMention`, §5b) — each row saying which, best first, with the same
@@ -2402,23 +2402,28 @@ become their reference, and then a name the auto-tagger applies.
 
 No prompt asks about likely candidates: few performers need it, and the person who knows says so.
 
-### Picking their face
+### Their faces
 
-**Some performers' faces are never found for them** (2026-10-09): nothing is confirmed, no face
-recurs on `SHARED_MIN_SHARE` of their items, and no group is proposed — their items carry another
-performer too, or their best group is a loose grab bag with somebody else confirmed in it. A third
-of the performers with three or more items and nothing confirmed were in that state.
+**A performer's Faces tab** (2026-10-10) replaces "Their face", its face groups and "Pick their
+face". "Their face" let a person confirm faces sometimes and not others, refuse a group only whole
+when some of it was them and some not, and gave no way to see or undo what was refused. Now every
+person in every item is a card (`PersonCardView`), and each section says one thing of them:
 
-**"Pick their face"**, under "Their face" while fewer than `ANCHOR_MIN_ITEMS` items have a face
-confirmed as them, goes through their own items — tagged by hand or by name, never by a face, or a
-face would vouch for itself — newest tag first, a page at a time. Each item shows its faces one a
-person: the largest of each group on it, and each face no group holds; never a face confirmed as
-somebody else or refused for them. A press confirms one face as them (`shown`), a second takes it
-back, and picking another on the same item takes the first back: an item never says two people
-are them. Picked on `ANCHOR_MIN_ITEMS` items, their reference is built from those faces, and
-matching, "Maybe in this item" and the auto-tagger follow; it is queued at once.
+- **Confirmed**: one card an item, the faces confirmed as them, most recently decided first.
+  Pressed and saved, "take back": the confirmations go and the faces are refused for them, so they
+  are not suggested again. The item's tag stays — that is the undo list's.
+- **Their items**: their own items — tagged by hand or by name, never by a face — with nobody on
+  them confirmed, each with its people (appearances). Press the one who is them, one an item; saved,
+  all that person's faces there are confirmed. Always there, where "Pick their face" disappeared
+  once three items were confirmed.
+- **Ruled out**: one card an item, the faces refused for them — those somebody saw, or every one
+  with "Also faces nobody saw". Pressed and saved, "restore": undecided again, to be suggested
+  again. A restore is itself an undoing, and is not listed in History; the rest are one decision
+  a save.
+- **"No single face"** sits above, as before. Their Suggestions are on the "To check" tab, where
+  the face groups were.
 
-It opens by itself when "Their face" has nothing else to show, and is behind a button otherwise.
+Each section holds still while worked (`faceReview.performerPeople`), as Suggestions does.
 
 ### Grab bags
 

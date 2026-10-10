@@ -232,11 +232,6 @@ export const queryKeys = {
          * from (§6). Under `faces(tagId)`, so whatever moves their faces moves this.
          */
         confirmedFaces: (tagId: string) => ["tags", "faces", tagId, "confirmed"],
-        /**
-         * "Pick their face": their own items with their faces, every page loaded (§5f). Under
-         * `faces(tagId)`, so whatever moves their faces moves this.
-         */
-        ownFaces: (tagId: string) => ["tags", "faces", tagId, "own"],
         /** "Likely" on a performer's page, every page of it: items that are probably them (§5f). */
         likely: (tagId: string) => ["tags", "likely", tagId],
         /**
@@ -290,6 +285,16 @@ export const queryKeys = {
          * it is shown: a decision on a performer's page changes their count.
          */
         suggestionPeople: (media: ReviewMedia) => ["faceReview", "suggestionPeople", media],
+        /**
+         * One section of a performer's Faces tab (§5f "Their faces"), every page loaded; holds
+         * still like `list` until a new `visit`.
+         */
+        performerPeople: (
+            tagId: string,
+            section: "confirmed" | "items" | "ruledOut",
+            all: boolean,
+            visit: number
+        ) => ["faceReview", "performerPeople", tagId, section, all, visit],
         /** One performer's suggestions, every page loaded; `visit` as for `list`. */
         suggestions: (tagId: string, media: ReviewMedia, visit: number) => [
             "faceReview",

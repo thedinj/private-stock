@@ -309,7 +309,9 @@ describe("a performer's faces", () => {
     };
 
     const evidence = (groupId: string) =>
-        faceRepo.groupsForPerformer("jane", [ROOT]).find((row) => row.groupId === groupId);
+        faceRepo
+            .groupEvidence([ROOT], faceRepo.performerGroupIds("jane"))
+            .find((row) => row.tagId === "jane" && row.groupId === groupId);
 
     beforeEach(() => {
         for (const id of ["c", "d", "e"]) {
@@ -848,8 +850,6 @@ describe("a performer's faces", () => {
             "a",
             "b",
         ]);
-        expect(faceRepo.confirmedItemCount("jane", [ROOT])).toBe(2);
-        expect(faceRepo.confirmedItemCount("jane", [])).toBe(0);
     });
 
     it("samples one face an item, largest first, and only from items the viewer can see", () => {
@@ -1013,56 +1013,5 @@ describe("corrections stick", () => {
         expect(faceRepo.noSingleFace("kim")).toBeDefined();
         expect(faces("a").map((f) => f.tagId)).toEqual(["kim", null]);
         expect(refusals("a")).toEqual([{ vectorIndex: 1, tagId: "kim" }]);
-    });
-});
-
-describe("picking their face", () => {
-    const tag = (mediaId: string, tagId: string, source = "user"): void => {
-        db.prepare(
-            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "source")
-             VALUES (?, ?, ?, ?)`
-        ).run(`${mediaId}-${tagId}`, mediaId, tagId, source);
-    };
-    const group = (mediaId: string, vectorIndex: number, groupId: string): void => {
-        db.prepare(`UPDATE "Face" SET "groupId" = ? WHERE "mediaId" = ? AND "vectorIndex" = ?`).run(
-            groupId,
-            mediaId,
-            vectorIndex
-        );
-    };
-
-    it("offers one face a person an item: the largest, theirs first, not anybody else's", () => {
-        faceRepo.replaceForMedia("a", [
-            face(0, 1000, 0.1, { h: 0.3 }),
-            face(1, 2000, 0.1, { h: 0.5 }),
-            face(2, 3000, 0.5, { h: 0.2 }),
-            face(3, 4000, 0.7, { h: 0.4 }),
-            face(4, 5000, 0.9, { h: 0.4 }),
-        ]);
-        // 0 and 1 one person; 2 alone; 3 somebody else's; 4 refused for jane.
-        group("a", 0, "g1");
-        group("a", 1, "g1");
-        const [, , small, other, refused] = faces("a");
-        confirm(other.id, "kim");
-        refuse(refused.id, "jane");
-
-        expect(faceRepo.ownFaces("jane", ["a"], 6).map((row) => row.x)).toEqual([0.1, 0.5]);
-        expect(faceRepo.ownFaces("jane", ["a"], 6)[0].h).toBe(0.5);
-
-        confirm(small.id, "jane");
-
-        expect(faceRepo.ownFaces("jane", ["a"], 1)).toEqual([
-            expect.objectContaining({ id: small.id, theirs: 1 }),
-        ]);
-    });
-
-    it("goes through their items tagged by hand, not by a face, and only those", () => {
-        faceRepo.replaceForMedia("a", [face(0, 1000, 0.1)]);
-        faceRepo.replaceForMedia("b", [face(0, 1000, 0.1)]);
-        tag("a", "jane");
-        tag("b", "jane", "ai");
-
-        expect(faceRepo.ownFaceMedia(faces("a")[0].id, "jane")).toBe("a");
-        expect(faceRepo.ownFaceMedia(faces("b")[0].id, "jane")).toBeUndefined();
     });
 });

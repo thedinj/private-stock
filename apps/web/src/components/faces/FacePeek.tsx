@@ -23,10 +23,11 @@ export const FacePeek: React.FC<{
     /** Or the same person's other moments, already known — an appearance's (§5f). */
     others?: FaceReviewFace[];
     face: FaceReviewFace;
-    state: TickState;
+    /** What is being said of the face; without it the look only looks. */
+    state?: TickState;
     /** Whether "unsure" is offered: not while naming someone else. */
     threeWay: boolean;
-    onSet: (state: TickState) => void;
+    onSet?: (state: TickState) => void;
     onPlay: () => void;
 }> = ({ groupId, others, face, state, threeWay, onSet, onPlay }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
@@ -89,17 +90,19 @@ export const FacePeek: React.FC<{
             ) : null}
 
             <Group gap="xs">
-                <SegmentedControl
-                    size="xs"
-                    color="brass"
-                    value={state}
-                    onChange={(value) => onSet(value as TickState)}
-                    data={[
-                        { value: "in", label: "Them" },
-                        { value: "out", label: "Not them" },
-                        ...(threeWay ? [{ value: "unsure", label: "Unsure" }] : []),
-                    ]}
-                />
+                {state && onSet && (
+                    <SegmentedControl
+                        size="xs"
+                        color="brass"
+                        value={state}
+                        onChange={(value) => onSet(value as TickState)}
+                        data={[
+                            { value: "in", label: "Them" },
+                            { value: "out", label: "Not them" },
+                            ...(threeWay ? [{ value: "unsure", label: "Unsure" }] : []),
+                        ]}
+                    />
+                )}
                 <Button size="compact-sm" variant="default" onClick={onPlay}>
                     {face.kind === "video" ? "Play it here" : "See it here"}
                 </Button>

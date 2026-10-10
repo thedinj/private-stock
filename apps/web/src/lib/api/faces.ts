@@ -13,21 +13,19 @@ import type {
     FaceLikeness,
     FacePeek,
     ConfirmedFacesPage,
-    FaceGroupDecision,
     FaceReviewDecision,
     FaceReviewPage,
     FaceReviewResult,
     FaceReviewTab,
     FaceHistoryPage,
+    PerformerPeopleDecision,
+    PerformerPeoplePage,
     SuggestionDecision,
     SuggestionPerformers,
     SuggestionsPage,
     FaceUndo,
     LikelyDecision,
     LikelyPage,
-    OwnFacePick,
-    OwnFacesPage,
-    PerformerFacesResponse,
     ReviewMedia,
 } from "@private-stock/core";
 
@@ -41,14 +39,6 @@ import { invalidateVocabulary } from "@/lib/api/tags";
  */
 
 const base = (tagId: string): string => `/api/tags/${encodeURIComponent(tagId)}`;
-
-/** "Their face", asked for once the section nears the viewport. */
-export const usePerformerFaces = (tagId: string, enabled: boolean) =>
-    useQuery({
-        queryKey: queryKeys.tags.faces(tagId),
-        queryFn: () => api<PerformerFacesResponse>(`${base(tagId)}/faces`),
-        enabled,
-    });
 
 /**
  * Every face confirmed as them, a page at a time, for choosing their picture: asked for only
@@ -73,27 +63,6 @@ export const useLikely = (tagId: string, enabled: boolean) =>
         getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
         enabled,
     });
-
-/**
- * "That's them" or "Not them" of a group. Both sections move: a confirmed group's items join
- * "Likely", a refused one's leave it.
- */
-export const useDecideFaceGroup = (tagId: string) => {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (decision: FaceGroupDecision) =>
-            api<{ changed: number }>(`${base(tagId)}/faces`, {
-                method: "POST",
-                body: JSON.stringify(decision),
-            }),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
-        },
-    });
-};
 
 /**
  * Tag items from "Likely", or say one is not them. Tagging is a tag edit like any other — the
@@ -313,38 +282,6 @@ export const useDecideItemSuspect = (mediaId: string) => {
  * "No single face", or taken back: the performer's face section, their "Likely" and the review
  * all change; the references are rebuilt behind it.
  */
-/** "Pick their face": their own items a page at a time, asked for only while it is open. */
-export const useOwnFaces = (tagId: string, enabled: boolean) =>
-    useInfiniteQuery({
-        queryKey: queryKeys.tags.ownFaces(tagId),
-        queryFn: ({ pageParam }) => api<OwnFacesPage>(`${base(tagId)}/faces/own?page=${pageParam}`),
-        initialPageParam: 0,
-        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
-        enabled,
-    });
-
-/**
- * "That's them" of one face on one of their items, or taken back. Their faces move — the strip,
- * the picker under them, the picture's choices — and the review and "Likely" follow once the
- * reference is rebuilt.
- */
-export const usePickOwnFace = (tagId: string) => {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (pick: OwnFacePick) =>
-            api<{ changed: number }>(`${base(tagId)}/faces/own`, {
-                method: "POST",
-                body: JSON.stringify(pick),
-            }),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
-        },
-    });
-};
-
 export const useSetNoSingleFace = (tagId: string) => {
     const queryClient = useQueryClient();
 
@@ -446,6 +383,48 @@ export const useDecideSuggestions = () => {
             }),
         onSuccess: () => {
             invalidateVocabulary(queryClient);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
+        },
+    });
+};
+
+/** One section of a performer's Faces tab, a page at a time; holds still until a new `visit`. */
+export const usePerformerPeople = (
+    tagId: string,
+    section: "confirmed" | "items" | "ruledOut",
+    all: boolean,
+    visit: number
+) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.faceReview.performerPeople(tagId, section, all, visit),
+        queryFn: ({ pageParam }) =>
+            api<PerformerPeoplePage>(
+                `${base(tagId)}/faces/people?section=${section}&page=${pageParam}` +
+                    (all ? "&all=true" : "")
+            ),
+        initialPageParam: 0,
+        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    });
+
+/**
+ * Take back, pick or restore a page of a performer's cards. Their faces move — the picture's
+ * choices, "Likely" — and History; the cards are settled in place by the tab.
+ */
+export const useDecidePerformerPeople = (tagId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: PerformerPeopleDecision) =>
+            api<{ changed: number }>(`${base(tagId)}/faces/people`, {
+                method: "POST",
+                body: JSON.stringify(decision),
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
             void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
         },
     });

@@ -11,7 +11,6 @@ import {
     Group,
     Loader,
     Paper,
-    Popover,
     Stack,
     Text,
     UnstyledButton,
@@ -22,12 +21,10 @@ import type { FaceReviewFace, ReviewMedia, Suggestion } from "@private-stock/cor
 
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { useDecideSuggestions, useSuggestionPeople, useSuggestions } from "@/lib/api/faces";
-import { useCloseOnBack } from "@/lib/useCloseOnBack";
 
-import { FaceCropView } from "./FaceCropView";
-import { FacePeek } from "./FacePeek";
 import { nextTick, type TickState } from "./FaceReviewRow";
 import { FaceViewDrawer } from "./FaceViewDrawer";
+import { MARKS, PersonCardView } from "./PersonCardView";
 
 /**
  * Suggestions (§5f "Suggestions"): people in items whose faces together look clearly like a
@@ -38,16 +35,6 @@ import { FaceViewDrawer } from "./FaceViewDrawer";
 
 const items = (n: number): string => `${n.toLocaleString()} ${n === 1 ? "item" : "items"}`;
 
-const BADGE: Record<TickState, { mark: string; color: string; ink: string }> = {
-    in: { mark: "✓", color: "var(--mantine-color-brass-6)", ink: "var(--mantine-color-white)" },
-    out: { mark: "✕", color: "var(--mantine-color-dark-4)", ink: "var(--mantine-color-white)" },
-    unsure: {
-        mark: "?",
-        color: "var(--mantine-color-yellow-5)",
-        ink: "var(--mantine-color-black)",
-    },
-};
-
 const SuggestionCard: React.FC<{
     suggestion: Suggestion;
     size: number;
@@ -57,131 +44,50 @@ const SuggestionCard: React.FC<{
     onSet: (state: TickState) => void;
     onPlay: (face: FaceReviewFace) => void;
 }> = ({ suggestion, size, state, saved, onSet, onPlay }) => {
-    const [peeking, setPeeking] = useState(false);
-    const badge = BADGE[state];
-
-    useCloseOnBack(peeking, () => setPeeking(false));
+    const said = saved ? (saved === "is" ? "in" : "out") : state;
 
     return (
-        <Paper withBorder radius="md" p={4} style={{ opacity: saved ? 0.45 : 1 }}>
-            <Stack gap={0} align="center">
-                <UnstyledButton
-                    disabled={saved !== null}
-                    onClick={() => onSet(nextTick(state, true))}
-                    aria-label={`${suggestion.title}: ${state === "in" ? "them" : state === "out" ? "not them" : "unsure"}`}
-                    style={{
-                        position: "relative",
-                        borderRadius: 8,
-                        padding: 2,
-                        outline:
-                            saved === null && state === "in"
-                                ? "2px solid var(--mantine-color-brass-6)"
-                                : saved === null && state === "unsure"
-                                  ? "2px dashed var(--mantine-color-yellow-6)"
-                                  : "2px solid transparent",
-                        touchAction: "manipulation",
-                    }}
-                >
-                    <Box
-                        style={{
-                            opacity:
-                                saved !== null || state === "in"
-                                    ? 1
-                                    : state === "unsure"
-                                      ? 0.65
-                                      : 0.3,
-                            filter: state === "out" ? "grayscale(1)" : undefined,
-                        }}
-                    >
-                        <FaceCropView crop={suggestion.face.crop} size={size} />
-                    </Box>
-                    <Box
-                        aria-hidden
-                        style={{
-                            position: "absolute",
-                            right: 6,
-                            top: 6,
-                            width: 24,
-                            height: 24,
-                            borderRadius: 12,
-                            display: "grid",
-                            placeItems: "center",
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: badge.ink,
-                            background: badge.color,
-                        }}
-                    >
-                        {saved === "is" ? "✓" : saved === "isNot" ? "✕" : badge.mark}
-                    </Box>
-                </UnstyledButton>
-                <Group gap={4} justify="space-between" w="100%" px={4} h={44} wrap="nowrap">
-                    <Text size="xs" c="dimmed" truncate>
-                        {saved
-                            ? saved === "is"
-                                ? "Tagged"
-                                : "Not them"
-                            : suggestion.kind === "image"
-                              ? "Photo"
-                              : `${suggestion.moments} moments`}
-                        {suggestion.named && !saved ? " · name on file" : ""}
-                    </Text>
-                    <Popover
-                        opened={peeking}
-                        onChange={setPeeking}
-                        position="bottom"
-                        withArrow
-                        shadow="md"
-                        withinPortal
-                    >
-                        <Popover.Target>
-                            <Anchor
-                                component="button"
-                                type="button"
-                                size="xs"
-                                c="dimmed"
-                                onClick={() => setPeeking((open) => !open)}
-                                style={{ minHeight: 44, minWidth: 44 }}
-                            >
-                                Look
-                            </Anchor>
-                        </Popover.Target>
-                        <Popover.Dropdown
-                            onClick={(event) => {
-                                // A tap on the picture, or anywhere but a control, closes it.
-                                if (
-                                    !(event.target as Element).closest(
-                                        "button, a, input, label, [role='radiogroup']"
-                                    )
-                                ) {
-                                    setPeeking(false);
-                                }
-                            }}
-                        >
-                            <FacePeek
-                                others={suggestion.others}
-                                face={suggestion.face}
-                                state={state}
-                                threeWay
-                                onSet={onSet}
-                                onPlay={() => {
-                                    setPeeking(false);
-                                    onPlay(suggestion.face);
-                                }}
-                            />
-                        </Popover.Dropdown>
-                    </Popover>
-                </Group>
-            </Stack>
-        </Paper>
+        <PersonCardView
+            face={suggestion.face}
+            others={suggestion.others}
+            size={size}
+            mark={said === "in" ? MARKS.them : said === "out" ? MARKS.notThem : MARKS.unsure}
+            look={
+                saved
+                    ? "plain"
+                    : state === "in"
+                      ? "chosen"
+                      : state === "unsure"
+                        ? "unsure"
+                        : "faded"
+            }
+            caption={
+                (saved
+                    ? saved === "is"
+                        ? "Tagged"
+                        : "Not them"
+                    : suggestion.kind === "image"
+                      ? "Photo"
+                      : `${suggestion.moments} moments`) +
+                (suggestion.named && !saved ? " · name on file" : "")
+            }
+            label={`${suggestion.title}: ${state === "in" ? "them" : state === "out" ? "not them" : "unsure"}`}
+            onPress={saved ? undefined : () => onSet(nextTick(state, true))}
+            peekState={saved ? undefined : { state, threeWay: true, onSet }}
+            onPlay={onPlay}
+        />
     );
 };
 
-/** One performer's suggestions: the grid, and the bar that saves them. */
-const PerformerSuggestions: React.FC<{
+/**
+ * One performer's suggestions: the grid, and the bar that saves them. In Review › Faces, and on
+ * the performer's own Organise page.
+ */
+export const PerformerSuggestions: React.FC<{
     tagId: string;
     media: ReviewMedia;
-    onBack: () => void;
+    /** Back to everybody, where there is a list of everybody to go back to. */
+    onBack?: () => void;
 }> = ({ tagId, media, onBack }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
     const size = isPhone ? 140 : 156;
@@ -230,9 +136,11 @@ const PerformerSuggestions: React.FC<{
     return (
         <Stack gap="md" pb={96}>
             <Group gap="sm" justify="space-between" wrap="wrap">
-                <Button variant="subtle" color="gray" h={44} onClick={onBack}>
-                    ← Everyone
-                </Button>
+                {onBack && (
+                    <Button variant="subtle" color="gray" h={44} onClick={onBack}>
+                        ← Everyone
+                    </Button>
+                )}
                 {saved.size > 0 && (
                     <Button
                         variant="subtle"

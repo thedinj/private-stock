@@ -15,15 +15,11 @@ import {
     normalizeName,
     type ConfirmedFacesPage,
     type ConfirmedFacesQuery,
-    type OwnFacePick,
-    type OwnFacesPage,
-    type OwnFacesQuery,
     type FaceCrop,
     type FaceLikeness,
     type FaceLikenessQuery,
     type FacePeek,
     type FacePeekQuery,
-    type FaceGroupDecision,
     type FaceGroupState,
     type FaceMatchState,
     type FaceReviewDecision,
@@ -43,7 +39,6 @@ import {
     type MediaKind,
     type MediaKindCounts,
     type MentionField,
-    type PerformerFacesResponse,
 } from "@private-stock/core";
 import {
     artifactRepo,
@@ -76,12 +71,6 @@ import { picturesFor } from "./tagPictureService";
  */
 
 type ShownFace = FaceRepoTypes.ShownFace;
-
-/** How many of a group's faces "Their face" shows. */
-const SAMPLE = 6;
-
-/** How many groups "Their face" lists: past this, the ones with fewest items are not worth it. */
-const GROUPS = 12;
 
 const requireAdmin = (auth: AuthContext): void => {
     if (!auth.scopes.includes("admin")) {
@@ -178,13 +167,6 @@ export const faceCrop = (face: ShownFace): FaceCrop | null => {
         },
     };
 };
-
-/** The performer's groups worth showing, with why: confirmed, or proposed by their tags. */
-const performerGroups = (tagId: string, auth: AuthContext) =>
-    faceRepo
-        .groupsForPerformer(tagId, auth.accessibleRootIds)
-        .map((row) => ({ ...row, state: groupStateFor(row) }))
-        .filter((row): row is typeof row & { state: FaceGroupState } => row.state !== null);
 
 /** A face group that might be a performer, and why. */
 interface ReviewPair {
@@ -317,61 +299,6 @@ const performerPairs = (tagId: string, roots: readonly string[]): ReviewPair[] =
     return reviewPairs(roots, groupIds).pairs.filter((pair) => pair.tagId === tagId);
 };
 
-/** How many confirmed faces "Their face" shows. */
-const CONFIRMED = 12;
-
-/**
- * "Their face": the faces confirmed as this performer, as one strip; how many groups are still to
- * check in Review › Faces; and the groups themselves — confirmed first, then the ones that would
- * settle most items — for taking a confirmation back.
- */
-export const performerFaces = (tagId: string, auth: AuthContext): PerformerFacesResponse => {
-    requireAdmin(auth);
-    libraryPerformer(tagId);
-
-    // Left out of face matching: nothing to show but that.
-    const noFace = faceRepo.noSingleFace(tagId);
-
-    if (noFace) {
-        return {
-            noSingleFace: { since: noFace.decidedAt },
-            confirmed: [],
-            fromTags: [],
-            confirmedItems: 0,
-            groups: [],
-        };
-    }
-
-    const roots = auth.accessibleRootIds;
-    const confirmed = faceRepo.confirmedFaces(tagId, roots, CONFIRMED).flatMap(reviewFace);
-    const groups = performerGroups(tagId, auth)
-        .sort(
-            (a, b) =>
-                (a.state === "confirmed" ? 0 : 1) - (b.state === "confirmed" ? 0 : 1) ||
-                b.untaggedCount - a.untaggedCount ||
-                b.itemCount - a.itemCount
-        )
-        .slice(0, GROUPS);
-
-    return {
-        noSingleFace: null,
-        confirmed,
-        fromTags:
-            confirmed.length > 0
-                ? []
-                : faceRepo.faceFromTags(tagId, roots, CONFIRMED).flatMap(reviewFace),
-        confirmedItems: faceRepo.confirmedItemCount(tagId, roots),
-        groups: groups.map((group) => ({
-            groupId: group.groupId,
-            state: group.state,
-            faces: faceRepo.sampleFaces(group.groupId, roots, SAMPLE).flatMap(reviewFace),
-            faceCount: group.faceCount,
-            itemCount: group.itemCount,
-            untaggedCount: group.untaggedCount,
-        })),
-    };
-};
-
 /**
  * Confirmations changed, so a performer's best face, and with it their picture, may have (§6 "A
  * tag's picture"). The job waits two minutes, so a review session's decisions are one pass.
@@ -424,117 +351,6 @@ export const confirmedFacesPage = (
         hasMore: start + query.limit < total,
         total,
     };
-};
-
-/** How many faces "Pick their face" shows an item: one a person, the people most on screen. */
-const OWN_FACES_PER_ITEM = 6;
-
-/**
- * "Pick their face" (§5f "Picking their face"): their own items, each with its faces, one a
- * person, for the performer neither their tags nor the groups could find a face for.
- */
-export const ownFacesPage = (
-    tagId: string,
-    query: OwnFacesQuery,
-    auth: AuthContext
-): OwnFacesPage => {
-    requireAdmin(auth);
-    libraryPerformer(tagId);
-
-    const start = query.page * query.limit;
-    const { mediaIds, total } = faceRepo.ownFaceItems(
-        tagId,
-        auth.accessibleRootIds,
-        query.limit,
-        start
-    );
-    const byItem = new Map<string, OwnFacesPage["items"][number]>(
-        mediaIds.map((mediaId) => [mediaId, { mediaId, faces: [], theirs: null }])
-    );
-
-    for (const face of faceRepo.ownFaces(tagId, mediaIds, OWN_FACES_PER_ITEM)) {
-        const item = byItem.get(face.mediaId);
-
-        if (!item) continue;
-        item.faces.push(...reviewFace(face));
-        if (face.theirs) item.theirs = face.id;
-    }
-
-    return {
-        items: [...byItem.values()].filter((item) => item.faces.length > 0),
-        hasMore: start + query.limit < total,
-        total,
-    };
-};
-
-/**
- * "That's them" of one face on one of their own items, or taken back. One face an item: picking
- * another there takes the first back, so an item never says two people are them.
- */
-export const pickOwnFace = (
-    tagId: string,
-    pick: OwnFacePick,
-    auth: AuthContext
-): { changed: number } => {
-    requireAdmin(auth);
-    libraryPerformer(tagId);
-
-    const mediaId = faceRepo.ownFaceMedia(pick.faceId, tagId);
-
-    if (!mediaId || lookupMedia([mediaId], auth).items.length === 0) {
-        throw new NotFoundError("Face not found");
-    }
-
-    // Taking a pick back undoes it; picking is a decision of its own.
-    const changed = pick.theirs
-        ? faceDecisionRepo.record(pressBy(auth, "is", tagId, "performer"), () =>
-              pickTheirs(tagId, mediaId, pick.faceId, auth.userId)
-          ).result
-        : faceRepo.unconfirmFace(pick.faceId, tagId);
-
-    if (changed > 0) confirmationsChanged();
-
-    return { changed };
-};
-
-/** One face on an item theirs, and no other there. Returns the faces changed. */
-const pickTheirs = (tagId: string, mediaId: string, faceId: string, userId: string): number =>
-    db.transaction(() => {
-        let taken = 0;
-
-        for (const face of faceRepo.ownFaces(tagId, [mediaId], Number.MAX_SAFE_INTEGER)) {
-            if (face.theirs && face.id !== faceId) {
-                taken += faceRepo.unconfirmFace(face.id, tagId);
-            }
-        }
-
-        return taken + faceRepo.confirmFace(faceId, tagId, userId);
-    })();
-
-/** "That's them" or "Not them", of a whole group. */
-export const decideFaceGroup = (
-    tagId: string,
-    decision: FaceGroupDecision,
-    auth: AuthContext
-): { changed: number } => {
-    requireAdmin(auth);
-    libraryPerformer(tagId);
-
-    const { result: changed } = faceDecisionRepo.record(
-        pressBy(auth, decision.verdict === "confirm" ? "is" : "isNot", tagId, "performer"),
-        () =>
-            faceRepo.decideGroup(
-                decision.groupId,
-                tagId,
-                decision.verdict,
-                auth.userId,
-                decision.faceIds
-            )
-    );
-
-    confirmationsChanged();
-
-    return { changed };
 };
 
 interface Candidate {

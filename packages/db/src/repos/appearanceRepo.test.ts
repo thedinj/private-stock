@@ -247,3 +247,63 @@ describe("deciding about a person", () => {
         expect(suggested()).toEqual([]);
     });
 });
+
+describe("a performer's Faces tab", () => {
+    it("lists the people confirmed as them, and takes one back as not them", () => {
+        const faces = person("a", "jane", 0.8);
+
+        appearanceRepo.confirmPerson(faces, faces[0], "jane", "someone");
+
+        const { rows, total } = appearanceRepo.confirmedPeople("jane", ["root"], 0, 10);
+
+        expect(total).toBe(1);
+        expect(rows[0]).toMatchObject({ mediaId: "a", moments: 2 });
+
+        appearanceRepo.takeBackPerson(faces, faces[0], "jane", "someone");
+
+        expect(appearanceRepo.confirmedPeople("jane", ["root"], 0, 10).total).toBe(0);
+        expect(appearanceRepo.refusedPeople("jane", ["root"], false, 0, 10).total).toBe(1);
+    });
+
+    it("lists the people ruled out — those seen, or every one — and restores them", () => {
+        const seen = person("a", "jane", 0.8);
+        const unseen = person("b", "jane", 0.8);
+
+        appearanceRepo.refusePerson(seen, seen[0], "jane", "someone");
+        db.prepare(
+            `INSERT INTO "FaceRefusal" ("faceId", "tagId", "how") VALUES (?, 'jane', 'inferred')`
+        ).run(unseen[0]);
+
+        expect(appearanceRepo.refusedPeople("jane", ["root"], false, 0, 10).total).toBe(1);
+        expect(appearanceRepo.refusedPeople("jane", ["root"], true, 0, 10).total).toBe(2);
+
+        appearanceRepo.restorePerson(seen, "jane");
+
+        expect(appearanceRepo.refusedPeople("jane", ["root"], false, 0, 10).total).toBe(0);
+    });
+
+    it("lists their own items with nobody confirmed, tagged by hand and not by a face", () => {
+        person("mine", "jane", 0.8);
+        person("auto", "jane", 0.8);
+        const done = person("done", "jane", 0.8);
+
+        for (const [mediaId, source] of [
+            ["mine", "user"],
+            ["auto", "ai"],
+            ["done", "user"],
+        ]) {
+            db.prepare(
+                `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "source") VALUES (?, ?, 'jane', ?)`
+            ).run(`t-${mediaId}`, mediaId, source);
+        }
+        appearanceRepo.confirmPerson(done, done[0], "jane", "someone");
+
+        const { mediaIds, total } = appearanceRepo.unconfirmedItems("jane", ["root"], 0, 10);
+
+        expect(mediaIds).toEqual(["mine"]);
+        expect(total).toBe(1);
+        expect(appearanceRepo.peopleOn(mediaIds)).toEqual([
+            expect.objectContaining({ mediaId: "mine", moments: 2 }),
+        ]);
+    });
+});

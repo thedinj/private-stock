@@ -279,3 +279,198 @@ export const refusePerson = (
             userId,
             decision: activeDecision(),
         }).changes;
+
+/** A person in an item as a performer's page lists them: their clearest face and how many. */
+export interface PersonRow {
+    mediaId: string;
+    kind: MediaKind;
+    title: string;
+    bestFaceId: string;
+    moments: number;
+}
+
+const pageOf = (rows: PersonRow[], total: number): { rows: PersonRow[]; total: number } => ({
+    rows,
+    total,
+});
+
+/**
+ * A performer's confirmed people (§5f "Their faces"): one an item, the item's faces confirmed as
+ * them, their clearest first, the most recently decided items first.
+ */
+export const confirmedPeople = (
+    tagId: string,
+    rootIds: readonly string[],
+    offset: number,
+    limit: number
+): { rows: PersonRow[]; total: number } => {
+    const params: Record<string, unknown> = { tagId, offset, limit };
+    const where = visible(rootIds, params);
+    const ranked = `
+        SELECT f."mediaId", m."kind", m."title", f."id",
+               row_number() OVER (PARTITION BY f."mediaId" ORDER BY f."eyes" * f."score" DESC) AS "n",
+               count(*) OVER (PARTITION BY f."mediaId") AS "moments",
+               max(f."decidedAt") OVER (PARTITION BY f."mediaId") AS "at"
+          FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
+         WHERE f."tagId" = :tagId AND ${where}`;
+
+    return pageOf(
+        db
+            .prepare(
+                `SELECT "mediaId", "kind", "title", "id" AS "bestFaceId", "moments"
+                   FROM (${ranked}) WHERE "n" = 1
+                  ORDER BY "at" DESC, "mediaId" LIMIT :limit OFFSET :offset`
+            )
+            .all(params) as PersonRow[],
+        db.prepare(`SELECT count(*) FROM (${ranked}) WHERE "n" = 1`).pluck().get(params) as number
+    );
+};
+
+/**
+ * A performer's ruled-out people (§5f "Their faces"): one an item, the item's faces refused for
+ * them — those somebody saw, or every one with `all` — the most recently refused first.
+ */
+export const refusedPeople = (
+    tagId: string,
+    rootIds: readonly string[],
+    all: boolean,
+    offset: number,
+    limit: number
+): { rows: PersonRow[]; total: number } => {
+    const params: Record<string, unknown> = { tagId, offset, limit, all: all ? 1 : 0 };
+    const where = visible(rootIds, params);
+    const ranked = `
+        SELECT f."mediaId", m."kind", m."title", f."id",
+               row_number() OVER (PARTITION BY f."mediaId" ORDER BY f."eyes" * f."score" DESC) AS "n",
+               count(*) OVER (PARTITION BY f."mediaId") AS "moments",
+               max(r."decidedAt") OVER (PARTITION BY f."mediaId") AS "at"
+          FROM "FaceRefusal" r JOIN "Face" f ON f."id" = r."faceId"
+          JOIN "Media" m ON m."id" = f."mediaId"
+         WHERE r."tagId" = :tagId AND (:all = 1 OR r."how" IS NOT 'inferred') AND ${where}`;
+
+    return pageOf(
+        db
+            .prepare(
+                `SELECT "mediaId", "kind", "title", "id" AS "bestFaceId", "moments"
+                   FROM (${ranked}) WHERE "n" = 1
+                  ORDER BY "at" DESC, "mediaId" LIMIT :limit OFFSET :offset`
+            )
+            .all(params) as PersonRow[],
+        db.prepare(`SELECT count(*) FROM (${ranked}) WHERE "n" = 1`).pluck().get(params) as number
+    );
+};
+
+/** The faces of a performer's people on these items: confirmed as them, or refused for them. */
+export const performerFacesOn = (
+    tagId: string,
+    mediaIds: readonly string[],
+    which: "confirmed" | "refused",
+    all = true
+): {
+    id: string;
+    mediaId: string;
+    kind: MediaKind;
+    atMs: number | null;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}[] =>
+    db
+        .prepare(
+            `SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h"
+               FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
+              WHERE f."mediaId" IN (SELECT value FROM json_each(:ids))
+                AND ${
+                    which === "confirmed"
+                        ? `f."tagId" = :tagId`
+                        : `EXISTS (SELECT 1 FROM "FaceRefusal" r
+                                    WHERE r."faceId" = f."id" AND r."tagId" = :tagId
+                                      AND (:all = 1 OR r."how" IS NOT 'inferred'))`
+                }
+              ORDER BY f."mediaId", f."eyes" * f."score" DESC`
+        )
+        .all({ ids: JSON.stringify(mediaIds), tagId, all: all ? 1 : 0 }) as ReturnType<
+        typeof performerFacesOn
+    >;
+
+/**
+ * A performer's own items with nobody on them confirmed as them, and people to pick from (§5f
+ * "Their faces"): tagged by hand or by name — never by a face, or a face would vouch for itself —
+ * newest tag first.
+ */
+export const unconfirmedItems = (
+    tagId: string,
+    rootIds: readonly string[],
+    offset: number,
+    limit: number
+): { mediaIds: string[]; total: number } => {
+    const params: Record<string, unknown> = { tagId, offset, limit };
+    const where = visible(rootIds, params);
+    const from = `FROM "MediaTag" mt JOIN "Media" m ON m."id" = mt."mediaId"
+                  WHERE mt."tagId" = :tagId AND mt."userId" IS NULL AND mt."source" <> 'ai' AND ${where}
+                    AND NOT EXISTS (SELECT 1 FROM "Face" f
+                                     WHERE f."mediaId" = mt."mediaId" AND f."tagId" = :tagId)
+                    AND EXISTS (SELECT 1 FROM "FaceAppearance" a WHERE a."mediaId" = mt."mediaId")`;
+
+    return {
+        mediaIds: db
+            .prepare(
+                `SELECT mt."mediaId" ${from}
+                  ORDER BY mt."createdAt" DESC, mt."mediaId" LIMIT :limit OFFSET :offset`
+            )
+            .pluck()
+            .all(params) as string[],
+        total: db.prepare(`SELECT count(*) ${from}`).pluck().get(params) as number,
+    };
+};
+
+/** The people on these items — legible first, then the most seen — with their item's title. */
+export const peopleOn = (
+    mediaIds: readonly string[]
+): {
+    id: string;
+    mediaId: string;
+    kind: MediaKind;
+    title: string;
+    bestFaceId: string;
+    moments: number;
+}[] =>
+    db
+        .prepare(
+            `SELECT a."id", a."mediaId", m."kind", m."title", a."bestFaceId", a."faceCount" AS "moments"
+               FROM "FaceAppearance" a JOIN "Media" m ON m."id" = a."mediaId"
+              WHERE a."mediaId" IN (SELECT value FROM json_each(?))
+              ORDER BY a."mediaId", a."legible" IS NULL, a."faceCount" DESC`
+        )
+        .all(JSON.stringify(mediaIds)) as ReturnType<typeof peopleOn>;
+
+/**
+ * "Not them after all", of a performer's confirmed person: the confirmations taken back and the
+ * faces refused for them, so they are not suggested again. The item's tag is the undo list's.
+ * Returns the faces changed.
+ */
+export const takeBackPerson = (
+    faceIds: readonly string[],
+    shownFaceId: string,
+    tagId: string,
+    userId: string
+): number => {
+    db.prepare(
+        `UPDATE "Face"
+            SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL, "decidedHow" = NULL,
+                "decisionId" = NULL
+          WHERE "tagId" = ? AND "id" IN (SELECT value FROM json_each(?))`
+    ).run(tagId, JSON.stringify(faceIds));
+
+    return refusePerson(faceIds, shownFaceId, tagId, userId);
+};
+
+/** Ruled out by mistake: these faces' refusals for the performer withdrawn, undecided again. */
+export const restorePerson = (faceIds: readonly string[], tagId: string): number =>
+    db
+        .prepare(
+            `DELETE FROM "FaceRefusal"
+              WHERE "tagId" = ? AND "faceId" IN (SELECT value FROM json_each(?))`
+        )
+        .run(tagId, JSON.stringify(faceIds)).changes;

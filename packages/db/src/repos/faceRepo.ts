@@ -526,13 +526,6 @@ export interface GroupEvidenceRow {
 }
 
 /**
- * Every face group that might be this performer's, with the counts that decide it: the groups on
- * their single-performer items, and the groups holding faces somebody confirmed as them.
- */
-export const groupsForPerformer = (tagId: string, rootIds: readonly string[]): GroupEvidenceRow[] =>
-    groupEvidence(rootIds, performerGroupIds(tagId)).filter((row) => row.tagId === tagId);
-
-/**
  * A performer and a face group, with the counts that decide it, and its untagged items split by
  * kind: Review › Faces opens on videos, and photos wait behind its kind control (§5f).
  */
@@ -1031,100 +1024,6 @@ export const everyConfirmedFace = (
     };
 };
 
-/**
- * A performer's own items with a face on them — tagged by hand or by name, not by a face, or a
- * face would vouch for itself — newest tag first, a page at a time, with how many there are:
- * what "Pick their face" goes through (§5f "Picking their face").
- */
-export const ownFaceItems = (
-    tagId: string,
-    rootIds: readonly string[],
-    limit: number,
-    offset: number
-): { mediaIds: string[]; total: number } => {
-    const params: Record<string, unknown> = { tagId };
-    const where = visible(rootIds, params);
-    const from = `FROM "MediaTag" mt JOIN "Media" m ON m."id" = mt."mediaId"
-                  WHERE mt."tagId" = :tagId AND mt."userId" IS NULL AND mt."source" <> 'ai'
-                    AND ${where}
-                    AND EXISTS (SELECT 1 FROM "Face" f WHERE f."mediaId" = mt."mediaId")`;
-
-    return {
-        mediaIds: (
-            db
-                .prepare(
-                    `SELECT mt."mediaId" ${from}
-                      ORDER BY mt."createdAt" DESC, mt."mediaId" LIMIT :limit OFFSET :offset`
-                )
-                .all({ ...params, limit, offset }) as { mediaId: string }[]
-        ).map((row) => row.mediaId),
-        total: (db.prepare(`SELECT count(*) AS "n" ${from}`).get(params) as { n: number }).n,
-    };
-};
-
-/**
- * The faces on these items that might be the performer, one a person: the largest and surest of
- * each group on the item, and each face no group holds; the one confirmed as them first, then by
- * size. Not faces confirmed as somebody else, nor refused for them. At most `perItem` an item.
- */
-export const ownFaces = (
-    tagId: string,
-    mediaIds: readonly string[],
-    perItem: number
-): (ShownFace & { theirs: number })[] =>
-    db
-        .prepare(
-            `WITH "candidate" AS (
-                 SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h",
-                        coalesce(f."tagId" = :tagId, 0) AS "theirs",
-                        row_number() OVER (
-                            PARTITION BY f."mediaId", coalesce(f."groupId", f."id")
-                            ORDER BY coalesce(f."tagId" = :tagId, 0) DESC, f."h" * f."score" DESC
-                        ) AS "n"
-                   FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
-                  WHERE f."mediaId" IN (SELECT value FROM json_each(:mediaIds))
-                    AND (f."tagId" IS NULL OR f."tagId" = :tagId)
-                    AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
-                                     WHERE r."faceId" = f."id" AND r."tagId" = :tagId)
-             ), "person" AS (
-                 SELECT *, row_number() OVER (
-                            PARTITION BY "mediaId" ORDER BY "theirs" DESC, "h" DESC
-                        ) AS "k"
-                   FROM "candidate" WHERE "n" = 1
-             )
-             SELECT "id", "mediaId", "kind", "atMs", "x", "y", "w", "h", "theirs"
-               FROM "person" WHERE "k" <= :perItem
-              ORDER BY "mediaId", "k"`
-        )
-        .all({ tagId, mediaIds: JSON.stringify(mediaIds), perItem }) as (ShownFace & {
-        theirs: number;
-    })[];
-
-/** The item a face is on, if it is one of this performer's own (`ownFaceItems`). */
-export const ownFaceMedia = (faceId: string, tagId: string): string | undefined =>
-    (
-        db
-            .prepare(
-                `SELECT f."mediaId" FROM "Face" f
-                  WHERE f."id" = ?
-                    AND EXISTS (SELECT 1 FROM "MediaTag" mt
-                                 WHERE mt."mediaId" = f."mediaId" AND mt."tagId" = ?
-                                   AND mt."userId" IS NULL AND mt."source" <> 'ai')`
-            )
-            .get(faceId, tagId) as { mediaId: string } | undefined
-    )?.mediaId;
-
-/** Take back one face confirmed as this performer: undecided again. */
-export const unconfirmFace = (faceId: string, tagId: string): number =>
-    db
-        .prepare(
-            `UPDATE "Face"
-                SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL, "decidedHow" = NULL,
-                    "decisionId" = NULL
-              WHERE "id" = ? AND "tagId" = ?`
-        )
-        .run(faceId, tagId).changes;
-
 /** Where each face's vector is: its item's faces file, at its index. */
 export const vectorRefs = (
     faceIds: readonly string[]
@@ -1241,22 +1140,6 @@ export const pictureCandidates = (
               ORDER BY "tagId", "tier", "n"`
         )
         .all({ minScore, minShare, perTier }) as PictureCandidate[];
-
-/** How many items this viewer can see have a face confirmed as the performer. */
-export const confirmedItemCount = (tagId: string, rootIds: readonly string[]): number => {
-    const params: Record<string, unknown> = { tagId };
-    const where = visible(rootIds, params);
-
-    return (
-        db
-            .prepare(
-                `SELECT count(DISTINCT f."mediaId") AS "n"
-                   FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
-                  WHERE f."tagId" = :tagId AND ${where}`
-            )
-            .get(params) as { n: number }
-    ).n;
-};
 
 /** A group's largest and surest faces, on items this viewer can see, one an item. */
 export const sampleFaces = (

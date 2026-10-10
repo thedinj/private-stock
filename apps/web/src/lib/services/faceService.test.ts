@@ -230,8 +230,6 @@ vi.mock("./spriteThumb", () => ({
 }));
 
 const {
-    ownFacesPage,
-    pickOwnFace,
     setNoSingleFace,
     decideItemSuspect,
     itemSuspects,
@@ -242,7 +240,6 @@ const {
     decideLikely,
     faceCrop,
     likely,
-    performerFaces,
     reviewFaces,
 } = await import("./faceService");
 
@@ -348,33 +345,8 @@ beforeEach(() => {
 
 describe("who may ask", () => {
     it("refuses anybody but an administrator, and anything but a library performer", () => {
-        expect(() => performerFaces("jane", { ...admin, scopes: [] })).toThrow(/administrator/);
-        expect(() => performerFaces("someone-else", admin)).toThrow(/not found/i);
-    });
-});
-
-describe("their face", () => {
-    it("shows the confirmed faces as one strip, and counts the groups still to check", () => {
-        state.tagged = [shown("t1", "g1"), shown("t2", "g2")];
-        state.groups = [
-            evidence("g1", { confirmed: 2, untaggedCount: 0 }),
-            evidence("g2", { confirmed: 1, untaggedCount: 3 }),
-            evidence("g3", { taggedAsThem: 2, untaggedCount: 1 }),
-        ];
-        state.pairs = [
-            pair("jane", "g1", { confirmed: 2, untaggedCount: 0 }),
-            pair("jane", "g2", { confirmed: 1, untaggedCount: 3 }),
-            pair("jane", "g3", { taggedAsThem: 2, untaggedCount: 1 }),
-            pair("kim", "g4", { taggedAsThem: 2 }),
-        ];
-
-        state.inGroups = [shown("u1", "g2"), shown("u2", "g2"), shown("u1", "g3")];
-
-        const faces = performerFaces("jane", admin);
-
-        expect(faces.confirmed.map((face) => face.mediaId)).toEqual(["t1", "t2"]);
-        expect(faces.confirmedItems).toBe(2);
-        expect(faces.groups.map((group) => group.groupId)).toEqual(["g2", "g1", "g3"]);
+        expect(() => likely("jane", page, { ...admin, scopes: [] })).toThrow(/administrator/);
+        expect(() => likely("someone-else", page, admin)).toThrow(/not found/i);
     });
 });
 
@@ -887,69 +859,16 @@ describe("maybe in this item", () => {
 });
 
 describe("no single face", () => {
-    it("shows only that it is so, and is said and undone by administrators", () => {
+    it("is said and undone by administrators", () => {
         setNoSingleFace("jane", { noSingleFace: true }, admin);
 
-        expect(performerFaces("jane", admin)).toEqual({
-            noSingleFace: { since: "2026-10-09 10:00:00" },
-            confirmed: [],
-            fromTags: [],
-            confirmedItems: 0,
-            groups: [],
-        });
+        expect(state.noFace.has("jane")).toBe(true);
 
         setNoSingleFace("jane", { noSingleFace: false }, admin);
 
-        expect(performerFaces("jane", admin).noSingleFace).toBeNull();
+        expect(state.noFace.has("jane")).toBe(false);
         expect(() =>
             setNoSingleFace("jane", { noSingleFace: true }, { ...admin, scopes: [] })
-        ).toThrow(/administrator/);
-    });
-});
-
-describe("picking their face", () => {
-    beforeEach(() => {
-        state.own = {
-            a1: ["a", false],
-            a2: ["a", false],
-            b1: ["b", false],
-            c1: ["hidden", false],
-        };
-    });
-
-    it("pages their items, each with its faces", () => {
-        const first = ownFacesPage("jane", { page: 0, limit: 2 }, admin);
-
-        expect(first.items).toEqual([
-            expect.objectContaining({ mediaId: "a", theirs: null }),
-            expect.objectContaining({ mediaId: "b", theirs: null }),
-        ]);
-        expect(first.items[0].faces.map((face) => face.id)).toEqual(["a1", "a2"]);
-        expect(first).toMatchObject({ hasMore: true, total: 3 });
-    });
-
-    it("keeps one face an item theirs, and takes it back on a second press", () => {
-        pickOwnFace("jane", { faceId: "a1", theirs: true }, admin);
-        pickOwnFace("jane", { faceId: "a2", theirs: true }, admin);
-
-        expect(state.own.a1[1]).toBe(false);
-        expect(state.own.a2[1]).toBe(true);
-        expect(ownFacesPage("jane", page, admin).items[0].theirs).toBe("a2");
-
-        pickOwnFace("jane", { faceId: "a2", theirs: false }, admin);
-
-        expect(state.own.a2[1]).toBe(false);
-    });
-
-    it("refuses a face not on their items, one this viewer cannot see, and non-administrators", () => {
-        expect(() => pickOwnFace("jane", { faceId: "zz", theirs: true }, admin)).toThrow(
-            /not found/
-        );
-        expect(() => pickOwnFace("jane", { faceId: "c1", theirs: true }, admin)).toThrow(
-            /not found/
-        );
-        expect(() =>
-            pickOwnFace("jane", { faceId: "a1", theirs: true }, { ...admin, scopes: [] })
         ).toThrow(/administrator/);
     });
 });

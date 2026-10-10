@@ -7,10 +7,11 @@ import { Box, Button, Center, Loader, Stack, Tabs, Text } from "@mantine/core";
 import { reviewMedia } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
-import { FaceReviewSheet } from "@/components/faces/FaceReviewSheet";
 import { LikelySection } from "@/components/faces/LikelySection";
-import { TheirFaceSection } from "@/components/faces/TheirFaceSection";
+import { PerformerFacesTab } from "@/components/faces/PerformerFacesTab";
+import { PerformerSuggestions } from "@/components/faces/SuggestionsSheet";
 import { SectionHead } from "@/components/library/LibraryRoom";
+import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { useTagProfile } from "@/lib/api/tags";
@@ -26,10 +27,12 @@ import { useTagSeed } from "@/lib/useTagSeed";
  * administrator, two tabs:
  *
  * - **To check**: everything that says an untagged item is them, strongest first. Where a face
- *   of theirs and their name agree ("Likely"), item by item, with "Add to all"; then their face
- *   groups, as Review › Faces asks about them, a group's items at a time; and what only their
- *   name points to, handed to the grid, where a long list is ticked fastest.
- * - **Their face**: what is confirmed, and the groups behind it, to take one back.
+ *   of theirs and their name agree ("Likely"), item by item, with "Add to all"; then their
+ *   Suggestions (§5f "Suggestions"), a card for each person in each item that looks clearly like
+ *   them; and what only their name points to, handed to the grid, where a long list is ticked
+ *   fastest.
+ * - **Faces**: who is confirmed as them, their own items with nobody confirmed yet, and who was
+ *   ruled out — each correctable (§5f "Their faces").
  *
  * Everything else -- a source, a keyword, a private tag, or anybody but an administrator -- has
  * only the grid hand-off, "Find untagged".
@@ -77,7 +80,7 @@ const PerformerOrganise: React.FC<{ tagId: string; name: string }> = ({ tagId, n
         >
             <Tabs.List mb="lg">
                 <Tabs.Tab value="check">To check</Tabs.Tab>
-                <Tabs.Tab value="face">Their face</Tabs.Tab>
+                <Tabs.Tab value="face">Faces</Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="check">
@@ -87,19 +90,24 @@ const PerformerOrganise: React.FC<{ tagId: string; name: string }> = ({ tagId, n
 
                     {/* Last: it is a long list that loads as it is read. */}
                     <Box>
-                        <SectionHead title="Face groups" />
-                        <FaceReviewSheet
-                            tab="matches"
-                            performer={tagId}
-                            media={state.media}
-                            onMedia={(media) => apply({ media })}
-                        />
+                        <SectionHead title="Suggestions" />
+                        <Stack gap="md">
+                            <ReviewKindFilter
+                                value={state.media}
+                                onChange={(media) => apply({ media })}
+                            />
+                            <PerformerSuggestions
+                                key={state.media}
+                                tagId={tagId}
+                                media={state.media}
+                            />
+                        </Stack>
                     </Box>
                 </Stack>
             </Tabs.Panel>
 
             <Tabs.Panel value="face">
-                <TheirFaceSection tagId={tagId} name={name} />
+                <PerformerFacesTab tagId={tagId} name={name} />
             </Tabs.Panel>
         </Tabs>
     );
