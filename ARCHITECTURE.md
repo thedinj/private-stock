@@ -2201,8 +2201,10 @@ confirmation). The rows are the same component and the same reads wherever they 
   named, then a name — picked, or new and so coined as a library performer. Those faces are
   refused for the one proposed and tagged as the one named; the rest of the group is left as it
   was. (It used to reuse the ticks set under "untick any that are not ‹name›" to mean "these are
-  someone else", and refused the whole group.) After a decision, that performer's other rows come
-  first (`prefer`): the face just compared is the one in mind.
+  someone else", and refused the whole group.) Once a row is tagged as somebody, "More for ‹name›"
+  narrows Matches to their rows: the face just compared is the one in mind. (Their rows used to
+  jump to the top by themselves — `prefer` — which reloaded and re-sorted the list under the
+  person working it; see "A list that holds still".)
 - **One person split across groups is asked about as that person.** See "One face, one score"
   below: a group with no tags or decisions of its own whose items look like somebody's reference
   is a Matches row, "Looks like them", with their confirmed faces for comparison — not an Unnamed
@@ -2356,6 +2358,31 @@ no floor on size or confidence would have kept them out.
 - **Not yet:** which way a face is turned. The stage could record it from the landmarks and keep
   faces turned well away out of grouping from the start, at the cost of reading every item again;
   worth it only if the button and the mark are not enough.
+
+### A list that holds still
+
+**Matches and Unnamed were a list that moved while it was worked** (2026-10-09): every decision
+re-read every page loaded — each one counting every group in the library again, 0.8–3 s a page —
+re-sorted it to bring the decided performer's rows first, and dropped rows a decision had made
+moot from under the reader. Each row then fetched its faces' scores and reordered its faces when
+they came. So it was slow, it shifted, it jolted, and things vanished and flew in.
+
+- **One list a visit, made on the server.** The first page counts the library and keeps the
+  ordered list in memory (an hour, a few dozen lists at most); every later page is a slice of it
+  (`list` in the query), so only the first costs anything. Rows are still read as they are now,
+  and a row of a kept list with nothing left to ask — settled since — is left out of its page.
+- **Nothing re-reads it by itself.** The list is not under `tags`, so no tag edit reaches it, and
+  it is never fetched again on focus. A decided row stays where it was as one line saying what was
+  done ("More for ‹name›" beside a tagging); faces another decision settled — the same items tagged
+  in another row of the group or of the performer, set aside, or scattered — stay in their rows,
+  dimmed and done, and leave that row's decision. A row with none left says "Settled by an earlier
+  decision" in one line. "Refresh list" makes a new one.
+- **A row is drawn once, finished.** Every row's faces are scored as soon as its page arrives
+  rather than as it nears the screen, and the row holds a placeholder until then, so its faces
+  never reorder and its "?" defaults never flip under a finger. The note under the faces keeps its
+  space when empty, so ticking does not change a row's height.
+- **What went wrong is said over the page**, not above the list, where a message pushed every row
+  down; what went right is said in the row.
 
 ### Checking faces quickly
 

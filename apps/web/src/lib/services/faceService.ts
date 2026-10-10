@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
     AuthorizationError,
     NotFoundError,
@@ -721,13 +723,62 @@ const reviewFace = (face: ShownFace): FaceReviewFace[] => {
 
 const STATE_ORDER: Record<FaceMatchState, number> = { confirmed: 0, proposed: 1, resembles: 2 };
 
+/** One row of a review list, as it was when the list was made. */
+interface ReviewEntry {
+    groupId: string;
+    faceCount: number;
+    itemCount: number;
+    candidate: { tagId: string; name: string; state: FaceMatchState } | null;
+    /** Unnamed only: which of the group's faces to ask about. */
+    only: "open" | "left";
+    loose: boolean;
+    openItems: number;
+}
+
+/**
+ * A visit's review list (§5f "A list that holds still"): the rows in their order, made once when
+ * the tab opens and paged from after. Deciding a row never re-sorts or re-reads it.
+ */
+interface ReviewList {
+    id: string;
+    userId: string;
+    /** What it is a list of: the query's tab, performer and kind. */
+    of: string;
+    entries: ReviewEntry[];
+    byMedia: MediaKindCounts;
+    performer: { id: string; name: string } | null;
+    madeAt: number;
+}
+
+/** How long a visit's list is kept: well past a sitting, and gone by the next. */
+const LIST_TTL_MS = 60 * 60 * 1000;
+/** How many lists are kept at once, the oldest dropped first: a handful of people and tabs. */
+const LIST_CAP = 32;
+const lists = new Map<string, ReviewList>();
+
+const keepList = (list: ReviewList): void => {
+    const now = Date.now();
+
+    for (const [id, kept] of lists) {
+        if (now - kept.madeAt > LIST_TTL_MS) lists.delete(id);
+    }
+
+    while (lists.size >= LIST_CAP) {
+        const oldest = lists.keys().next().value;
+
+        if (oldest === undefined) break;
+        lists.delete(oldest);
+    }
+
+    lists.set(list.id, list);
+};
+
 /**
  * Review › Faces (§5f "One review, two sources"): every face group with something to decide,
  * across the library.
  *
  * - **Matches**: a group that is, or might be, a performer (`reviewPairs`) and is on items not
- *   tagged with them yet. The ones that would settle most items first — after the preferred
- *   performer's, when the review has just decided one of theirs.
+ *   tagged with them yet. The ones that would settle most items first.
  * - **Unnamed**: the groups no performer is confirmed, proposed or resembled for, most open items
  *   first: "Who is this?". Only ever the undecided faces — nobody's, not set aside — so naming part
  *   of a group never brings the named part back. A group with a "can't tell" in it waits until
@@ -735,16 +786,10 @@ const STATE_ORDER: Record<FaceMatchState, number> = { confirmed: 0, proposed: 1,
  *   once one is named and the group is theirs: the faces left over — unticked, so refused for
  *   them, and nobody's yet — come back here on their own, to name the other.
  *
- * A row shows exactly the faces it asks about — one for each item a decision would tag, up to
- * `REVIEW_FACES` — and, on Matches, a few from items already tagged, kept apart, to compare with.
- * What is ticked is what is tagged; the rest of a large group comes back as the row afterwards.
- *
- * Both are computed per request from the faces' counts: a few tens of milliseconds once the pages
- * are warm, and nothing to keep up to date.
+ * The list is the expensive part — every group in the library, counted — so it is made once a
+ * visit (`makeList`) and kept; every later page is a slice of it, its rows read as they are now.
  */
-export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceReviewPage => {
-    requireAdmin(auth);
-
+const makeList = (query: FaceReviewQuery, auth: AuthContext, of: string): ReviewList => {
     const roots = auth.accessibleRootIds;
     // From a performer's page: their matches only, asked of their own groups -- which is all
     // Matches needs of them. Unnamed is everybody's by definition.
@@ -754,18 +799,6 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
         ? { pairs: performerPairs(performer.id, roots), named: new Set<string>(), sizes: [] }
         : reviewPairs(roots);
 
-    interface Entry {
-        groupId: string;
-        faceCount: number;
-        itemCount: number;
-        candidate: { tagId: string; name: string; state: FaceMatchState } | null;
-        /** Unnamed only: which of the group's faces to ask about. */
-        only: "open" | "left";
-        loose: boolean;
-        openItems: number;
-    }
-
-    const preferred = (pair: ReviewPair): number => (pair.tagId === query.prefer ? 0 : 1);
     const tags = new Map<string, ReturnType<typeof tagRepo.findById>>();
     const tagOf = (tagId: string) => {
         if (!tags.has(tagId)) tags.set(tagId, tagRepo.findById(tagId));
@@ -778,7 +811,7 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
      * that kind only, so a group whose open faces are all on photos is not a row under Videos.
      * Which groups are whose is still decided from every item -- photos keep naming people.
      */
-    const entriesFor = (media: MediaKind | undefined): Entry[] => {
+    const entriesFor = (media: MediaKind | undefined): ReviewEntry[] => {
         const of = (counts: MediaKindCounts): number =>
             media ? counts[media] : counts.video + counts.image;
 
@@ -790,13 +823,12 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
                   )
                   .sort(
                       (a, b) =>
-                          preferred(a) - preferred(b) ||
                           of(b.untaggedBy) - of(a.untaggedBy) ||
                           STATE_ORDER[a.state] - STATE_ORDER[b.state] ||
                           b.itemCount - a.itemCount ||
                           (a.groupId < b.groupId ? -1 : 1)
                   )
-                  .flatMap((pair): Entry[] => {
+                  .flatMap((pair): ReviewEntry[] => {
                       const tag = tagOf(pair.tagId);
 
                       return tag
@@ -814,7 +846,7 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
                           : [];
                   })
             : sizes
-                  .flatMap((size): Entry[] => {
+                  .flatMap((size): ReviewEntry[] => {
                       const base = {
                           groupId: size.groupId,
                           faceCount: size.faceCount,
@@ -849,15 +881,53 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
     };
 
     const entries = entriesFor(query.media);
+
+    return {
+        id: randomUUID(),
+        userId: auth.userId,
+        of,
+        entries,
+        byMedia: {
+            video: query.media === "video" ? entries.length : entriesFor("video").length,
+            image: query.media === "image" ? entries.length : entriesFor("image").length,
+        },
+        performer: performer && { id: performer.id, name: performer.name },
+        madeAt: Date.now(),
+    };
+};
+
+/**
+ * A page of the review. Without `list`, or with one no longer kept, the visit's list is made;
+ * with it, the page is the next slice of that list, in the order it had.
+ *
+ * A row shows exactly the faces it asks about — one for each item a decision would tag, up to
+ * `REVIEW_FACES` — and, on Matches, a few from items already tagged, kept apart, to compare with.
+ * What is ticked is what is tagged; the rest of a large group comes back as the row afterwards.
+ *
+ * Rows are read as they are now, not as the list remembers them: from a kept list, a row whose
+ * faces were all settled since — by a decision on another row of it — is left out of its page.
+ */
+export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceReviewPage => {
+    requireAdmin(auth);
+
+    const roots = auth.accessibleRootIds;
+    const of = `${query.tab}|${query.performer ?? ""}|${query.media ?? ""}`;
+    const kept = query.list ? lists.get(query.list) : undefined;
+    const reused = kept !== undefined && kept.userId === auth.userId && kept.of === of;
+    const list = reused ? kept : makeList(query, auth, of);
+
+    if (!reused) keepList(list);
+
     const start = query.page * query.limit;
-    const page = entries.slice(start, start + query.limit);
+    const page = list.entries.slice(start, start + query.limit);
     const pictures = picturesFor(
         page.flatMap((entry) => (entry.candidate ? [entry.candidate.tagId] : [])),
         auth
     );
 
     return {
-        rows: page.map((entry): FaceReviewRow => {
+        list: list.id,
+        rows: page.flatMap((entry): FaceReviewRow[] => {
             const { candidate } = entry;
             const shape = {
                 groupId: entry.groupId,
@@ -871,15 +941,19 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
                     .sampleFaces(entry.groupId, roots, REVIEW_FACES, entry.only, query.media)
                     .flatMap(reviewFace);
 
-                return {
-                    ...shape,
-                    // What is asked about: the leftovers are not the whole group.
-                    itemCount: entry.openItems,
-                    candidate: null,
-                    faces,
-                    more: Math.max(0, entry.openItems - faces.length),
-                    reference: [],
-                };
+                if (reused && faces.length === 0) return [];
+
+                return [
+                    {
+                        ...shape,
+                        // What is asked about: the leftovers are not the whole group.
+                        itemCount: entry.openItems,
+                        candidate: null,
+                        faces,
+                        more: Math.max(0, entry.openItems - faces.length),
+                        reference: [],
+                    },
+                ];
             }
 
             const untagged = faceRepo
@@ -887,47 +961,53 @@ export const reviewFaces = (query: FaceReviewQuery, auth: AuthContext): FaceRevi
                 .filter((face) => !query.media || face.kind === query.media);
             const faces = untagged.slice(0, REVIEW_FACES).flatMap(reviewFace);
 
-            return {
-                ...shape,
-                candidate: {
-                    ...candidate,
-                    untagged: untagged.length,
-                    pictureUrl: pictures.get(candidate.tagId)?.smallUrl ?? null,
-                },
-                faces,
-                more: untagged.length - faces.length,
-                reference:
-                    candidate.state === "resembles"
-                        ? (() => {
-                              // Their reference's faces: confirmed ones, or else their tags'.
-                              const confirmed = faceRepo.confirmedFaces(
-                                  candidate.tagId,
-                                  roots,
-                                  REFERENCE_FACES
-                              );
+            if (reused && faces.length === 0) return [];
 
-                              return (
-                                  confirmed.length > 0
-                                      ? confirmed
-                                      : faceRepo.faceFromTags(
-                                            candidate.tagId,
-                                            roots,
-                                            REFERENCE_FACES
-                                        )
-                              ).flatMap(reviewFace);
-                          })()
-                        : faceRepo
-                              .taggedInGroup(entry.groupId, candidate.tagId, roots, REFERENCE_FACES)
-                              .flatMap(reviewFace),
-            };
+            return [
+                {
+                    ...shape,
+                    candidate: {
+                        ...candidate,
+                        untagged: untagged.length,
+                        pictureUrl: pictures.get(candidate.tagId)?.smallUrl ?? null,
+                    },
+                    faces,
+                    more: untagged.length - faces.length,
+                    reference:
+                        candidate.state === "resembles"
+                            ? (() => {
+                                  // Their reference's faces: confirmed ones, or else their tags'.
+                                  const confirmed = faceRepo.confirmedFaces(
+                                      candidate.tagId,
+                                      roots,
+                                      REFERENCE_FACES
+                                  );
+
+                                  return (
+                                      confirmed.length > 0
+                                          ? confirmed
+                                          : faceRepo.faceFromTags(
+                                                candidate.tagId,
+                                                roots,
+                                                REFERENCE_FACES
+                                            )
+                                  ).flatMap(reviewFace);
+                              })()
+                            : faceRepo
+                                  .taggedInGroup(
+                                      entry.groupId,
+                                      candidate.tagId,
+                                      roots,
+                                      REFERENCE_FACES
+                                  )
+                                  .flatMap(reviewFace),
+                },
+            ];
         }),
-        hasMore: start + query.limit < entries.length,
-        total: entries.length,
-        byMedia: {
-            video: query.media === "video" ? entries.length : entriesFor("video").length,
-            image: query.media === "image" ? entries.length : entriesFor("image").length,
-        },
-        performer: performer && { id: performer.id, name: performer.name },
+        hasMore: start + query.limit < list.entries.length,
+        total: list.entries.length,
+        byMedia: list.byMedia,
+        performer: list.performer,
     };
 };
 

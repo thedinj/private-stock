@@ -62,6 +62,7 @@ const FacesReview: React.FC = () => {
                         tab="matches"
                         performer={view.performer || null}
                         onClearPerformer={() => apply({ performer: "" })}
+                        onPerformer={(performer) => apply({ performer })}
                         media={view.media}
                         onMedia={(media) => apply({ media })}
                     />

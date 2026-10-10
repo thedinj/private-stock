@@ -3,33 +3,35 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActionIcon,
+    Affix,
     Alert,
     Badge,
     Button,
     Group,
     Loader,
+    Paper,
     Popover,
+    Skeleton,
     Stack,
     Text,
 } from "@mantine/core";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import type { Virtualizer } from "@tanstack/react-virtual";
 
-import type {
-    FaceLikeness,
-    FaceReviewDecision,
-    FaceReviewFace,
-    FaceReviewPage,
-    FaceReviewResult,
-    FaceReviewRow,
-    FaceReviewTab,
-    ReviewMedia,
+import {
+    normalizeName,
+    type FaceLikeness,
+    type FaceReviewDecision,
+    type FaceReviewFace,
+    type FaceReviewResult,
+    type FaceReviewRow,
+    type FaceReviewTab,
+    type ReviewMedia,
 } from "@private-stock/core";
 
 import { VirtualFeed } from "@/components/ocr/VirtualFeed";
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
-import { useDecideFaceReview, useFaceReview } from "@/lib/api/faces";
-import { queryKeys } from "@/lib/api/queryKeys";
+import { faceLikenessQuery, useDecideFaceReview, useFaceReview } from "@/lib/api/faces";
 import { isTypingTarget } from "@/lib/typingTarget";
 
 import {
@@ -125,13 +127,60 @@ const keyOf = (row: FaceReviewRow): string => `${row.groupId}:${row.candidate?.t
 const NONE: ReadonlySet<string> = new Set();
 
 /**
+ * What a decision settled beyond its own row (§5f "A list that holds still"): items now tagged
+ * in a group, or as somebody, or set aside or scattered there. Another row showing them shows
+ * them done, in place, rather than the list being fetched again under the person working it.
+ */
+interface Settled {
+    groupId?: string;
+    /** By name: a name typed may have coined the performer, whose id the row never had. */
+    name?: string;
+    mediaIds: ReadonlySet<string> | "all";
+}
+
+/** A decided row, as it stays in the list: one line where it was. */
+interface Decided {
+    message: string;
+    /** Tagged as a performer: their other rows are one press away. */
+    performer: { tagId: string; name: string } | null;
+}
+
+/** About the height of a row before its faces are scored: a placeholder holds its place. */
+const PLACEHOLDER = 220;
+
+const DecidedRow: React.FC<{
+    decided: Decided;
+    onPerformer: ((tagId: string) => void) | undefined;
+}> = ({ decided, onPerformer }) => (
+    <Paper withBorder radius="md" px="sm" py={8} mb="sm" style={{ opacity: 0.8 }}>
+        <Group gap="xs" justify="space-between" wrap="nowrap">
+            <Text size="sm" c="dimmed" lineClamp={1}>
+                ✓ {decided.message}
+            </Text>
+            {decided.performer && onPerformer && (
+                <Button
+                    variant="subtle"
+                    color="brass"
+                    size="compact-sm"
+                    onClick={() => onPerformer(decided.performer!.tagId)}
+                >
+                    More for {decided.performer.name}
+                </Button>
+            )}
+        </Group>
+    </Paper>
+);
+
+/**
  * One tab of Review › Faces (§5f "One review, two sources"), a page at a time and drawn only near
  * the screen, as OCR's queue is, with the same keys.
  *
- * What each row has ticked is held here rather than in the row, so the keys can reach it. A
- * decided row leaves at once and the list is fetched behind it: tagging one group's items moves
- * the counts of others. After a decision on Matches, that performer's other rows come first — the
- * face just compared is the one in mind.
+ * What each row has ticked is held here rather than in the row, so the keys can reach it.
+ *
+ * **The list holds still** (§5f "A list that holds still"): it is made once a visit, on the server,
+ * and paged from. A decided row stays where it was as one line saying what was done; faces another
+ * decision settled stay in their rows, done; each row is drawn once, finished, after its faces are
+ * scored. Nothing is fetched again or re-sorted until somebody asks with "Refresh list".
  */
 export const FaceReviewSheet: React.FC<{
     tab: FaceReviewTab;
@@ -139,13 +188,15 @@ export const FaceReviewSheet: React.FC<{
     performer: string | null;
     /** Widens a narrowed list to everyone; without it, the list stays theirs and says nothing. */
     onClearPerformer?: () => void;
+    /** Narrows Matches to one performer: "More for ‹name›" once one of theirs is tagged. */
+    onPerformer?: (tagId: string) => void;
     /** Faces on videos, photos or both: the page's kind control, which opens on videos. */
     media: ReviewMedia;
     onMedia: (media: ReviewMedia) => void;
-}> = ({ tab, performer, onClearPerformer, media, onMedia }) => {
-    const queryClient = useQueryClient();
-    const [prefer, setPrefer] = useState<string | null>(null);
-    const review = useFaceReview(tab, performer, prefer, media);
+}> = ({ tab, performer, onClearPerformer, onPerformer, media, onMedia }) => {
+    // When the list was made: a new one is a new list, and the only way the list changes.
+    const [visit, setVisit] = useState(() => Date.now());
+    const review = useFaceReview(tab, performer, media, visit);
     const decide = useDecideFaceReview();
     // Kept for the visit, so opening an item and coming back finds the ticks as they were.
     const [excluded, setExcluded] = useState<Map<string, Set<string>>>(() =>
@@ -162,7 +213,10 @@ export const FaceReviewSheet: React.FC<{
     useEffect(() => saveTicks(tab, "unsure", unsure), [tab, unsure]);
     const [pending, setPending] = useState<Map<string, FaceReviewDecision["verdict"]>>(new Map());
     const [focused, setFocused] = useState(0);
-    const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
+    // Only what went wrong: what went right is said in the row itself.
+    const [failure, setFailure] = useState<string | null>(null);
+    const [decided, setDecided] = useState<ReadonlyMap<string, Decided>>(new Map());
+    const [settledBy, setSettledBy] = useState<readonly Settled[]>([]);
     const virtualizerRef = useRef<Virtualizer<Window, Element> | null>(null);
     // Rows decided with faces left unsure: those faces are asked about again, but on a later
     // visit — not straight back in the list while it is being worked through.
@@ -170,23 +224,68 @@ export const FaceReviewSheet: React.FC<{
 
     useEffect(() => saveDeferred(tab, deferred), [tab, deferred]);
 
+    // Put off on an earlier list of this session, not this one: a row decided here stays put.
+    const [putOff, setPutOff] = useState(deferred);
     const rows = (review.data?.pages.flatMap((page) => page.rows) ?? []).filter(
-        (row) => !deferred.has(keyOf(row))
+        (row) => !putOff.has(keyOf(row))
     );
 
-    const remove = (key: string): void => {
-        queryClient.setQueryData<InfiniteData<FaceReviewPage>>(
-            queryKeys.tags.faceReview(tab, performer, prefer, media),
-            (data) =>
-                data && {
-                    ...data,
-                    pages: data.pages.map((page) => ({
-                        ...page,
-                        rows: page.rows.filter((row) => keyOf(row) !== key),
-                    })),
-                }
-        );
+    // Every row's faces scored as soon as its page arrives, so it is drawn once, finished.
+    const likenesses = useQueries({
+        queries: rows.map((row) =>
+            faceLikenessQuery(
+                row.groupId,
+                row.candidate?.tagId ?? null,
+                row.faces.map((face) => face.id)
+            )
+        ),
+    });
+    const likenessAt = new Map(rows.map((row, index) => [keyOf(row), likenesses[index]]));
+
+    /** The row's likeness, once asked for; undefined while it is still being scored. */
+    const likenessOf = (row: FaceReviewRow): FaceLikeness | undefined =>
+        likenessAt.get(keyOf(row))?.data;
+
+    /** Whether the row can be drawn: scored, or its scoring failed (then drawn unscored). */
+    const ready = (row: FaceReviewRow): boolean => {
+        const query = likenessAt.get(keyOf(row));
+
+        return !query || query.isSuccess || query.isError;
     };
+
+    /** The row's items another decision settled since the list was made. */
+    const settledOf = (row: FaceReviewRow): ReadonlySet<string> => {
+        const done = new Set<string>();
+
+        for (const rule of settledBy) {
+            if (rule.groupId !== undefined && rule.groupId !== row.groupId) continue;
+            if (
+                rule.name !== undefined &&
+                normalizeName(rule.name) !== normalizeName(row.candidate?.name ?? "")
+            ) {
+                continue;
+            }
+
+            for (const face of row.faces) {
+                if (rule.mediaIds === "all" || rule.mediaIds.has(face.mediaId)) {
+                    done.add(face.mediaId);
+                }
+            }
+        }
+
+        return done.size > 0 ? done : NONE;
+    };
+
+    /** The faces still to decide in a row: what its decision is about. */
+    const liveFaces = (row: FaceReviewRow): FaceReviewFace[] => {
+        const done = settledOf(row);
+
+        return row.faces.filter((face) => !done.has(face.mediaId));
+    };
+
+    /** Whether a row has anything left to ask: not decided, and not settled by another. */
+    const askable = (row: FaceReviewRow): boolean =>
+        !decided.has(keyOf(row)) && liveFaces(row).length > 0;
 
     const forget = (key: string): void => {
         setExcluded((current) => {
@@ -225,26 +324,67 @@ export const FaceReviewSheet: React.FC<{
         );
     };
 
+    /** What a decision settles in other rows: the items it tagged, set aside or scattered. */
+    const settles = (decision: FaceReviewDecision, result: FaceReviewResult): Settled[] => {
+        if (decision.verdict === "scatter") {
+            return [{ groupId: decision.groupId, mediaIds: "all" }];
+        }
+
+        if (decision.verdict === "skip") {
+            return [{ groupId: decision.groupId, mediaIds: new Set(decision.mediaIds) }];
+        }
+
+        if (decision.verdict === "refuse" || result.tagged === 0 || !result.name) {
+            return [];
+        }
+
+        const tagged = new Set(decision.mediaIds);
+
+        // In this group, whoever else it was asked about; and as them, in any group.
+        return [
+            { groupId: decision.groupId, mediaIds: tagged },
+            { name: result.name, mediaIds: tagged },
+        ];
+    };
+
     const send = (row: FaceReviewRow, decision: FaceReviewDecision): void => {
         const key = keyOf(row);
 
         setPending((current) => new Map(current).set(key, decision.verdict));
         decide.mutate(decision, {
             onSuccess: (result) => {
-                remove(key);
                 forget(key);
-                setOutcome({ ok: true, message: said(decision, result) });
+                setFailure(null);
+                setDecided((current) =>
+                    new Map(current).set(key, {
+                        message: said(decision, result),
+                        performer:
+                            tab === "matches" &&
+                            !performer &&
+                            row.candidate &&
+                            decision.verdict === "accept"
+                                ? { tagId: row.candidate.tagId, name: row.candidate.name }
+                                : null,
+                    })
+                );
+                setSettledBy((current) => [...current, ...settles(decision, result)]);
 
                 if ("unsureMediaIds" in decision && decision.unsureMediaIds.length > 0) {
                     setDeferred((current) => new Set(current).add(key));
                 }
 
-                // Their other rows next, while their face is in mind.
-                if (tab === "matches" && row.candidate && decision.verdict !== "skip") {
-                    setPrefer(row.candidate.tagId);
+                // On to the next row with something to ask, if this one had the keys.
+                const at = rows.findIndex((other) => keyOf(other) === key);
+
+                if (at === focused) {
+                    const next = rows.findIndex(
+                        (other, index) => index > at && keyOf(other) !== key && askable(other)
+                    );
+
+                    if (next >= 0) setFocused(next);
                 }
             },
-            onError: (error) => setOutcome({ ok: false, message: errorText(error) }),
+            onError: (error) => setFailure(errorText(error)),
             onSettled: () =>
                 setPending((current) => {
                     const next = new Map(current);
@@ -257,20 +397,21 @@ export const FaceReviewSheet: React.FC<{
     const shown = (row: FaceReviewRow) => {
         const out = excludedOf(row);
         const notSure = unsureOf(row);
+        const live = liveFaces(row);
 
         return {
             groupId: row.groupId,
-            mediaIds: row.faces
+            mediaIds: live
                 .filter((face) => !out.has(face.mediaId) && !notSure.has(face.mediaId))
                 .map((face) => face.mediaId),
-            excludedMediaIds: row.faces
+            excludedMediaIds: live
                 .filter((face) => out.has(face.mediaId) && !notSure.has(face.mediaId))
                 .map((face) => face.mediaId),
-            unsureMediaIds: row.faces
+            unsureMediaIds: live
                 .filter((face) => notSure.has(face.mediaId))
                 .map((face) => face.mediaId),
-            // Everything on screen, ticked or not: decided as seen, not inferred.
-            shownFaceIds: row.faces.map((face) => face.id),
+            // Everything on screen still to decide, ticked or not: decided as seen.
+            shownFaceIds: live.map((face) => face.id),
         };
     };
 
@@ -288,7 +429,7 @@ export const FaceReviewSheet: React.FC<{
                 verdict: "refuse",
                 groupId: row.groupId,
                 tagId: row.candidate.tagId,
-                shownFaceIds: row.faces.map((face) => face.id),
+                shownFaceIds: liveFaces(row).map((face) => face.id),
             });
         }
     };
@@ -298,7 +439,7 @@ export const FaceReviewSheet: React.FC<{
 
         if (picked && row.candidate) {
             // Someone else: the faces ticked for them, and nothing said of the rest.
-            const mediaIds = row.faces
+            const mediaIds = liveFaces(row)
                 .filter((face) => picked.has(face.mediaId))
                 .map((face) => face.mediaId);
 
@@ -311,7 +452,7 @@ export const FaceReviewSheet: React.FC<{
                     mediaIds,
                     excludedMediaIds: [],
                     unsureMediaIds: [],
-                    shownFaceIds: row.faces.map((face) => face.id),
+                    shownFaceIds: liveFaces(row).map((face) => face.id),
                 });
             }
 
@@ -331,18 +472,8 @@ export const FaceReviewSheet: React.FC<{
         send(row, {
             verdict: "skip",
             groupId: row.groupId,
-            mediaIds: row.faces.map((face) => face.mediaId),
+            mediaIds: liveFaces(row).map((face) => face.mediaId),
         });
-
-    /** The row's likeness, as its own query fetched it. */
-    const likenessOf = (row: FaceReviewRow): FaceLikeness | undefined =>
-        queryClient.getQueryData<FaceLikeness>(
-            queryKeys.tags.faceLikeness(
-                row.groupId,
-                row.candidate?.tagId ?? null,
-                row.faces.map((face) => face.id).join(",")
-            )
-        );
 
     /** What a row leaves out: what somebody said is not them. */
     const excludedOf = (row: FaceReviewRow): ReadonlySet<string> =>
@@ -397,7 +528,7 @@ export const FaceReviewSheet: React.FC<{
 
     const toggleAll = (row: FaceReviewRow): void => {
         const key = keyOf(row);
-        const all = row.faces.map((face) => face.mediaId);
+        const all = liveFaces(row).map((face) => face.mediaId);
 
         if (chosen.has(key)) {
             setChosen((current) =>
@@ -455,15 +586,20 @@ export const FaceReviewSheet: React.FC<{
         const digit = /^Digit\d$/.test(event.code)
             ? "1234567890".indexOf(event.code.slice(5))
             : "1234567890".indexOf(event.key);
-        // The order the row shows: least like the rest first, once that is known.
-        const faces = orderFaces(row.faces, likenessOf(row)).faces;
+        // The order the row shows: least like the rest first. A settled face keeps its number.
+        const done = settledOf(row);
+        const faces = orderFaces(row.faces, likenessOf(row)).faces.map((face) =>
+            done.has(face.mediaId) ? undefined : face
+        );
 
         if (event.key === "j") {
             moveFocus(focused + 1);
         } else if (event.key === "k") {
             moveFocus(focused - 1);
+        } else if (!askable(row) || !ready(row)) {
+            return;
         } else if (digit >= 0 && faces[digit] && event.shiftKey) {
-            const faceId = faces[digit].id;
+            const faceId = faces[digit]!.id;
 
             setPeek((current) =>
                 current?.key === key && current.faceId === faceId ? null : { key, faceId }
@@ -541,6 +677,23 @@ export const FaceReviewSheet: React.FC<{
                     {INTRO[tab]}
                     {total !== undefined && total > 0 && ` ${total.toLocaleString()} in all.`}
                 </Text>
+                {decided.size > 0 && (
+                    <Button
+                        variant="subtle"
+                        color="gray"
+                        size="compact-sm"
+                        onClick={() => {
+                            setDecided(new Map());
+                            setSettledBy([]);
+                            setPutOff(deferred);
+                            setFocused(0);
+                            setVisit(Date.now());
+                        }}
+                        title="Make the list again: what was decided goes, and what is new comes in"
+                    >
+                        Refresh list
+                    </Button>
+                )}
                 <Popover position="bottom-end" withArrow>
                     <Popover.Target>
                         <ActionIcon
@@ -558,15 +711,20 @@ export const FaceReviewSheet: React.FC<{
                 </Popover>
             </Group>
 
-            {outcome && (
-                <Alert
-                    color={outcome.ok ? "brass" : "oxblood"}
-                    variant="light"
-                    withCloseButton
-                    onClose={() => setOutcome(null)}
-                >
-                    {outcome.message}
-                </Alert>
+            {/* Over the page, not in it: a message above the list moved every row under it. */}
+            {failure && (
+                <Affix position={{ bottom: 16, left: 16, right: 16 }} zIndex={300}>
+                    <Alert
+                        color="oxblood"
+                        variant="filled"
+                        withCloseButton
+                        onClose={() => setFailure(null)}
+                        maw={560}
+                        mx="auto"
+                    >
+                        {failure}
+                    </Alert>
+                </Affix>
             )}
 
             {review.isPending ? (
@@ -583,38 +741,63 @@ export const FaceReviewSheet: React.FC<{
                 <VirtualFeed
                     items={rows}
                     keyOf={keyOf}
-                    estimate={260}
+                    estimate={PLACEHOLDER + 40}
                     hasMore={review.hasNextPage}
                     loadingMore={review.isFetchingNextPage}
                     onLoadMore={loadMore}
                     virtualizerRef={virtualizerRef}
-                    render={(row, index) => (
-                        <div data-face-row={keyOf(row)}>
-                            <FaceReviewRowView
-                                row={row}
-                                focused={index === focused}
-                                onFocus={() => setFocused(index)}
-                                excluded={excluded.get(keyOf(row)) ?? new Set()}
-                                unsure={unsure.get(keyOf(row)) ?? null}
-                                chosen={chosen.get(keyOf(row)) ?? null}
-                                onSet={(mediaId, state) => setFace(row, mediaId, state)}
-                                onElsewhere={(open) => elsewhere(row, open)}
-                                pending={pending.get(keyOf(row)) ?? null}
-                                onAccept={() => accept(row)}
-                                onRefuse={() => refuse(row)}
-                                onName={(typed) => name(row, typed)}
-                                onSkip={() => skip(row)}
-                                onScatter={() =>
-                                    send(row, { verdict: "scatter", groupId: row.groupId })
-                                }
-                                peeking={peek?.key === keyOf(row) ? peek.faceId : null}
-                                onPeek={(faceId) =>
-                                    setPeek(faceId ? { key: keyOf(row), faceId } : null)
-                                }
-                                onPlay={setViewing}
-                            />
-                        </div>
-                    )}
+                    render={(row, index) => {
+                        const key = keyOf(row);
+                        const done = decided.get(key);
+
+                        if (done) {
+                            return <DecidedRow decided={done} onPerformer={onPerformer} />;
+                        }
+
+                        if (!ready(row)) {
+                            return <Skeleton height={PLACEHOLDER} radius="md" mb="sm" />;
+                        }
+
+                        if (!askable(row)) {
+                            return (
+                                <Paper withBorder radius="md" px="sm" py={8} mb="sm">
+                                    <Text size="sm" c="dimmed">
+                                        ✓ Settled by an earlier decision.
+                                    </Text>
+                                </Paper>
+                            );
+                        }
+
+                        return (
+                            <div data-face-row={key}>
+                                <FaceReviewRowView
+                                    row={row}
+                                    likeness={likenessOf(row)}
+                                    settled={settledOf(row)}
+                                    focused={index === focused}
+                                    onFocus={() => setFocused(index)}
+                                    excluded={excluded.get(keyOf(row)) ?? new Set()}
+                                    unsure={unsure.get(keyOf(row)) ?? null}
+                                    chosen={chosen.get(keyOf(row)) ?? null}
+                                    onSet={(mediaId, state) => setFace(row, mediaId, state)}
+                                    onElsewhere={(open) => elsewhere(row, open)}
+                                    pending={pending.get(keyOf(row)) ?? null}
+                                    onAccept={() => accept(row)}
+                                    onRefuse={() => refuse(row)}
+                                    onName={(typed) => name(row, typed)}
+                                    onSkip={() => skip(row)}
+                                    onScatter={() =>
+                                        send(row, { verdict: "scatter", groupId: row.groupId })
+                                    }
+                                    peeking={peek?.key === keyOf(row) ? peek.faceId : null}
+                                    onPeek={(faceId) =>
+                                        setPeek(faceId ? { key: keyOf(row), faceId } : null)
+                                    }
+                                    onPlay={setViewing}
+                                />
+                            </div>
+                        );
+                    }}
                 />
             )}
 

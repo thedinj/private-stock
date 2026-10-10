@@ -26,7 +26,6 @@ import {
 } from "@private-stock/core";
 
 import { TagNameInput } from "@/components/tags/TagNameInput";
-import { useFaceLikeness } from "@/lib/api/faces";
 import { useTagSearch } from "@/lib/api/tags";
 import { itemHref } from "@/lib/lookMoment";
 import { useCloseOnBack } from "@/lib/useCloseOnBack";
@@ -339,6 +338,22 @@ const FaceTick: React.FC<{
     );
 };
 
+/** A face settled by a decision on another row: still where it was, dimmed, nothing to press. */
+const SettledFace: React.FC<{ face: FaceReviewFace; size: number }> = ({ face, size }) => (
+    <Stack gap={0} align="center" aria-label="Already decided" style={{ opacity: 0.35 }}>
+        <Box pos="relative">
+            <FaceCropView crop={face.crop} size={size} />
+            <Text size="xs" fw={700} pos="absolute" top={2} right={6} c="brass.3" aria-hidden>
+                ✓
+            </Text>
+        </Box>
+        {/* The tick's own label row, so a settled face takes the space a live one does. */}
+        <Text size="xs" c="dimmed" py={6}>
+            Done
+        </Text>
+    </Stack>
+);
+
 /**
  * Which faces start unsure, before anybody has touched the row (§5f "Unsure"): those below the
  * doubt line, where the row is scored against the performer's reference — of the faces people
@@ -387,6 +402,13 @@ export const orderFaces = (
 
 export interface FaceReviewRowProps {
     row: FaceReviewRow;
+    /** How alike its faces are to who it asks about: the row is drawn once this has arrived. */
+    likeness: FaceLikeness | undefined;
+    /**
+     * Its items settled by a decision on another row since the list was made: shown, dimmed,
+     * and left out of this row's decision (§5f "A list that holds still").
+     */
+    settled: ReadonlySet<string>;
     /** Where the keys act; the sheet moves it. */
     focused: boolean;
     onFocus: () => void;
@@ -435,6 +457,8 @@ export interface FaceReviewRowProps {
  */
 export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
     row,
+    likeness,
+    settled,
     focused,
     onFocus,
     excluded,
@@ -453,12 +477,7 @@ export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
     onPlay,
 }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
-    const likeness = useFaceLikeness(
-        row.groupId,
-        row.candidate?.tagId ?? null,
-        row.faces.map((face) => face.id)
-    );
-    const ordered = orderFaces(row.faces, likeness.data);
+    const ordered = orderFaces(row.faces, likeness);
     const candidate = row.candidate;
     const size = isPhone ? 72 : 88;
     const busy = pending !== null;
@@ -467,7 +486,8 @@ export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
 
     // Back cancels "Someone else…", as its own button does.
     useCloseOnBack(elsewhere, () => onElsewhere(false));
-    const notSure = unsure ?? defaultUnsure(row.faces, likeness.data);
+    const notSure = unsure ?? defaultUnsure(row.faces, likeness);
+    const open = row.faces.filter((face) => !settled.has(face.mediaId));
     const stateOf = (mediaId: string): TickState =>
         chosen
             ? chosen.has(mediaId)
@@ -478,11 +498,11 @@ export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
               : out.has(mediaId)
                 ? "out"
                 : "in";
-    const ticked = row.faces.filter((face) => stateOf(face.mediaId) === "in").length;
+    const ticked = open.filter((face) => stateOf(face.mediaId) === "in").length;
     const unsureCount = elsewhere
         ? 0
-        : row.faces.filter((face) => stateOf(face.mediaId) === "unsure").length;
-    const left = row.faces.length - ticked - unsureCount;
+        : open.filter((face) => stateOf(face.mediaId) === "unsure").length;
+    const left = open.length - ticked - unsureCount;
 
     return (
         <Paper
@@ -590,25 +610,29 @@ export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
                         </Text>
                     )}
                     <Group gap={4} wrap="wrap" align="flex-start">
-                        {ordered.faces.map((face, index) => (
-                            <FaceTick
-                                key={face.mediaId}
-                                groupId={row.groupId}
-                                face={face}
-                                size={size}
-                                number={index + 1}
-                                doubtful={ordered.doubtful.has(face.id)}
-                                state={stateOf(face.mediaId)}
-                                threeWay={!elsewhere}
-                                peeking={peeking === face.id}
-                                onSet={(state) => onSet(face.mediaId, state)}
-                                onPeek={(open) => onPeek(open ? face.id : null)}
-                                onPlay={() => {
-                                    onPeek(null);
-                                    onPlay(face);
-                                }}
-                            />
-                        ))}
+                        {ordered.faces.map((face, index) =>
+                            settled.has(face.mediaId) ? (
+                                <SettledFace key={face.mediaId} face={face} size={size} />
+                            ) : (
+                                <FaceTick
+                                    key={face.mediaId}
+                                    groupId={row.groupId}
+                                    face={face}
+                                    size={size}
+                                    number={index + 1}
+                                    doubtful={ordered.doubtful.has(face.id)}
+                                    state={stateOf(face.mediaId)}
+                                    threeWay={!elsewhere}
+                                    peeking={peeking === face.id}
+                                    onSet={(state) => onSet(face.mediaId, state)}
+                                    onPeek={(open) => onPeek(open ? face.id : null)}
+                                    onPlay={() => {
+                                        onPeek(null);
+                                        onPlay(face);
+                                    }}
+                                />
+                            )
+                        )}
                     </Group>
                     {row.more > 0 && (
                         <Text size="xs" c="dimmed">
@@ -724,14 +748,15 @@ export const FaceReviewRowView: React.FC<FaceReviewRowProps> = ({
                     </Group>
                 )}
 
-                {!elsewhere && (left > 0 || unsureCount > 0) && (
-                    <Text size="xs" c="dimmed">
-                        {left > 0 &&
-                            `The ${items(left)} left out will not be suggested as ${candidate ? candidate.name : "the name given"} again. `}
-                        {unsureCount > 0 &&
-                            `${unsureCount === 1 ? "The one" : `The ${unsureCount}`} marked ? ${unsureCount === 1 ? "is" : "are"} left undecided, to be asked about again later.`}
-                    </Text>
-                )}
+                {/* Always there, so ticking a face never changes the row's height. */}
+                <Text size="xs" c="dimmed" mih={36}>
+                    {!elsewhere &&
+                        left > 0 &&
+                        `The ${items(left)} left out will not be suggested as ${candidate ? candidate.name : "the name given"} again. `}
+                    {!elsewhere &&
+                        unsureCount > 0 &&
+                        `${unsureCount === 1 ? "The one" : `The ${unsureCount}`} marked ? ${unsureCount === 1 ? "is" : "are"} left undecided, to be asked about again later.`}
+                </Text>
             </Stack>
         </Paper>
     );

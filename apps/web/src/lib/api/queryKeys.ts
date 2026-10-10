@@ -240,21 +240,12 @@ export const queryKeys = {
         /** "Likely" on a performer's page, every page of it: items that are probably them (§5f). */
         likely: (tagId: string) => ["tags", "likely", tagId],
         /**
-         * Review › Faces, both tabs (§5f). Under `tags`, so every tagging and vocabulary change
-         * reaches it: a tag on an item moves the counts that make a group a match.
+         * "Would tag", "Tagged for you" and a face's closer look (§5f). Under `tags`, so every
+         * tagging and vocabulary change reaches them. Not Matches and Unnamed: `faceReview`.
          */
         faceReviewAll: () => ["tags", "faceReview"],
         /** "Would tag" (§5f "Tagging by itself"): one state of it, in a visit's random order. */
         autoTags: (state: string, seed: number) => ["tags", "faceReview", "auto", state, seed],
-        /** How alike a review row's faces are to who it asks about (§5f), by the faces shown. */
-        faceLikeness: (groupId: string, tagId: string | null, faceIds: string) => [
-            "tags",
-            "faceReview",
-            "likeness",
-            groupId,
-            tagId,
-            faceIds,
-        ],
         /** A closer look at one face: its item's other faces in the group (§5f). */
         facePeek: (groupId: string, mediaId: string) => [
             "tags",
@@ -263,17 +254,31 @@ export const queryKeys = {
             groupId,
             mediaId,
         ],
-        /**
-         * One tab; Matches narrowed to one performer when `performer` is given, and with
-         * `prefer`'s rows first — the performer just decided about — under one choice of the
-         * kind control.
-         */
-        faceReview: (
-            tab: FaceReviewTab,
-            performer: string | null,
-            prefer: string | null,
-            media: ReviewMedia
-        ) => ["tags", "faceReview", tab, performer, prefer, media],
+    },
+
+    /**
+     * Review › Faces' lists (§5f "A list that holds still"). **Not under `tags`**: a list is made
+     * once a visit and only ever changes when somebody asks — a decision settles its own row in
+     * place, and no tag edit anywhere re-reads or re-sorts it under the person working through it.
+     */
+    faceReview: {
+        /** One tab of it, every page loaded so far; `visit` is when it was opened, or refreshed. */
+        list: (tab: FaceReviewTab, performer: string | null, media: ReviewMedia, visit: number) => [
+            "faceReview",
+            "list",
+            tab,
+            performer,
+            media,
+            visit,
+        ],
+        /** How alike a review row's faces are to who it asks about (§5f), by the faces shown. */
+        likeness: (groupId: string, tagId: string | null, faceIds: string) => [
+            "faceReview",
+            "likeness",
+            groupId,
+            tagId,
+            faceIds,
+        ],
     },
 
     // --- Collections ---

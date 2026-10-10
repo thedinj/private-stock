@@ -1,7 +1,6 @@
 "use client";
 
 import {
-    keepPreviousData,
     useInfiniteQuery,
     useMutation,
     useQuery,
@@ -128,26 +127,33 @@ export const useDecideLikely = (tagId: string) => {
     });
 };
 
-/** Review › Faces, a page at a time (§5f). See docs/CACHE_KEYS.md "Review › Faces". */
+/**
+ * Review › Faces, a page at a time (§5f "A list that holds still"). The first page makes the
+ * visit's list on the server; every later page asks for the next slice of that same list. Never
+ * fetched again by itself — not on focus, not by any tag edit — so nothing moves under the person
+ * working through it; a new `visit` is a fresh list. See docs/CACHE_KEYS.md "Review › Faces".
+ */
 export const useFaceReview = (
     tab: FaceReviewTab,
     performer: string | null,
-    prefer: string | null,
-    media: ReviewMedia
+    media: ReviewMedia,
+    visit: number
 ) =>
     useInfiniteQuery({
-        queryKey: queryKeys.tags.faceReview(tab, performer, prefer, media),
+        queryKey: queryKeys.faceReview.list(tab, performer, media, visit),
         queryFn: ({ pageParam }) =>
             api<FaceReviewPage>(
-                `/api/faces/review?tab=${tab}&page=${pageParam}` +
+                `/api/faces/review?tab=${tab}&page=${pageParam.page}` +
+                    (pageParam.list ? `&list=${encodeURIComponent(pageParam.list)}` : "") +
                     (performer ? `&performer=${encodeURIComponent(performer)}` : "") +
-                    (prefer ? `&prefer=${encodeURIComponent(prefer)}` : "") +
                     (media === "all" ? "" : `&media=${media}`)
             ),
-        // A new preference reorders the list, but the old order is worth showing meanwhile.
-        placeholderData: keepPreviousData,
-        initialPageParam: 0,
-        getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+        initialPageParam: { page: 0, list: null } as { page: number; list: string | null },
+        getNextPageParam: (last, pages) =>
+            last.hasMore ? { page: pages.length, list: last.list } : undefined,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
     });
 
 /**
@@ -166,8 +172,8 @@ export const useDecideFaceReview = () => {
                 body: JSON.stringify(decision),
             }),
         onSuccess: (_, decision) => {
+            // The list itself is not touched: the sheet settles the row in place.
             if (decision.verdict === "refuse") {
-                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
                 void queryClient.invalidateQueries({
                     queryKey: queryKeys.tags.faces(decision.tagId),
                 });
@@ -182,14 +188,15 @@ export const useDecideFaceReview = () => {
 };
 
 /**
- * How alike a review row's faces are to who it asks about, asked for as the row nears the screen
- * (the list draws only those). Kept for the visit: the faces do not change under a row.
+ * How alike a review row's faces are to who it asks about: asked for every row as soon as its page
+ * arrives, so a row is drawn once, finished (§5f "A list that holds still"). Kept for the visit:
+ * the faces do not change under a row.
  */
-export const useFaceLikeness = (groupId: string, tagId: string | null, faceIds: string[]) => {
+export const faceLikenessQuery = (groupId: string, tagId: string | null, faceIds: string[]) => {
     const ids = faceIds.join(",");
 
-    return useQuery({
-        queryKey: queryKeys.tags.faceLikeness(groupId, tagId, ids),
+    return {
+        queryKey: queryKeys.faceReview.likeness(groupId, tagId, ids),
         queryFn: () =>
             api<FaceLikeness>(
                 `/api/faces/review/likeness?groupId=${encodeURIComponent(groupId)}&ids=${encodeURIComponent(ids)}` +
@@ -197,7 +204,7 @@ export const useFaceLikeness = (groupId: string, tagId: string | null, faceIds: 
             ),
         enabled: faceIds.length > 0,
         staleTime: Infinity,
-    });
+    };
 };
 
 /** A closer look at one face: asked for only while it is open. */

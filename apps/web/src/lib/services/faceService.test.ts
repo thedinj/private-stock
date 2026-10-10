@@ -535,17 +535,39 @@ describe("Review › Faces", () => {
         expect(result.total).toBe(2);
     });
 
-    it("puts the preferred performer's rows first", () => {
+    it("pages the visit's list in the order it was made, leaving out rows settled since", () => {
         state.pairs = [
             pair("kim", "many", { taggedAsThem: 3, untaggedCount: 9 }),
-            pair("jane", "few", { taggedAsThem: 2, untaggedCount: 1 }),
+            pair("jane", "few", { taggedAsThem: 2, untaggedCount: 2 }),
+            pair("jane", "fewer", { taggedAsThem: 2, untaggedCount: 1 }),
+        ];
+        state.inGroups = [shown("m1", "many"), shown("f1", "few"), shown("r1", "fewer")];
+
+        const first = reviewFaces({ tab: "matches", page: 0, limit: 1 }, admin);
+
+        expect(first.rows.map((row) => row.groupId)).toEqual(["many"]);
+        expect(first.total).toBe(3);
+
+        // Since then: "few" was settled, and the counts would order the rest differently.
+        state.inGroups = state.inGroups.filter((face) => face.groupId !== "few");
+        state.pairs = [
+            pair("jane", "fewer", { taggedAsThem: 2, untaggedCount: 50 }),
+            pair("kim", "many", { taggedAsThem: 3, untaggedCount: 9 }),
         ];
 
+        const kept = { tab: "matches" as const, limit: 1, list: first.list };
+
+        expect(reviewFaces({ ...kept, page: 1 }, admin).rows).toEqual([]);
+        expect(reviewFaces({ ...kept, page: 2 }, admin).rows.map((row) => row.groupId)).toEqual([
+            "fewer",
+        ]);
+        // Another person's list, or another tab's, is never theirs to page.
+        expect(reviewFaces({ ...kept, page: 0 }, { ...admin, userId: "u2" }).list).not.toBe(
+            first.list
+        );
         expect(
-            reviewFaces({ tab: "matches", ...page, prefer: "jane" }, admin).rows.map(
-                (row) => row.groupId
-            )
-        ).toEqual(["few", "many"]);
+            reviewFaces({ tab: "unnamed", page: 0, limit: 1, list: first.list }, admin).list
+        ).not.toBe(first.list);
     });
 
     it("asks about the untagged items' faces, and shows the tagged ones apart", () => {

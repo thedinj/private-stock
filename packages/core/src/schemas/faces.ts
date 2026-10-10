@@ -246,8 +246,11 @@ export const faceReviewQuerySchema = z.object({
     tab: faceReviewTabSchema.default("matches"),
     /** Matches for one performer only, from their page. */
     performer: z.string().min(1).max(64).optional(),
-    /** Matches for this performer first: the one just decided about, whose face is in mind. */
-    prefer: z.string().min(1).max(64).optional(),
+    /**
+     * The visit's list, from its first page (§5f "A list that holds still"): later pages are
+     * slices of it, in the order it had. Made afresh when absent or no longer kept.
+     */
+    list: z.string().min(1).max(64).optional(),
     /**
      * Ask only about faces on videos, or on photos; both when absent. Which group is whose is
      * still judged from every item — this narrows what a row asks, not what decides it.
@@ -259,6 +262,8 @@ export const faceReviewQuerySchema = z.object({
 export type FaceReviewQuery = z.infer<typeof faceReviewQuerySchema>;
 
 export const faceReviewPageSchema = z.object({
+    /** The list this page is a slice of: what the next page asks for. */
+    list: z.string(),
     rows: z.array(faceReviewRowSchema),
     /** The performer Matches is narrowed to, by name, for the page to say so. */
     performer: z.object({ id: z.string(), name: z.string() }).nullable(),
