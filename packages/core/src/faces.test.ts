@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    gatherNewPeople,
     LEGIBLE_EYES,
     appearancesInItem,
     FACE_SIDE,
     alignment,
     chooseFaces,
-    decodeFaceGroups,
-    encodeFaceGroups,
     decodeDetections,
     detectorLayout,
     eyeDistance,
-    groupStateFor,
     autoTagBraked,
     autoTagTrusted,
     autoTags,
@@ -21,10 +19,8 @@ import {
     performerCentre,
     sharedFace,
     peopleInItem,
-    placePerson,
     writeDetectorInput,
     writeFaceInput,
-    type FaceGroup,
     type Point,
 } from "./faces.js";
 import { normaliseVector } from "./embedding.js";
@@ -180,42 +176,6 @@ describe("people within an item", () => {
     });
 });
 
-describe("people across the library", () => {
-    let next = 0;
-    const newId = (): string => `g${++next}`;
-    const groups = (): Map<string, FaceGroup> => new Map();
-    const one = (vector: Float32Array) => ({ members: [0], sum: Float32Array.from(vector) });
-
-    it("starts a group for somebody new, and adds them to it when they return", () => {
-        const library = groups();
-        const first = placePerson(one(person(0)), library, newId);
-        const again = placePerson(one(person(0, 0.3)), library, newId);
-        const other = placePerson(one(person(4)), library, newId);
-
-        expect(again.groupId).toBe(first.groupId);
-        expect(other.groupId).not.toBe(first.groupId);
-        expect(library.get(first.groupId)?.count).toBe(2);
-    });
-
-    it("joins two groups of one person when somebody close to both arrives", () => {
-        const library = groups();
-        // Two groups of one person, started too far apart to join (0.31): one leans each way.
-        const left = placePerson(one(person(0, 1.5, 1)), library, newId);
-        const right = placePerson(one(person(0, 1.5, 2)), library, newId);
-
-        expect(left.groupId).not.toBe(right.groupId);
-
-        // Between the two: 0.79 from each.
-        const between = normaliseVector(Float32Array.from([1, 0.5, 0.5, 0, 0, 0, 0, 0]));
-        const bridge = placePerson(one(between), library, newId);
-
-        expect(library.size).toBe(1);
-        expect(bridge.merged).toHaveLength(1);
-        expect([left.groupId, right.groupId]).toContain(bridge.groupId);
-        expect(library.get(bridge.groupId)?.count).toBe(3);
-    });
-});
-
 describe("one face, one score", () => {
     const unit = (...values: number[]): Float32Array => normaliseVector(Float32Array.from(values));
 
@@ -309,49 +269,6 @@ describe("tagging by itself", () => {
     });
 });
 
-describe("the groups between runs", () => {
-    it("round-trips ids, counts, sums and the cursor", () => {
-        const groups = new Map<string, FaceGroup>([
-            ["a", { id: "a", count: 3, sum: Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]) }],
-            ["b", { id: "b", count: 1, sum: Float32Array.from([-1, 0, 0.5, 0, 0, 0, 0, 2]) }],
-        ]);
-        const back = decodeFaceGroups(encodeFaceGroups({ cursor: 42, dims: 8, groups }));
-
-        expect(back.cursor).toBe(42);
-        expect([...back.groups.values()]).toEqual([...groups.values()]);
-    });
-
-    it("refuses bytes that are not a groups file", () => {
-        expect(() => decodeFaceGroups(new Uint8Array(16))).toThrow();
-    });
-});
-
-describe("whether a group is somebody's", () => {
-    const none = {
-        taggedAsThem: 0,
-        taggedAsOthers: 0,
-        confirmed: 0,
-        confirmedOthers: 0,
-        refused: 0,
-    };
-
-    it("proposes the performer most of its single-performer items carry, from two", () => {
-        expect(groupStateFor({ ...none, taggedAsThem: 3, taggedAsOthers: 1 })).toBe("proposed");
-        expect(groupStateFor({ ...none, taggedAsThem: 1 })).toBeNull();
-        expect(groupStateFor({ ...none, taggedAsThem: 2, taggedAsOthers: 2 })).toBeNull();
-    });
-
-    it("is theirs once somebody says so, and not once somebody says it is not", () => {
-        expect(groupStateFor({ ...none, confirmed: 1 })).toBe("confirmed");
-        expect(groupStateFor({ ...none, taggedAsThem: 5, refused: 2 })).toBeNull();
-        expect(groupStateFor({ ...none, confirmed: 1, refused: 3 })).toBeNull();
-    });
-
-    it("proposes nobody for a group somebody named as someone else", () => {
-        expect(groupStateFor({ ...none, taggedAsThem: 5, confirmedOthers: 1 })).toBeNull();
-    });
-});
-
 describe("appearances", () => {
     const unit = (x: number, y: number) => normaliseVector(Float32Array.from([x, y, 0]));
     const face = (vector: Float32Array, eyes = 30, score = 0.9) => ({ vector, eyes, score });
@@ -380,5 +297,23 @@ describe("appearances", () => {
 
         expect(person.members).toEqual([0]);
         expect(person.legible).toBe(false);
+    });
+});
+
+describe("new people", () => {
+    const unit = (x: number, y: number) => normaliseVector(Float32Array.from([x, y, 0]));
+
+    it("gathers the people who are alike, and keeps only those seen on enough items", () => {
+        const gathered = gatherNewPeople([
+            { centre: unit(1, 0), mediaId: "a" },
+            { centre: unit(1, 0.05), mediaId: "b" },
+            { centre: unit(0, 1), mediaId: "c" },
+            { centre: unit(1, 0.1), mediaId: "d" },
+            { centre: unit(0.05, 1), mediaId: "e" },
+            // The same item twice is one item.
+            { centre: unit(1, 0.02), mediaId: "a" },
+        ]);
+
+        expect(gathered).toEqual([0, 0, null, 0, null, 0]);
     });
 });

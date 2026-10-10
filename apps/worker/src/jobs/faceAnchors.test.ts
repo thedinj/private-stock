@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
         faceIds: string[];
         matchTagId: string | null;
         score: number | null;
+        newPersonId: string | null;
     }[],
     confirmed: [] as { tagId: string; mediaId: string; vectorIndex: number }[],
     tagged: [] as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[],
@@ -79,6 +80,7 @@ vi.mock("@private-stock/db", () => ({
                 score: 0.9,
                 kind: "video",
                 scattered: 0,
+                decided: 0,
             })),
         replaceAll: (rows: typeof state.appearances) => {
             state.appearances = [...rows];
@@ -212,6 +214,28 @@ describe("face references", () => {
         expect(people[0].matchTagId).toBe("jane");
         expect(people[0].score).toBeGreaterThan(0.9);
         expect(people[1].score ?? 0).toBeLessThan(0.3);
+    });
+
+    it("gathers people who match nobody, seen on enough items, into a new person", async () => {
+        item("s1", [8, 8]);
+        item("s2", [8, 8]);
+        item("s3", [8, 8]);
+        // Seen on two items only: a face in passing.
+        item("t1", [9, 9]);
+        item("t2", [9, 9]);
+
+        await runFaceAnchors();
+
+        const of = (prefix: string) =>
+            new Set(
+                state.appearances
+                    .filter((person) => person.mediaId.startsWith(prefix))
+                    .map((person) => person.newPersonId)
+            );
+
+        expect(of("s").size).toBe(1);
+        expect([...of("s")][0]).not.toBeNull();
+        expect([...of("t")]).toEqual([null]);
     });
 
     it("keeps out a tags' face that is not the one people confirmed", async () => {

@@ -15,6 +15,14 @@ import type { Database } from "better-sqlite3";
  * refusals there were.
  */
 export function up(db: Database): void {
+    // A database built after face groups went has no groups, and nothing of this to restore.
+    if (
+        db.prepare(`SELECT 1 FROM pragma_table_info('Face') WHERE "name" = 'groupId'`).get() ===
+        undefined
+    ) {
+        return;
+    }
+
     db.exec(
         `DELETE FROM "FaceRefusal"
           WHERE "how" IN ('shown', 'inferred') AND "decidedAt" >= '2026-10-09'

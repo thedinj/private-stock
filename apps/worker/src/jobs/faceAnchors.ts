@@ -13,6 +13,10 @@ import {
     SAME_FACE_ACROSS_ITEMS,
     appearancesInItem,
     bestMatch,
+    gatherNewPeople,
+    NEW_PERSON_EYES,
+    NEW_PERSON_SCORE,
+    NEW_PERSON_UNMATCHED,
     encodeFaceAnchors,
     performerCentre,
     sharedFace,
@@ -51,7 +55,7 @@ import { dataFile, readFaceVectors } from "./faceVectorFiles.js";
  * kept. One question, "is this face them", asked one way: the review's order and default ticks,
  * "looks like them", "Likely" and, later, tagging by itself all read these.
  *
- * Library-wide and coalescing, as `faceGroups` is. Runs after a grouping run, and a couple of
+ * Library-wide and coalescing. Runs once a burst of faces jobs has settled, and a couple of
  * minutes after confirmations change. A few tens of seconds at a few thousand items, most of it
  * the shared-face search, which is the square of a performer's faces — hence `ITEMS_PER_TAG`.
  */
@@ -253,6 +257,8 @@ export const runFaceAnchors = async (): Promise<void> => {
     // (§5f "A person in a video") — one pass, so each faces file is read once.
     const matches: { faceId: string; tagId: string; score: number; second: number }[] = [];
     const appearances: NewAppearance[] = [];
+    // Who might be a new person (§5f "New people"): beside `appearances`, by index.
+    const strangers: { index: number; centre: Float32Array; mediaId: string }[] = [];
     const round = (value: number): number => Math.round(value * 1000) / 1000;
 
     const scoreItem = (
@@ -287,6 +293,20 @@ export const runFaceAnchors = async (): Promise<void> => {
             people[0].face.kind
         )) {
             const match = anchors.length > 0 ? bestMatch(person.centre, anchors) : null;
+            const best = people[person.best].face;
+
+            if (
+                (!match || match.score < NEW_PERSON_UNMATCHED) &&
+                best.eyes >= NEW_PERSON_EYES &&
+                best.score >= NEW_PERSON_SCORE &&
+                person.members.every((index) => people[index].face.decided === 0)
+            ) {
+                strangers.push({
+                    index: appearances.length,
+                    centre: person.centre,
+                    mediaId: best.mediaId,
+                });
+            }
 
             appearances.push({
                 id: randomUUID(),
@@ -297,6 +317,7 @@ export const runFaceAnchors = async (): Promise<void> => {
                 matchTagId: match?.tagId ?? null,
                 score: match ? round(match.score) : null,
                 second: match ? round(match.second) : null,
+                newPersonId: null,
             });
         }
     };
@@ -323,6 +344,15 @@ export const runFaceAnchors = async (): Promise<void> => {
         })),
         matches
     );
+    // New people: those who match nobody, gathered; a gathering on too few items stays nobody's.
+    const gatheringIds = new Map<number, string>();
+
+    gatherNewPeople(strangers).forEach((gathering, i) => {
+        if (gathering === null) return;
+        if (!gatheringIds.has(gathering)) gatheringIds.set(gathering, randomUUID());
+        appearances[strangers[i].index].newPersonId = gatheringIds.get(gathering)!;
+    });
+
     appearanceRepo.replaceAll(appearances);
 
     // What the rule would tag now, for the "Would tag" list (§5f "Tagging by itself").
@@ -347,7 +377,8 @@ export const runFaceAnchors = async (): Promise<void> => {
     console.log(
         `Face references: ${anchors.length} performer(s), ` +
             `${anchors.filter((a) => a.confirmedItems === 0).length} from their tags alone; ` +
-            `${matches.length} face(s) matched; ${appearances.length} person(s) in items; ` +
+            `${matches.length} face(s) matched; ${appearances.length} person(s) in items, ` +
+            `${gatheringIds.size} new person(s); ` +
             `${proposals.length} item(s) the rule would tag` +
             (applied > 0 ? `, ${applied} tagged` : "")
     );

@@ -223,60 +223,13 @@ describe("borrowing an identical copy's faces", () => {
     });
 });
 
-describe("grouping", () => {
-    const groupsOf = (mediaId: string) =>
-        (
-            db
-                .prepare(`SELECT "groupId" FROM "Face" WHERE "mediaId" = ? ORDER BY "vectorIndex"`)
-                .all(mediaId) as { groupId: string | null }[]
-        ).map((row) => row.groupId);
-
-    it("lists items with faces added since a point, oldest first", () => {
-        faceRepo.replaceForMedia("a", [face(0, 0, 0.1)]);
-        faceRepo.replaceForMedia("b", [face(0, 0, 0.1), face(1, 1000, 0.5)]);
-
-        const all = faceRepo.itemsToGroup(0, 10);
-
-        expect(all.map((item) => [item.mediaId, item.kind])).toEqual([
-            ["a", "video"],
-            ["b", "video"],
-        ]);
-        expect(faceRepo.itemsToGroup(all[0].last, 10).map((item) => item.mediaId)).toEqual(["b"]);
-        expect(faceRepo.facesToGroup("b").map((f) => f.vectorIndex)).toEqual([0, 1]);
-    });
-
-    it("assigns faces to groups and moves a merged group's faces", () => {
-        faceRepo.replaceForMedia("a", [face(0, 0, 0.1)]);
-        faceRepo.replaceForMedia("b", [face(0, 0, 0.1), face(1, 1000, 0.5)]);
-
-        const [a0] = faceRepo.facesToGroup("a");
-        const [b0, b1] = faceRepo.facesToGroup("b");
-
-        faceRepo.applyGroups(
-            [
-                { id: a0.id, groupId: "old" },
-                { id: b1.id, groupId: null },
-            ],
-            []
-        );
-        faceRepo.applyGroups([{ id: b0.id, groupId: "new" }], [{ from: "old", to: "new" }]);
-
-        expect(groupsOf("a")).toEqual(["new"]);
-        expect(groupsOf("b")).toEqual(["new", null]);
-
-        faceRepo.clearGroups();
-
-        expect([...groupsOf("a"), ...groupsOf("b")]).toEqual([null, null, null]);
-    });
-});
-
 describe("a performer's faces", () => {
     const ROOT = "root";
 
-    /** Items in the library, each with faces in the groups given and the performers given. */
-    const setUp = (items: { id: string; groups: string[]; performers?: string[] }[]): void => {
+    /** Items in the library, each with this many faces and the performers given. */
+    const setUp = (items: { id: string; faces: number; performers?: string[] }[]): void => {
         db.prepare(
-            `INSERT INTO "MediaRoot" ("id", "path", "label", "enabled", "updatedAt")
+            `INSERT OR IGNORE INTO "MediaRoot" ("id", "path", "label", "enabled", "updatedAt")
              VALUES (?, '/media', 'Media', 1, CURRENT_TIMESTAMP)`
         ).run(ROOT);
 
@@ -291,14 +244,10 @@ describe("a performer's faces", () => {
             );
             faceRepo.replaceForMedia(
                 item.id,
-                item.groups.map((_, i) => face(i, i * 1000, 0.1 * i, { eyes: 20 + i }))
+                Array.from({ length: item.faces }, (_, i) =>
+                    face(i, i * 1000, 0.1 * i, { eyes: 20 + i })
+                )
             );
-            faceRepo.facesToGroup(item.id).forEach((row, i) => {
-                db.prepare(`UPDATE "Face" SET "groupId" = ? WHERE "id" = ?`).run(
-                    item.groups[i],
-                    row.id
-                );
-            });
 
             for (const tagId of item.performers ?? []) {
                 db.prepare(
@@ -307,11 +256,6 @@ describe("a performer's faces", () => {
             }
         }
     };
-
-    const evidence = (groupId: string) =>
-        faceRepo
-            .groupEvidence([ROOT], faceRepo.performerGroupIds("jane"))
-            .find((row) => row.tagId === "jane" && row.groupId === groupId);
 
     beforeEach(() => {
         for (const id of ["c", "d", "e"]) {
@@ -322,458 +266,57 @@ describe("a performer's faces", () => {
         }
     });
 
-    it("counts what decides a group, among single-performer items", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"], performers: ["jane"] },
-            { id: "c", groups: ["g1"], performers: ["kim"] },
-            { id: "d", groups: ["g1"], performers: ["jane", "kim"] },
-            { id: "e", groups: ["g1", "g2"] },
-        ]);
-
-        expect(evidence("g1")).toMatchObject({
-            faceCount: 5,
-            itemCount: 5,
-            untaggedCount: 2,
-            taggedAsThem: 2,
-            taggedAsOthers: 1,
-            confirmed: 0,
-            refused: 0,
-        });
-        // Nothing of Jane's touches g2.
-        expect(evidence("g2")).toBeUndefined();
-    });
-
-    it("confirms a group's faces, and a refusal takes them back", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"] },
-        ]);
-
-        const shown = [faces("a")[0].id, faces("b")[0].id];
-        const how = (mediaId: string) =>
-            db.prepare(`SELECT "decidedHow" FROM "Face" WHERE "mediaId" = ?`).pluck().get(mediaId);
-
-        // Only the faces shown are confirmed, and they say so.
-        expect(faceRepo.decideGroup("g1", "jane", "confirm", "someone", [shown[1]])).toBe(1);
-        expect(how("b")).toBe("shown");
-        expect(faceRepo.decideGroup("g1", "jane", "confirm", "someone", shown)).toBe(1);
-        expect(evidence("g1")).toMatchObject({ confirmed: 2, refused: 0 });
-
-        faceRepo.decideGroup("g1", "jane", "refuse", "someone", shown);
-
-        // Not a's: it carries her, which nobody was asked about.
-        expect(evidence("g1")).toMatchObject({ confirmed: 0, refused: 1 });
-        expect(refusals("b")).toEqual([{ vectorIndex: 0, tagId: "jane" }]);
-        expect(refusals("a")).toEqual([]);
-        // And a later confirm does not override the refusal it was told.
-        expect(faceRepo.decideGroup("g1", "jane", "confirm", "someone", shown)).toBe(1);
-        expect(faces("b").map((f) => f.tagId)).toEqual([null]);
-    });
-
-    it("says how each confirmation and refusal was made", () => {
-        setUp([
-            { id: "a", groups: ["g1", "g1"] },
-            { id: "b", groups: ["g1"] },
-        ]);
-        const [seen, unseen] = faces("a").map((f) => f.id);
-
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone", [seen]);
-        faceRepo.refuseOnItem("b", "kim", ["g1"], "someone", [], "item");
-
-        expect(
-            db.prepare(`SELECT "id", "decidedHow" FROM "Face" WHERE "mediaId" = 'a'`).all()
-        ).toEqual(
-            expect.arrayContaining([
-                { id: seen, decidedHow: "shown" },
-                { id: unseen, decidedHow: "inferred" },
-            ])
-        );
-        expect(db.prepare(`SELECT "how" FROM "FaceRefusal"`).pluck().all()).toEqual(["item"]);
-    });
-
-    it("lists untagged items in the groups, without those refused for the performer", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1", "g1"] },
-        ]);
-
-        expect(
-            faceRepo
-                .untaggedInGroups(["g1"], "jane", [ROOT])
-                .map((row) => row.mediaId)
-                .sort()
-        ).toEqual(["b", "c"]);
-
-        faceRepo.refuseOnItem("c", "jane", ["g1"], "someone");
-
-        expect(faceRepo.untaggedInGroups(["g1"], "jane", [ROOT]).map((row) => row.mediaId)).toEqual(
-            ["b"]
-        );
-    });
-
-    it("gives every performer's pairs the same counts their own page does", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"], performers: ["jane"] },
-            { id: "c", groups: ["g1", "g2"], performers: ["kim"] },
-            { id: "d", groups: ["g2"] },
-            { id: "e", groups: ["g3"] },
-        ]);
-        faceRepo.decideGroup("g3", "kim", "confirm", "someone", [faces("e")[0].id]);
-
-        const pairs = faceRepo.groupEvidence([ROOT]);
-        const pair = (tagId: string, groupId: string) =>
-            pairs.find((row) => row.tagId === tagId && row.groupId === groupId);
-
-        expect(pair("jane", "g1")).toEqual({
-            tagId: "jane",
-            ...evidence("g1"),
-            // Review › Faces' kind control (§5f): every item here is a video.
-            untaggedVideos: evidence("g1").untaggedCount,
-            untaggedPhotos: 0,
-        });
-        expect(pair("kim", "g1")).toMatchObject({ taggedAsThem: 1, taggedAsOthers: 2 });
-        expect(pair("kim", "g2")).toMatchObject({ itemCount: 2, untaggedCount: 1 });
-        // A confirmed face is a pair with nothing tagged behind it.
-        expect(pair("kim", "g3")).toMatchObject({ confirmed: 1, taggedAsThem: 0 });
-        expect(pair("jane", "g2")).toBeUndefined();
-        expect(faceRepo.groupEvidence([])).toEqual([]);
-
-        // An item whose face was refused for them is decided: nothing left to ask about it.
-        faceRepo.refuseOnItem("d", "kim", ["g2"], "someone");
-
-        expect(
-            faceRepo
-                .groupEvidence([ROOT])
-                .find((row) => row.tagId === "kim" && row.groupId === "g2")
-        ).toMatchObject({ untaggedCount: 0 });
-    });
-
-    it("sizes the groups on enough items", () => {
-        setUp([
-            { id: "a", groups: ["g1", "g1"] },
-            { id: "b", groups: ["g1", "g2"] },
-        ]);
-
-        expect(faceRepo.groupSizes([ROOT], 2)).toEqual([
-            {
-                groupId: "g1",
-                faceCount: 3,
-                itemCount: 2,
-                openItems: 2,
-                skippedItems: 0,
-                leftItems: 0,
-                cohesion: null,
-                openVideos: 2,
-                openPhotos: 0,
-                leftVideos: 0,
-                leftPhotos: 0,
-            },
-        ]);
-
-        // "Can't tell" of a's faces: the group knows how much of it is still open.
-        expect(faceRepo.skipFaces("g1", ["a"], "someone")).toBe(2);
-        expect(faceRepo.groupSizes([ROOT], 2)[0]).toMatchObject({ openItems: 1, skippedItems: 1 });
-        expect(faceRepo.sampleFaces("g1", [ROOT], 10, "open").map((row) => row.mediaId)).toEqual([
-            "b",
-        ]);
-        expect(
-            faceRepo
-                .groupSizes([ROOT], 1)
-                .map((row) => row.groupId)
-                .sort()
-        ).toEqual(["g1", "g2"]);
-
-        // Review › Faces opens on videos (§5f): a photo's faces are counted and sampled apart.
-        db.prepare(`UPDATE "Media" SET "kind" = 'image' WHERE "id" = 'b'`).run();
-
-        expect(faceRepo.groupSizes([ROOT], 2)[0]).toMatchObject({
-            openItems: 1,
-            openVideos: 0,
-            openPhotos: 1,
-        });
-        expect(faceRepo.sampleFaces("g1", [ROOT], 10, "open", "video")).toEqual([]);
-        expect(
-            faceRepo.sampleFaces("g1", [ROOT], 10, "open", "image").map((row) => row.mediaId)
-        ).toEqual(["b"]);
-    });
-
-    it("counts as open only the faces nobody has named or set aside", () => {
-        setUp([
-            { id: "a", groups: ["g1"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-
-        expect(faceRepo.groupSizes([ROOT], 2)[0]).toMatchObject({ itemCount: 3, openItems: 2 });
-        expect(
-            faceRepo
-                .sampleFaces("g1", [ROOT], 10, "open")
-                .map((row) => row.mediaId)
-                .sort()
-        ).toEqual(["b", "c"]);
-    });
-
-    it("takes a grab bag's undecided faces out of grouping for good, and dissolves the group", () => {
-        setUp([
-            { id: "a", groups: ["g1"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        faceRepo.confirmOnItems("g1", "jane", ["c"], "someone");
-
-        expect(faceRepo.scatterGroup("g1", "someone")).toBe(2);
-        expect(faceRepo.dissolvedGroups()).toEqual(["g1"]);
-        // Never grouped again; the confirmed face stays hers, and in its group.
-        expect(faceRepo.facesToGroup("a")).toEqual([]);
-        expect(faces("c").map((f) => f.tagId)).toEqual(["jane"]);
-        expect(faceRepo.groupSizes([ROOT], 1).map((g) => g.groupId)).toEqual(["g1"]);
-
-        // Found again by a re-run, a face stays out.
-        faceRepo.replaceForMedia("a", [face(0, 0, 0)]);
-        expect(faceRepo.facesToGroup("a")).toEqual([]);
-
-        faceRepo.forgetDissolved(["g1"]);
-        expect(faceRepo.dissolvedGroups()).toEqual([]);
-    });
-
-    it("keeps each group's cohesion, replaced whole", () => {
-        setUp([
-            { id: "a", groups: ["g1"] },
-            { id: "b", groups: ["g1"] },
-        ]);
-
-        expect(faceRepo.hasGroupStats()).toBe(false);
-
-        faceRepo.replaceGroupStats([{ groupId: "g1", cohesion: 0.48 }]);
-
-        expect(faceRepo.groupSizes([ROOT], 2)[0].cohesion).toBe(0.48);
-        expect(faceRepo.hasGroupStats()).toBe(true);
-    });
-
-    it("counts what is left of a group of two people once one is named", () => {
-        setUp([
-            { id: "a", groups: ["g1"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-        faceRepo.refuseOnItem("b", "jane", ["g1"], "someone");
-        faceRepo.refuseOnItem("c", "jane", ["g1"], "someone");
-
-        expect(faceRepo.groupSizes([ROOT], 2)[0]).toMatchObject({ leftItems: 2 });
-        expect(
-            faceRepo
-                .sampleFaces("g1", [ROOT], 10, "left")
-                .map((row) => row.mediaId)
-                .sort()
-        ).toEqual(["b", "c"]);
-
-        // Named in turn, or skipped, they are left over no longer.
-        faceRepo.confirmOnItems("g1", "kim", ["b"], "someone");
-        faceRepo.skipFaces("g1", ["c"], "someone");
-
-        expect(faceRepo.groupSizes([ROOT], 1)[0]).toMatchObject({ leftItems: 0 });
-    });
-
-    it("confirms only the items' faces said to be them, and not a refused one", () => {
-        setUp([
-            { id: "a", groups: ["g1"] },
-            { id: "b", groups: ["g1", "g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        refuse(faces("b")[1].id, "jane");
-
-        expect(faceRepo.confirmOnItems("g1", "jane", ["a", "b"], "someone")).toBe(2);
-        expect(faces("a").map((row) => row.tagId)).toEqual(["jane"]);
-        expect(faces("b").map((row) => row.tagId)).toEqual(["jane", null]);
-        expect(faces("c").map((row) => row.tagId)).toEqual([null]);
-    });
-
-    it("counts confirmations and refusals by item, not by face", () => {
-        setUp([
-            { id: "a", groups: ["g1", "g1", "g1"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-        faceRepo.refuseOnItem("b", "jane", ["g1"], "someone");
-        faceRepo.refuseOnItem("c", "jane", ["g1"], "someone");
-
-        // Three confirmed faces on one item, against two items refused: two to one.
-        expect(evidence("g1")).toMatchObject({ confirmed: 1, refused: 2 });
-    });
-
-    it("leaves faces set aside, and refusals withdrawn, where they belong", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
-        ]);
-        faceRepo.skipFaces("g1", ["b"], "someone");
-        faceRepo.refuseOnItem("c", "jane", ["g1"], "someone");
-
-        // b is set aside and c refused: nothing left to ask about.
-        expect(faceRepo.untaggedInGroups(["g1"], "jane", [ROOT])).toEqual([]);
-        expect(evidence("g1")).toMatchObject({ untaggedCount: 0 });
-
-        expect(faceRepo.withdrawRefusals("g1", "jane", ["c"])).toBe(1);
-        expect(faceRepo.untaggedInGroups(["g1"], "jane", [ROOT]).map((row) => row.mediaId)).toEqual(
-            ["c"]
-        );
-    });
-
-    it("lists the faces on items already tagged with the performer, to compare with", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1", "g1"], performers: ["jane"] },
-        ]);
-
-        // c's second face is the larger, and it is the one shown.
-        expect(
-            faceRepo.taggedInGroup("g1", "jane", [ROOT], 10).map((row) => [row.mediaId, row.x])
-        ).toEqual([
-            ["c", 0.1],
-            ["a", 0],
-        ]);
-        expect(faceRepo.taggedInGroup("g1", "jane", [ROOT], 1)).toHaveLength(1);
-    });
-
-    it("answers about a performer's own groups as the whole library would", () => {
-        setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"], performers: ["jane"] },
-            { id: "c", groups: ["g1", "g2"], performers: ["kim"] },
-            { id: "d", groups: ["g2"] },
-            { id: "e", groups: ["g3"] },
-        ]);
-        faceRepo.decideGroup("g3", "kim", "confirm", "someone", [faces("e")[0].id]);
-        faceRepo.refuseOnItem("d", "kim", ["g2"], "someone");
-        faceRepo.replaceAnchors(
-            [],
-            [
-                { faceId: faces("d")[0].id, tagId: "jane", score: 0.7, second: 0.1 },
-                // Like her, but barely more than like somebody else.
-                { faceId: faces("e")[0].id, tagId: "jane", score: 0.6, second: 0.55 },
-            ]
-        );
-
-        // Her tags reach g1; kim's tags and his confirmation reach all three; her likeness, g2.
-        expect(faceRepo.performerGroupIds("jane")).toEqual(["g1"]);
-        expect(faceRepo.performerGroupIds("kim").sort()).toEqual(["g1", "g2", "g3"]);
-        expect(faceRepo.likenessGroupIds("jane", 0.45, 0.1)).toEqual(["g2"]);
-
-        const only = ["g2", "g3"];
-        const inOnly = <T extends { groupId: string }>(rows: T[]) =>
-            rows.filter((row) => only.includes(row.groupId));
-
-        expect(faceRepo.groupEvidence([ROOT], only)).toEqual(
-            inOnly(faceRepo.groupEvidence([ROOT]))
-        );
-        expect(faceRepo.groupSizes([ROOT], 1, only)).toEqual(
-            inOnly(faceRepo.groupSizes([ROOT], 1))
-        );
-        expect(faceRepo.groupLikenesses([ROOT], 0.45, 0.1, only)).toEqual(
-            inOnly(faceRepo.groupLikenesses([ROOT], 0.45, 0.1))
-        );
-        expect(faceRepo.groupRefusals(only)).toEqual(inOnly(faceRepo.groupRefusals()));
-        expect(faceRepo.groupEvidence([ROOT], [])).toEqual([]);
-
-        // Counted as `untaggedInGroups` lists them: d's face was refused for kim.
-        expect(
-            faceRepo.untaggedCounts(
-                [
-                    { groupId: "g1", tagId: "jane" },
-                    { groupId: "g2", tagId: "kim" },
-                    { groupId: "g2", tagId: "jane" },
-                ],
-                [ROOT]
-            )
-        ).toEqual([
-            { groupId: "g1", tagId: "jane", items: 1, videos: 1, photos: 0 },
-            { groupId: "g2", tagId: "jane", items: 2, videos: 2, photos: 0 },
-        ]);
-    });
-
-    it("keeps the refusals by group", () => {
-        setUp([{ id: "a", groups: ["g1", "g2"] }]);
-        faceRepo.refuseOnItem("a", "jane", ["g2"], "someone");
-
-        expect(faceRepo.groupRefusals()).toEqual([{ groupId: "g2", tagId: "jane" }]);
-    });
-
     it("keeps references and best matches whole, and reads them back", () => {
         setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1"] },
-            { id: "c", groups: ["g1"] },
+            { id: "a", faces: 1, performers: ["jane"] },
+            { id: "b", faces: 1 },
         ]);
-        const [fa, fb, fc] = ["a", "b", "c"].map((id) => faces(id)[0].id);
+        const [fa, fb] = ["a", "b"].map((id) => faces(id)[0].id);
 
         faceRepo.replaceAnchors(
             [{ tagId: "jane", items: 3, confirmedItems: 0, sharedItems: 3 }],
             [
                 { faceId: fa, tagId: "jane", score: 0.7, second: 0.1 },
                 { faceId: fb, tagId: "jane", score: 0.6, second: 0.2 },
-                // Like her, but barely more than like somebody else.
-                { faceId: fc, tagId: "jane", score: 0.6, second: 0.55 },
                 { faceId: "gone", tagId: "jane", score: 0.9, second: 0 },
             ]
         );
 
         expect(faceRepo.anchorOf("jane")).toMatchObject({ items: 3, sharedItems: 3 });
-        expect(faceRepo.groupLikenesses([ROOT], 0.45, 0.1)).toEqual([
-            { groupId: "g1", tagId: "jane", items: 2 },
-        ]);
-        expect(
-            faceRepo.untaggedLookingLike("jane", [ROOT], 0.45, 0.1).map((row) => row.mediaId)
-        ).toEqual(["b"]);
-        expect(faceRepo.faceFromTags("jane", [ROOT], 5).map((row) => row.mediaId)).toEqual(["a"]);
 
         faceRepo.replaceAnchors([], []);
 
         expect(faceRepo.anchorOf("jane")).toBeUndefined();
     });
 
-    it("leaves a performer with no single face out of every face question, and back when undone", () => {
+    it("leaves a performer with no single face out of every reference, and back when undone", () => {
         setUp([
-            // Kim has no single face; Jane is on screen with her in b.
-            { id: "a", groups: ["g1"], performers: ["kim"] },
-            { id: "b", groups: ["g1"], performers: ["jane", "kim"] },
-            { id: "c", groups: ["g1"], performers: ["jane"] },
+            { id: "a", faces: 1, performers: ["kim"] },
+            { id: "b", faces: 1, performers: ["jane", "kim"] },
         ]);
-        faceRepo.confirmOnItems("g1", "kim", ["a"], "someone");
+        confirm(faces("a")[0].id, "kim");
 
         faceRepo.setNoSingleFace("kim", true, "someone");
 
         expect(faceRepo.noSingleFace("kim")).toBeDefined();
-        // Her confirmation and her tags are evidence about no group...
-        expect(faceRepo.groupEvidence([ROOT]).some((row) => row.tagId === "kim")).toBe(false);
         expect(faceRepo.confirmedFaceRefs().some((row) => row.tagId === "kim")).toBe(false);
         expect(faceRepo.taggedFaceRefs(10).some((row) => row.tagId === "kim")).toBe(false);
-        // ...and b, with her set aside, is a single-performer item of Jane's.
-        expect(evidence("g1")).toMatchObject({ taggedAsThem: 2 });
 
         faceRepo.setNoSingleFace("kim", false, "someone");
 
         expect(faceRepo.noSingleFace("kim")).toBeUndefined();
         expect(faceRepo.confirmedFaceRefs().some((row) => row.tagId === "kim")).toBe(true);
-        expect(evidence("g1")).toMatchObject({ taggedAsThem: 1 });
     });
 
     it("finds the faces on each performer's tagged items, not refused, not made by a face", () => {
         setUp([
-            { id: "a", groups: ["g1"], performers: ["jane"] },
-            { id: "b", groups: ["g1", "g2"], performers: ["jane"] },
+            { id: "a", faces: 1, performers: ["jane"] },
+            { id: "b", faces: 2, performers: ["jane"] },
         ]);
         db.prepare(
             `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "source") VALUES ('x', 'b', 'kim', 'ai')`
         ).run();
-        faceRepo.refuseOnItem("b", "jane", ["g2"], "someone");
+        refuse(faces("b")[1].id, "jane");
 
         const rows = faceRepo.taggedFaceRefs(10);
 
@@ -783,31 +326,13 @@ describe("a performer's faces", () => {
         ]);
     });
 
-    it("finds where faces' vectors are, and an item's other faces in a group", () => {
-        setUp([{ id: "a", groups: ["g1", "g1", "g2"] }]);
-
-        const ids = faces("a").map((row) => row.id);
-
-        expect(
-            faceRepo
-                .vectorRefs([ids[0], ids[2], "gone"])
-                .map((row) => [row.vectorIndex, row.groupId])
-                .sort()
-        ).toEqual([
-            [0, "g1"],
-            [2, "g2"],
-        ]);
-        expect(faceRepo.itemFacesInGroup("g1", "a", [ROOT], 5)).toHaveLength(2);
-        expect(faceRepo.itemFacesInGroup("g1", "a", [], 5)).toEqual([]);
-    });
-
     it("pages every confirmed face, every moment, largest first", () => {
         setUp([
-            { id: "a", groups: ["g1", "g1"] },
-            { id: "b", groups: ["g2"] },
+            { id: "a", faces: 2 },
+            { id: "b", faces: 1 },
         ]);
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-        faceRepo.confirmOnItems("g2", "jane", ["b"], "someone");
+
+        for (const row of [...faces("a"), ...faces("b")]) confirm(row.id, "jane");
 
         const first = faceRepo.everyConfirmedFace("jane", [ROOT], 2, 0);
 
@@ -815,34 +340,6 @@ describe("a performer's faces", () => {
         expect(first.faces).toHaveLength(2);
         expect(faceRepo.everyConfirmedFace("jane", [ROOT], 2, 2).faces).toHaveLength(1);
         expect(faceRepo.everyConfirmedFace("jane", [], 2, 0)).toEqual({ faces: [], total: 0 });
-    });
-
-    it("gathers their confirmed faces across groups, one an item", () => {
-        setUp([
-            { id: "a", groups: ["g1", "g1"] },
-            { id: "b", groups: ["g2"] },
-            { id: "c", groups: ["g3"] },
-        ]);
-        faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-        faceRepo.confirmOnItems("g2", "jane", ["b"], "someone");
-
-        expect(faceRepo.confirmedFaces("jane", [ROOT], 10).map((row) => row.mediaId)).toEqual([
-            "a",
-            "b",
-        ]);
-    });
-
-    it("samples one face an item, largest first, and only from items the viewer can see", () => {
-        setUp([
-            { id: "a", groups: ["g1", "g1"] },
-            { id: "b", groups: ["g1"] },
-        ]);
-
-        expect(faceRepo.sampleFaces("g1", [ROOT], 10).map((row) => row.mediaId)).toEqual([
-            "a",
-            "b",
-        ]);
-        expect(faceRepo.sampleFaces("g1", [], 10)).toEqual([]);
     });
 });
 

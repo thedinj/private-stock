@@ -1,27 +1,24 @@
 "use client";
 
-import { Box, Button, Group, Loader, SegmentedControl, Stack, Text } from "@mantine/core";
+import { Box, Button, Group, SegmentedControl, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import type { FaceReviewFace } from "@private-stock/core";
 
-import { useFacePeek } from "@/lib/api/faces";
 import { spriteCropStyle } from "@/lib/spriteCrop";
 import { formatTimecode } from "@/lib/timecode";
 
 import { FaceCropView } from "./FaceCropView";
-import type { TickState } from "./FaceReviewRow";
+import type { TickState } from "./faceControls";
 
 /**
- * A closer look at one face in a review row (§5f "Checking faces quickly"), without leaving it:
+ * A closer look at one person on a card (§5f "A person in a video"), without leaving it:
  * the whole frame it was found in, with the face marked, and the same item's other moments of
  * that person. Most "is that them?" is settled here; "Play it here" is for the rest.
  */
 export const FacePeek: React.FC<{
-    /** The group the face is in: its other moments are fetched from it. */
-    groupId?: string;
-    /** Or the same person's other moments, already known — an appearance's (§5f). */
-    others?: FaceReviewFace[];
+    /** The same person's other moments in the item: an appearance's (§5f). */
+    others: FaceReviewFace[];
     face: FaceReviewFace;
     /** What is being said of the face; without it the look only looks. */
     state?: TickState;
@@ -29,9 +26,8 @@ export const FacePeek: React.FC<{
     threeWay: boolean;
     onSet?: (state: TickState) => void;
     onPlay: () => void;
-}> = ({ groupId, others, face, state, threeWay, onSet, onPlay }) => {
+}> = ({ others, face, state, threeWay, onSet, onPlay }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
-    const fetched = useFacePeek(groupId ?? "", face.mediaId, others === undefined && !!groupId);
     const { frame, rect } = face.crop;
     const width = isPhone ? 260 : 380;
     // The square around the face, as fractions of the frame.
@@ -41,7 +37,7 @@ export const FacePeek: React.FC<{
         width: `${(rect.width / frame.width) * 100}%`,
         height: `${(rect.height / frame.height) * 100}%`,
     };
-    const more = (others ?? fetched.data?.faces ?? []).filter((other) => other.id !== face.id);
+    const more = others.filter((other) => other.id !== face.id);
 
     return (
         <Stack gap="xs" w={width}>
@@ -74,9 +70,7 @@ export const FacePeek: React.FC<{
                 </Text>
             )}
 
-            {others === undefined && fetched.isPending ? (
-                <Loader size="xs" />
-            ) : more.length > 0 ? (
+            {more.length > 0 ? (
                 <Stack gap={4}>
                     <Text size="xs" c="dimmed">
                         The same person elsewhere in this item

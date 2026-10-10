@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
     Affix,
     Alert,
-    Anchor,
     Badge,
     Box,
     Button,
@@ -22,7 +21,7 @@ import type { FaceReviewFace, ReviewMedia, Suggestion } from "@private-stock/cor
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { useDecideSuggestions, useSuggestionPeople, useSuggestions } from "@/lib/api/faces";
 
-import { nextTick, type TickState } from "./FaceReviewRow";
+import { nextTick, type TickState } from "./faceControls";
 import { FaceViewDrawer } from "./FaceViewDrawer";
 import { MARKS, PersonCardView } from "./PersonCardView";
 
@@ -317,9 +316,7 @@ export const SuggestionsSheet: React.FC<{
     onPerformer: (tagId: string | null) => void;
     media: ReviewMedia;
     onMedia: (media: ReviewMedia) => void;
-    /** The old face-group review, kept behind a link for now. */
-    onGroups: () => void;
-}> = ({ performer, onPerformer, media, onMedia, onGroups }) => (
+}> = ({ performer, onPerformer, media, onMedia }) => (
     <Stack gap="md">
         <ReviewKindFilter value={media} onChange={onMedia} />
 
@@ -334,11 +331,7 @@ export const SuggestionsSheet: React.FC<{
             <>
                 <Text size="sm" c="dimmed">
                     People in items who look clearly like a performer, one card for each person in
-                    each item. Only clear matches are asked about.{" "}
-                    <Anchor component="button" type="button" size="sm" onClick={onGroups}>
-                        The old face groups
-                    </Anchor>{" "}
-                    are still there for now.
+                    each item. Only clear matches are asked about.
                 </Text>
                 <SuggestionPeople media={media} onPerformer={(tagId) => onPerformer(tagId)} />
             </>

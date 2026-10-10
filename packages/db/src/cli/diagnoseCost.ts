@@ -25,8 +25,10 @@ import {
     DEFAULT_HOME_LAYOUT,
     homeLayoutSchema,
     isViewerRelative,
-    LOOKS_LIKE,
-    LOOKS_LIKE_MARGIN,
+    NEW_PERSON_MIN_ITEMS,
+    SUGGEST_LINE,
+    SUGGEST_MARGIN,
+    SUGGEST_NAMED_LINE,
     mediaQuerySchema,
     PROGRESS_STAGE_NAMES,
     savedQuerySchema,
@@ -41,7 +43,7 @@ import {
     artifactRepo,
     clipRepo,
     dupeRepo,
-    faceRepo,
+    appearanceRepo,
     homeLayoutRepo,
     jobRepo,
     mediaRepo,
@@ -452,46 +454,47 @@ const ENDPOINTS: Endpoint[] = [
         },
     },
     {
-        // Review › Faces' pairs (§5f): every group in the library, every request.
-        name: "GET /api/faces/review (pairs, library-wide)",
+        // Suggestions (§5f): every performer with any, counted across the library's people.
+        name: "GET /api/faces/suggestions/people",
         run: (viewer) => {
-            faceRepo.groupEvidence(viewer.rootIds);
-            faceRepo.groupRefusals();
-            faceRepo.groupSizes(viewer.rootIds, 1);
-            faceRepo.groupLikenesses(viewer.rootIds, LOOKS_LIKE, LOOKS_LIKE_MARGIN);
+            appearanceRepo.suggestedPerformers(viewer.rootIds, SUGGESTED, null);
         },
     },
     {
-        // A performer's Organise page (§5f): the same pairs, asked of only their groups. The
-        // performer with the most confirmed faces, the costliest there is.
-        name: "GET /api/tags/:id/faces + /likely (pairs, one performer)",
+        // One performer's suggestions: the one with the most, the costliest there is.
+        name: "GET /api/faces/suggestions (one performer)",
         run: (viewer) => {
-            const busiest = getDb()
-                .prepare(
-                    `SELECT "tagId" FROM "Face" WHERE "tagId" IS NOT NULL
-                      GROUP BY "tagId" ORDER BY count(*) DESC LIMIT 1`
-                )
-                .get() as { tagId: string } | undefined;
+            const [busiest] = appearanceRepo.suggestedPerformers(viewer.rootIds, SUGGESTED, null);
 
-            if (!busiest) {
-                return;
+            if (busiest) {
+                appearanceRepo.suggestions({
+                    tagId: busiest.tagId,
+                    rootIds: viewer.rootIds,
+                    lines: SUGGESTED,
+                    kind: null,
+                    after: null,
+                    limit: 25,
+                });
             }
+        },
+    },
+    {
+        // New people (§5f): the gatherings worth asking about, and a page of their people.
+        name: "GET /api/faces/new-people",
+        run: (viewer) => {
+            const { rows } = appearanceRepo.newPeople(viewer.rootIds, NEW_PERSON_MIN_ITEMS, 0, 6);
 
-            const groupIds = [
-                ...new Set([
-                    ...faceRepo.performerGroupIds(busiest.tagId),
-                    ...faceRepo.likenessGroupIds(busiest.tagId, LOOKS_LIKE, LOOKS_LIKE_MARGIN),
-                ]),
-            ];
-
-            faceRepo.groupEvidence(viewer.rootIds, groupIds);
-            faceRepo.groupRefusals(groupIds);
-            faceRepo.groupSizes(viewer.rootIds, 1, groupIds);
-            faceRepo.groupLikenesses(viewer.rootIds, LOOKS_LIKE, LOOKS_LIKE_MARGIN, groupIds);
-            faceRepo.untaggedInGroups(groupIds, busiest.tagId, viewer.rootIds);
+            appearanceRepo.newPersonPeople(
+                rows.map((row) => row.newPersonId),
+                viewer.rootIds,
+                8
+            );
         },
     },
 ];
+
+/** The lines Suggestions are drawn at, as the web app draws them. */
+const SUGGESTED = { line: SUGGEST_LINE, margin: SUGGEST_MARGIN, namedLine: SUGGEST_NAMED_LINE };
 
 /**
  * The layout `/api/home` would render for this viewer: theirs, else the admin default, then

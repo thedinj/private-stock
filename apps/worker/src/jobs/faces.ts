@@ -11,7 +11,8 @@ import { loadConfig } from "@private-stock/core/server";
 import { artifactRepo, faceRepo, mediaRepo } from "@private-stock/db";
 
 import { facesInChild } from "../embed/embedder.js";
-import { enqueueFaceGroups } from "./faceGroups.js";
+import { enqueueFaceAnchors } from "./faceAnchors.js";
+import { enqueueTagPictures } from "./tagPictures.js";
 import type { FacesSource } from "../embed/protocol.js";
 import { placeDataFile, settledTwin } from "../media/twin.js";
 import type { JobRow } from "../queue.js";
@@ -89,6 +90,19 @@ const imageSources = (mediaId: string): FacesSource[] => {
     ];
 };
 
+/** Long enough for an import's burst of faces jobs to arrive; short enough to see them soon. */
+const FACES_SETTLE_MS = 10 * 60 * 1000;
+
+/**
+ * New faces on an item: its people, and everybody's matches and suggestions, are out of date, and
+ * a confirmation carried over from a re-run may change a performer's picture. One references run
+ * after the burst settles (§5f "A person in a video"); the queue keeps one pending.
+ */
+const facesChanged = (): void => {
+    enqueueFaceAnchors(FACES_SETTLE_MS);
+    enqueueTagPictures();
+};
+
 export const runFaces = async (job: JobRow): Promise<StageOutcome | void> => {
     if (!job.mediaId || !job.fileId) {
         throw new Error("faces job requires both mediaId and fileId");
@@ -120,7 +134,7 @@ export const runFaces = async (job: JobRow): Promise<StageOutcome | void> => {
             });
 
             if (faceRepo.copyFromTwin(twin.mediaId, job.mediaId) > 0) {
-                enqueueFaceGroups();
+                facesChanged();
 
                 return "done";
             }
@@ -154,6 +168,5 @@ export const runFaces = async (job: JobRow): Promise<StageOutcome | void> => {
         return "empty";
     }
 
-    // New faces, so the library's groups are out of date; one run after the burst settles.
-    enqueueFaceGroups();
+    facesChanged();
 };

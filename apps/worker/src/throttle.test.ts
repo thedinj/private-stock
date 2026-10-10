@@ -241,10 +241,11 @@ describe("cpuSlots and the shared budget", () => {
 
         // The measurement that motivated the budget: throttling moved the ceiling by two (26 and
         // 24 when it was taken). `embed` and `faces` have since added one each at full speed and
-        // none outside the window, where only requested passes run; `faceGroups`,
-        // `faceAnchors`, `tagPictures` and `tagLookPictures` one each at both.
-        expect(sum(false)).toBe(32);
-        expect(sum(true)).toBe(28);
+        // none outside the window, where only requested passes run; `faceAnchors`,
+        // `tagPictures` and `tagLookPictures` one each at both (`faceGroups`, gone with face
+        // groups, was one more).
+        expect(sum(false)).toBe(31);
+        expect(sum(true)).toBe(27);
     });
 
     it("leaves a core for the web process, and halves that inside the window", () => {

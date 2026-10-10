@@ -307,13 +307,6 @@ export const writeFaceInput = (
  */
 export const SAME_PERSON_IN_ITEM = 0.35;
 
-/**
- * How alike an item's person and a library group must be to be the same person (§5f). Stricter
- * than within an item: a wrong join is copied into every later comparison with that group, and
- * the review is better shown two groups of one person than one group of two.
- */
-export const SAME_PERSON_IN_LIBRARY = 0.5;
-
 /** One person within an item: which of its faces, and their direction together. */
 export interface ItemPerson {
     members: number[];
@@ -353,85 +346,6 @@ export const peopleInItem = (
     });
 
     return people;
-};
-
-/** A library group: everyone it holds, as the sum of their faces. */
-export interface FaceGroup {
-    id: string;
-    count: number;
-    sum: Float32Array;
-}
-
-/**
- * Where an item's person goes among the library's groups: the nearest group near enough, or a
- * new one. A person near enough to several groups joins them all into the nearest, which is how
- * two groups of one person, started apart, come together.
- *
- * Mutates `groups` — the person's faces are added to the group they join — and returns the
- * group's id, with the ids of any groups merged into it, whose faces the caller must move.
- */
-export const placePerson = (
-    person: ItemPerson,
-    groups: Map<string, FaceGroup>,
-    newId: () => string,
-    near = SAME_PERSON_IN_LIBRARY
-): { groupId: string; merged: string[] } => {
-    const direction = normaliseVector(person.sum);
-    const close = [...groups.values()]
-        .map((group) => ({
-            group,
-            similarity: vectorSimilarity(normaliseVector(group.sum), direction),
-        }))
-        .filter((entry) => entry.similarity >= near)
-        .sort((a, b) => b.similarity - a.similarity);
-
-    if (close.length === 0) {
-        const id = newId();
-
-        groups.set(id, { id, count: person.members.length, sum: Float32Array.from(person.sum) });
-
-        return { groupId: id, merged: [] };
-    }
-
-    const [{ group: target }, ...others] = close;
-
-    for (const { group } of others) {
-        target.sum = target.sum.map((value, i) => value + group.sum[i]);
-        target.count += group.count;
-        groups.delete(group.id);
-    }
-
-    target.sum = target.sum.map((value, i) => value + person.sum[i]);
-    target.count += person.members.length;
-
-    return { groupId: target.id, merged: others.map(({ group }) => group.id) };
-};
-
-/**
- * Below this, a face in a review row is flagged as less like the rest (§5f "Checking faces
- * quickly"): its similarity to the performer's reference (`performerCentre`), or, where there is
- * none, to the row's own faces. Measured 2026-10-08 on the first 2,341 confirmed faces and 147
- * refused ones, across 72 performers: 92% of confirmed faces score above it, 88% of refused ones
- * below.
- */
-export const FACE_DOUBT = 0.35;
-
-/**
- * Below this, a group is "loosely grouped" (§5f "Grab bags"): its faces are on average this close
- * to its centre or less — the mean projection on its direction, `|sum| / count`. Measured
- * 2026-10-08: groups confirmed as one performer sit at 0.62 typically and 0.50 at their loosest
- * twentieth; the grab bags of obscured and turned-away faces at 0.49–0.52. A mark and an order,
- * not a verdict: a loose group may still be one person, filmed badly.
- */
-export const LOOSE_GROUP = 0.52;
-
-/** How tightly a group's faces hold together, from its sum and count. */
-export const groupCohesion = (group: { count: number; sum: Float32Array }): number => {
-    let squares = 0;
-
-    for (let i = 0; i < group.sum.length; i += 1) squares += group.sum[i] * group.sum[i];
-
-    return group.count > 0 ? Math.sqrt(squares) / group.count : 0;
 };
 
 /**
@@ -733,135 +647,6 @@ export const bestMatch = (
 };
 
 /**
- * The library's groups between runs (§5f): each group's id, how many faces it holds and their
- * sum, and how far through the faces the last run got. Kept so that a run reads only the faces
- * added since, rather than every vector in the library; lost, it is rebuilt from the faces.
- */
-export interface FaceGroupsFile {
-    /** The highest `Face` rowid already grouped. */
-    cursor: number;
-    dims: number;
-    groups: Map<string, FaceGroup>;
-}
-
-const GROUPS_MAGIC = [0x50, 0x53, 0x46, 0x47]; // "PSFG"
-
-/** Bytes on disk: magic, a JSON header of ids and counts, then each group's sum as float32. */
-export const encodeFaceGroups = (state: FaceGroupsFile): Uint8Array => {
-    const groups = [...state.groups.values()];
-    const header = new TextEncoder().encode(
-        JSON.stringify({
-            version: 1,
-            cursor: state.cursor,
-            dims: state.dims,
-            groups: groups.map((group) => [group.id, group.count]),
-        })
-    );
-    const bytes = new Uint8Array(8 + header.length + groups.length * state.dims * 4);
-    const view = new DataView(bytes.buffer);
-
-    bytes.set(GROUPS_MAGIC, 0);
-    view.setUint32(4, header.length, true);
-    bytes.set(header, 8);
-
-    let at = 8 + header.length;
-
-    for (const group of groups) {
-        for (let i = 0; i < state.dims; i += 1) {
-            view.setFloat32(at, group.sum[i], true);
-            at += 4;
-        }
-    }
-
-    return bytes;
-};
-
-export const decodeFaceGroups = (bytes: Uint8Array): FaceGroupsFile => {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-    if (GROUPS_MAGIC.some((value, index) => bytes[index] !== value)) {
-        throw new ValidationError("Not a face groups file");
-    }
-
-    const length = view.getUint32(4, true);
-    const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + length))) as {
-        version: number;
-        cursor: number;
-        dims: number;
-        groups: [string, number][];
-    };
-
-    if (header.version !== 1) {
-        throw new ValidationError("A face groups file this version cannot read");
-    }
-
-    let at = 8 + length;
-    const groups = new Map<string, FaceGroup>();
-
-    for (const [id, count] of header.groups) {
-        const sum = new Float32Array(header.dims);
-
-        for (let i = 0; i < header.dims; i += 1) {
-            sum[i] = view.getFloat32(at, true);
-            at += 4;
-        }
-
-        groups.set(id, { id, count, sum });
-    }
-
-    return { cursor: header.cursor, dims: header.dims, groups };
-};
-
-/** What a face group shows about one performer: the counts the proposal rule reads (§5f). */
-export interface GroupEvidence {
-    /** Items in the group carrying exactly one performer, and that performer is this one. */
-    taggedAsThem: number;
-    /** Items in the group carrying exactly one performer, and it is somebody else. */
-    taggedAsOthers: number;
-    /**
-     * Items with a face in the group somebody confirmed as this performer, and as somebody else.
-     * Items, not faces: one video with eight confirmed faces is one item's say, and used to
-     * outvote seven items refused once each.
-     */
-    confirmed: number;
-    confirmedOthers: number;
-    /** Items with a face in the group somebody said is not this performer. */
-    refused: number;
-}
-
-/** Of the group's single-performer items, the share that must be this one to propose them. */
-const PROPOSAL_SHARE = 0.6;
-
-/** And how many: one item is a coincidence, two are a pattern. */
-const PROPOSAL_ITEMS = 2;
-
-/**
- * Whether a face group belongs on a performer's page, and why (§5f "Grouping").
- *
- * - **Confirmed** when somebody has said more of its faces are them than are not.
- * - **Proposed** when nobody has said either, nobody has named the group as someone else, and
- *   most of its items that carry a single performer carry this one — at least two of them.
- *   Items with two performers say nothing: which face is which is exactly what is not known.
- * - Otherwise not: a group somebody refused stays refused until somebody confirms it.
- */
-export const groupStateFor = (evidence: GroupEvidence): "confirmed" | "proposed" | null => {
-    if (evidence.confirmed > 0) {
-        return evidence.confirmed > evidence.refused ? "confirmed" : null;
-    }
-
-    if (evidence.refused > 0 || evidence.confirmedOthers > 0) {
-        return null;
-    }
-
-    const single = evidence.taggedAsThem + evidence.taggedAsOthers;
-
-    return evidence.taggedAsThem >= PROPOSAL_ITEMS &&
-        evidence.taggedAsThem >= single * PROPOSAL_SHARE
-        ? "proposed"
-        : null;
-};
-
-/**
  * Appearances (§5f "A person in a video"): one person in one item — what is shown and asked
  * about, rather than each face the stage happened to keep. Within one item a looser line than
  * across the library is safe: the faces share the item's light and grain, and look-alikes rarely
@@ -935,3 +720,61 @@ export const appearancesInItem = (
                 legible: faces[best].eyes >= LEGIBLE_EYES && faces[best].score >= LEGIBLE_SCORE,
             };
         });
+
+/**
+ * New people (§5f "New people"): people in items who match nobody known, gathered across the
+ * library into the ones worth naming — what replaces Unnamed and its groups.
+ *
+ * Only people who match no reference (`NEW_PERSON_UNMATCHED`), nobody decided about, with a clear
+ * face (`NEW_PERSON_EYES`, `NEW_PERSON_SCORE` — stricter than to be shown, as a stranger is named
+ * from a few faces alone). Each joins the nearest gathering whose centre is `NEW_PERSON_NEAR` like
+ * them, or starts one; nothing merges by a bridging face. A gathering on fewer than
+ * `NEW_PERSON_MIN_ITEMS` items is a face seen in passing, and is not asked about. Measured
+ * 2026-10-10: about 110 gatherings of three or more, covering some 460 videos, median four.
+ */
+export const NEW_PERSON_UNMATCHED = 0.4;
+export const NEW_PERSON_EYES = 20;
+export const NEW_PERSON_SCORE = 0.7;
+export const NEW_PERSON_NEAR = 0.55;
+export const NEW_PERSON_MIN_ITEMS = 3;
+
+/**
+ * Gather people into new people: each, in the order given, joins the gathering whose centre is
+ * nearest if at least `near` alike, or starts one. Returns each person's gathering, by index, and
+ * which gatherings rest on `minItems` items or more — the rest are null.
+ */
+export const gatherNewPeople = (
+    people: readonly { centre: Float32Array; mediaId: string }[],
+    near = NEW_PERSON_NEAR,
+    minItems = NEW_PERSON_MIN_ITEMS
+): (number | null)[] => {
+    const sums: Float32Array[] = [];
+    const items: Set<string>[] = [];
+    const joined = people.map((person) => {
+        let best = -1;
+        let bestSimilarity = near;
+
+        sums.forEach((sum, index) => {
+            const similarity = vectorSimilarity(normaliseVector(sum), person.centre);
+
+            if (similarity >= bestSimilarity) {
+                best = index;
+                bestSimilarity = similarity;
+            }
+        });
+
+        if (best < 0) {
+            sums.push(Float32Array.from(person.centre));
+            items.push(new Set([person.mediaId]));
+
+            return sums.length - 1;
+        }
+
+        sums[best] = sums[best].map((value, i) => value + person.centre[i]);
+        items[best].add(person.mediaId);
+
+        return best;
+    });
+
+    return joined.map((index) => (items[index].size >= minItems ? index : null));
+};

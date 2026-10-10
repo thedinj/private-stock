@@ -7,7 +7,6 @@ import { Box, Button, Center, Loader, Stack, Tabs, Text } from "@mantine/core";
 import { reviewMedia } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
-import { LikelySection } from "@/components/faces/LikelySection";
 import { PerformerFacesTab } from "@/components/faces/PerformerFacesTab";
 import { PerformerSuggestions } from "@/components/faces/SuggestionsSheet";
 import { SectionHead } from "@/components/library/LibraryRoom";
@@ -26,11 +25,11 @@ import { useTagSeed } from "@/lib/useTagSeed";
  * The tag's page is for browsing it; finding more of it is here. For a library performer, to an
  * administrator, two tabs:
  *
- * - **To check**: everything that says an untagged item is them, strongest first. Where a face
- *   of theirs and their name agree ("Likely"), item by item, with "Add to all"; then their
- *   Suggestions (§5f "Suggestions"), a card for each person in each item that looks clearly like
- *   them; and what only their name points to, handed to the grid, where a long list is ticked
- *   fastest.
+ * - **To check**: everything that says an untagged item is them. Their Suggestions (§5f
+ *   "Suggestions"), a card for each person in each item that looks clearly like them — a face and
+ *   their name together are among them, at a lower line — and what only their name points to,
+ *   handed to the grid, where a long list is ticked fastest. (Until 2026-10-10, "Likely" listed
+ *   items where a face of theirs and their name agreed; Suggestions does that now.)
  * - **Faces**: who is confirmed as them, their own items with nobody confirmed yet, and who was
  *   ruled out — each correctable (§5f "Their faces").
  *
@@ -85,10 +84,6 @@ const PerformerOrganise: React.FC<{ tagId: string; name: string }> = ({ tagId, n
 
             <Tabs.Panel value="check">
                 <Stack gap={40}>
-                    {/* Links to "Find untagged" itself, counted, for what only the name points to. */}
-                    <LikelySection tagId={tagId} name={name} />
-
-                    {/* Last: it is a long list that loads as it is read. */}
                     <Box>
                         <SectionHead title="Suggestions" />
                         <Stack gap="md">
@@ -103,6 +98,7 @@ const PerformerOrganise: React.FC<{ tagId: string; name: string }> = ({ tagId, n
                             />
                         </Stack>
                     </Box>
+                    <FindUntagged tagId={tagId} name={name} />
                 </Stack>
             </Tabs.Panel>
 

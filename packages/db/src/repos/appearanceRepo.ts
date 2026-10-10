@@ -20,6 +20,8 @@ export interface AppearanceSourceFace {
     kind: MediaKind;
     /** Taken out of grouping as "not one person": scored, but nobody's person. */
     scattered: 0 | 1;
+    /** Confirmed as somebody, or set aside as "later": not a new person to ask about. */
+    decided: 0 | 1;
 }
 
 /**
@@ -31,7 +33,8 @@ export const sourceFaces = (): AppearanceSourceFace[] =>
     db
         .prepare(
             `SELECT f."id", f."mediaId", f."vectorIndex", f."eyes", f."score", m."kind",
-                    f."scatteredAt" IS NOT NULL AS "scattered"
+                    f."scatteredAt" IS NOT NULL AS "scattered",
+                    (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL) AS "decided"
                FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
               ORDER BY f."mediaId", f."vectorIndex"`
         )
@@ -47,14 +50,18 @@ export interface NewAppearance {
     matchTagId: string | null;
     score: number | null;
     second: number | null;
+    /** The new person it is part of (§5f "New people"), if any worth asking about. */
+    newPersonId: string | null;
 }
 
 /** Replace every appearance with a run's. One transaction, so a reader never sees half of one. */
 export const replaceAll = (rows: readonly NewAppearance[]): void => {
     const insert = db.prepare(
         `INSERT INTO "FaceAppearance"
-             ("id", "mediaId", "faceCount", "bestFaceId", "legible", "matchTagId", "score", "second")
-         VALUES (@id, @mediaId, @faceCount, @bestFaceId, @legible, @matchTagId, @score, @second)`
+             ("id", "mediaId", "faceCount", "bestFaceId", "legible", "matchTagId", "score", "second",
+              "newPersonId")
+         VALUES (@id, @mediaId, @faceCount, @bestFaceId, @legible, @matchTagId, @score, @second,
+                 @newPersonId)`
     );
     const member = db.prepare(`UPDATE "Face" SET "appearanceId" = ? WHERE "id" = ?`);
 
@@ -74,6 +81,7 @@ export const replaceAll = (rows: readonly NewAppearance[]): void => {
                 matchTagId: row.matchTagId,
                 score: row.score,
                 second: row.second,
+                newPersonId: row.newPersonId,
             });
 
             for (const faceId of row.faceIds) member.run(row.id, faceId);
@@ -520,3 +528,100 @@ export const personOf = (faceId: string): string[] => {
 
     return faces.length > 0 ? faces : [faceId];
 };
+
+/**
+ * New people worth asking about (§5f "New people"): gatherings on enough items this viewer can
+ * see, the most items first, a page at a time, with how many there are.
+ */
+export const newPeople = (
+    rootIds: readonly string[],
+    minItems: number,
+    offset: number,
+    limit: number
+): { rows: { newPersonId: string; items: number }[]; total: number } => {
+    const params: Record<string, unknown> = { minItems, offset, limit };
+    const where = visible(rootIds, params);
+    const gathered = `
+        SELECT a."newPersonId", count(DISTINCT a."mediaId") AS "items"
+          FROM "FaceAppearance" a JOIN "Media" m ON m."id" = a."mediaId"
+         WHERE a."newPersonId" IS NOT NULL AND ${where}
+           AND NOT EXISTS (SELECT 1 FROM "Face" f
+                            WHERE f."appearanceId" = a."id"
+                              AND (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL
+                                   OR f."scatteredAt" IS NOT NULL))
+         GROUP BY a."newPersonId" HAVING "items" >= :minItems`;
+
+    return {
+        rows: db
+            .prepare(
+                `SELECT * FROM (${gathered}) ORDER BY "items" DESC, "newPersonId" LIMIT :limit OFFSET :offset`
+            )
+            .all(params) as { newPersonId: string; items: number }[],
+        total: db.prepare(`SELECT count(*) FROM (${gathered})`).pluck().get(params) as number,
+    };
+};
+
+/**
+ * The people of these new people still undecided, on items this viewer can see: at most `each`
+ * a gathering, legible and most seen first, one an item.
+ */
+export const newPersonPeople = (
+    newPersonIds: readonly string[],
+    rootIds: readonly string[],
+    each: number
+): {
+    id: string;
+    newPersonId: string;
+    mediaId: string;
+    kind: MediaKind;
+    title: string;
+    bestFaceId: string;
+    moments: number;
+}[] => {
+    const params: Record<string, unknown> = { ids: JSON.stringify(newPersonIds), each };
+    const where = visible(rootIds, params);
+
+    return db
+        .prepare(
+            `SELECT "id", "newPersonId", "mediaId", "kind", "title", "bestFaceId", "moments" FROM (
+                 SELECT a."id", a."newPersonId", a."mediaId", m."kind", m."title", a."bestFaceId",
+                        a."faceCount" AS "moments",
+                        row_number() OVER (PARTITION BY a."newPersonId", a."mediaId"
+                                           ORDER BY a."faceCount" DESC) AS "perItem",
+                        row_number() OVER (PARTITION BY a."newPersonId"
+                                           ORDER BY a."legible" IS NULL, a."faceCount" DESC, a."id") AS "n"
+                   FROM "FaceAppearance" a JOIN "Media" m ON m."id" = a."mediaId"
+                  WHERE a."newPersonId" IN (SELECT value FROM json_each(:ids)) AND ${where}
+                    AND NOT EXISTS (SELECT 1 FROM "Face" f
+                                     WHERE f."appearanceId" = a."id"
+                                       AND (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL
+                                            OR f."scatteredAt" IS NOT NULL))
+             ) WHERE "perItem" = 1 AND "n" <= :each
+             ORDER BY "newPersonId", "n"`
+        )
+        .all(params) as ReturnType<typeof newPersonPeople>;
+};
+
+/**
+ * "Not one person", of people gathered as a new person: their faces taken out of every person and
+ * gathering for good — turned away, obscured, or several people. Returns the faces changed.
+ */
+export const scatterPeople = (faceIds: readonly string[], userId: string): number =>
+    db
+        .prepare(
+            `UPDATE "Face"
+                SET "scatteredAt" = CURRENT_TIMESTAMP, "scatteredByUserId" = ?, "decisionId" = ?
+              WHERE "id" IN (SELECT value FROM json_each(?)) AND "tagId" IS NULL`
+        )
+        .run(userId, activeDecision(), JSON.stringify(faceIds)).changes;
+
+/** "Later", of people gathered as a new person: set aside, not asked about with the rest. */
+export const setAsidePeople = (faceIds: readonly string[], userId: string): number =>
+    db
+        .prepare(
+            `UPDATE "Face"
+                SET "skippedAt" = CURRENT_TIMESTAMP, "skippedByUserId" = ?, "decisionId" = ?
+              WHERE "id" IN (SELECT value FROM json_each(?)) AND "tagId" IS NULL
+                AND "skippedAt" IS NULL`
+        )
+        .run(userId, activeDecision(), JSON.stringify(faceIds)).changes;

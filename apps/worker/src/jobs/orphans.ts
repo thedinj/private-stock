@@ -8,7 +8,6 @@ import {
     vectorFileRelPath,
     faceFileRelPath,
     FACE_ANCHORS_REL_PATH,
-    FACE_GROUPS_REL_PATH,
 } from "@private-stock/core";
 import { dataPaths, loadConfig } from "@private-stock/core/server";
 import { db } from "@private-stock/db";
@@ -635,7 +634,7 @@ export const runOrphanSweep = async (): Promise<void> => {
         stage: "faces",
         dir: paths.faces,
         relPathOf: faceFileRelPath,
-        keep: [FACE_GROUPS_REL_PATH, FACE_ANCHORS_REL_PATH],
+        keep: [FACE_ANCHORS_REL_PATH],
     });
 
     /**

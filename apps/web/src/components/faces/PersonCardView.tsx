@@ -9,7 +9,7 @@ import { useCloseOnBack } from "@/lib/useCloseOnBack";
 
 import { FaceCropView } from "./FaceCropView";
 import { FacePeek } from "./FacePeek";
-import type { TickState } from "./FaceReviewRow";
+import type { TickState } from "./faceControls";
 
 /**
  * One person in one item, as every face surface shows them (§5f "A person in a video"): their

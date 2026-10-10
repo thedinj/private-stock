@@ -51,7 +51,6 @@ import { runVariantPurge } from "./jobs/variantPurge.js";
 import { runDupes } from "./jobs/dupes.js";
 import { runEmbed } from "./jobs/embed.js";
 import { runFaceAnchors } from "./jobs/faceAnchors.js";
-import { runFaceGroups } from "./jobs/faceGroups.js";
 import { runTagLookPictures } from "./jobs/tagLookPictures.js";
 import { runTagPictures } from "./jobs/tagPictures.js";
 import { runFaces } from "./jobs/faces.js";
@@ -235,7 +234,6 @@ const handlers: Record<string, JobHandler> = {
     dupes: runDupes,
     embed: runEmbed,
     faces: runFaces,
-    faceGroups: runFaceGroups,
     faceAnchors: runFaceAnchors,
     tagPictures: runTagPictures,
     tagLookPictures: runTagLookPictures,

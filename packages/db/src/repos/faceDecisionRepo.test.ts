@@ -17,6 +17,7 @@ vi.mock("../db", async () => {
 });
 
 const faceRepo = await import("./faceRepo.js");
+const appearanceRepo = await import("./appearanceRepo.js");
 const faceDecisionRepo = await import("./faceDecisionRepo.js");
 const mentionRepo = await import("./mentionRepo.js");
 const tagBatchRepo = await import("./tagBatchRepo.js");
@@ -48,6 +49,9 @@ const facesOf = (mediaId: string) =>
         skippedAt: string | null;
         scatteredAt: string | null;
     }[];
+
+/** An item's face ids, in order. */
+const ids = (mediaId: string): string[] => facesOf(mediaId).map((row) => row.id);
 
 const refusals = () =>
     db.prepare(`SELECT "faceId", "decisionId" FROM "FaceRefusal" ORDER BY "faceId"`).all() as {
@@ -101,8 +105,6 @@ beforeEach(() => {
         faceRepo.replaceForMedia(id, [face(0), face(1)]);
     }
 
-    db.prepare(`UPDATE "Face" SET "groupId" = 'g1'`).run();
-
     for (const id of ["jane", "kim"]) {
         db.prepare(
             `INSERT INTO "Tag" ("id", "kind", "name", "nameNorm", "updatedAt")
@@ -114,8 +116,8 @@ beforeEach(() => {
 describe("recording a press", () => {
     it("stamps every row the press writes, and counts them", () => {
         const { decisionId } = faceDecisionRepo.record(user("is", "jane"), () => {
-            faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
-            faceRepo.refuseOnItem("b", "jane", ["g1"], "someone");
+            appearanceRepo.confirmPerson(ids("a"), ids("a")[0], "jane", "someone");
+            appearanceRepo.refusePerson(ids("b"), ids("b")[0], "jane", "someone");
         });
 
         expect(decisionId).not.toBeNull();
@@ -149,7 +151,7 @@ describe("recording a press", () => {
         ).run();
 
         const { decisionId } = faceDecisionRepo.record(user("is", "jane"), () => {
-            faceRepo.confirmOnItems("g1", "jane", ["a"], "someone");
+            appearanceRepo.confirmPerson(ids("a"), ids("a")[0], "jane", "someone");
             tagBatchRepo.applyAssignments({
                 userId: "someone",
                 scope: null,
@@ -172,7 +174,7 @@ describe("undoing a press", () => {
             faceRepo.refuseOnItems(["a", "b"], "jane", "someone")
         ).decisionId!;
         const second = faceDecisionRepo.record(user("is", "kim"), () =>
-            faceRepo.confirmOnItems("g1", "kim", ["b"], "someone")
+            appearanceRepo.confirmPerson(ids("b"), ids("b")[0], "kim", "someone")
         ).decisionId!;
 
         expect(faceDecisionRepo.undo(first, "someone")).toMatchObject({ refusals: 4 });
@@ -186,13 +188,11 @@ describe("undoing a press", () => {
     });
 
     it("brings back faces set aside, or taken out of grouping", () => {
-        db.prepare(`UPDATE "Face" SET "groupId" = 'g2' WHERE "mediaId" = 'b'`).run();
-
         const later = faceDecisionRepo.record(user("later", null), () =>
-            faceRepo.skipFaces("g1", ["a"], "someone")
+            appearanceRepo.setAsidePeople(ids("a"), "someone")
         ).decisionId!;
         const scattered = faceDecisionRepo.record(user("notOnePerson", null), () =>
-            faceRepo.scatterGroup("g2", "someone")
+            appearanceRepo.scatterPeople(ids("b"), "someone")
         ).decisionId!;
 
         expect(facesOf("a").every((row) => row.skippedAt !== null)).toBe(true);

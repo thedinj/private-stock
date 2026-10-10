@@ -29,8 +29,6 @@ export function up(db: Database): void {
             UNIQUE ("mediaId", "vectorIndex")
         );
 
-        CREATE INDEX IF NOT EXISTS "idx_Face_group" ON "Face" ("groupId") WHERE "groupId" IS NOT NULL;
-
         CREATE INDEX IF NOT EXISTS "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
 
         CREATE TABLE IF NOT EXISTS "FaceRefusal" (
@@ -43,6 +41,17 @@ export function up(db: Database): void {
 
         CREATE INDEX IF NOT EXISTS "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");`
     );
+
+    // The groups' index, where there are groups: a database built after face groups went
+    // (2026-10-11) has a "Face" without the column, and replays this to be stamped.
+    if (
+        db.prepare(`SELECT 1 FROM pragma_table_info('Face') WHERE "name" = 'groupId'`).get() !==
+        undefined
+    ) {
+        db.exec(
+            `CREATE INDEX IF NOT EXISTS "idx_Face_group" ON "Face" ("groupId") WHERE "groupId" IS NOT NULL;`
+        );
+    }
 }
 
 export function down(db: Database): void {

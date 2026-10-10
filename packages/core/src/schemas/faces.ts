@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { mediaKindCountsSchema, mediaKindSchema } from "../domain.js";
+import { mediaKindSchema } from "../domain.js";
 import { mentionFields } from "../ocrTagMatch.js";
 import { spriteRectSchema } from "./clips.js";
 import { mediaListItemSchema } from "./media.js";
@@ -57,233 +57,9 @@ export const confirmedFacesPageSchema = z.object({
 });
 export type ConfirmedFacesPage = z.infer<typeof confirmedFacesPageSchema>;
 
-/**
- * Why a group is on a performer's page: somebody said these faces are them (`confirmed`), or
- * the items they are on are tagged with them (`proposed`).
- */
-export const faceGroupStateSchema = z.enum(["confirmed", "proposed"]);
-export type FaceGroupState = z.infer<typeof faceGroupStateSchema>;
-
-/**
- * Why a group might be a performer anywhere it is asked about: confirmed, proposed by their tags,
- * or `resembles` — no tags or decisions of its own, but like a group confirmed as them (§5f
- * "Groups of one person").
- */
-export const faceMatchStateSchema = z.enum(["confirmed", "proposed", "resembles"]);
-export type FaceMatchState = z.infer<typeof faceMatchStateSchema>;
-
 /** "No single face", said of a performer, or taken back (§5f). */
 export const noSingleFaceSchema = z.object({ noSingleFace: z.boolean() });
 export type NoSingleFace = z.infer<typeof noSingleFaceSchema>;
-
-/**
- * One item on a performer's "Likely" list, with the evidence for it (§5f): a face in one of
- * their groups, the name in its filename, title or burned-in text — any of those, best first.
- */
-export const likelyItemSchema = z.object({
-    item: mediaListItemSchema,
-    /** The strongest face evidence: a face in a group confirmed, proposed or like theirs. */
-    face: faceMatchStateSchema.nullable(),
-    /** That face, to compare with "Their face". */
-    crop: faceCropSchema.nullable(),
-    /** Where the name was found on the item, if anywhere. */
-    mentions: z.array(z.enum(mentionFields)),
-});
-export type LikelyItem = z.infer<typeof likelyItemSchema>;
-
-export const likelyQuerySchema = z.object({
-    page: z.coerce.number().int().min(0).default(0),
-    limit: z.coerce.number().int().min(1).max(60).default(24),
-});
-export type LikelyQuery = z.infer<typeof likelyQuerySchema>;
-
-export const likelyPageSchema = z.object({
-    items: z.array(likelyItemSchema),
-    hasMore: z.boolean(),
-    total: z.number(),
-    /** Untagged items with only their name: what "Find untagged" opens. */
-    nameOnly: z.number(),
-});
-export type LikelyPage = z.infer<typeof likelyPageSchema>;
-
-/**
- * Answering a "Likely" list: tag items with the performer, as one batch that can be undone, or
- * say an item's face is not them.
- */
-export const likelyDecisionSchema = z.discriminatedUnion("verdict", [
-    z.object({ verdict: z.literal("add"), mediaIds: z.array(z.string().min(1)).min(1).max(200) }),
-    /** Every item the list holds, as the server counts it — not what happens to be loaded. */
-    z.object({ verdict: z.literal("addAll") }),
-    /** Not them: the item's faces in their groups, and its name match, both refused. */
-    z.object({ verdict: z.literal("refuse"), mediaId: z.string().min(1) }),
-]);
-export type LikelyDecision = z.infer<typeof likelyDecisionSchema>;
-
-/**
- * Review › Faces (§5f "One review, two sources"): face groups across the whole library, one row a
- * group. **Matches** are groups that are, or might be, a performer, with items not tagged with
- * them yet; **Unnamed** are the largest groups nobody's tags or decisions point anywhere.
- */
-export const faceReviewTabSchema = z.enum(["matches", "unnamed"]);
-export type FaceReviewTab = z.infer<typeof faceReviewTabSchema>;
-
-export const faceReviewRowSchema = z.object({
-    groupId: z.string(),
-    /**
-     * The faces being decided about: one an item, on the items a decision would tag — on
-     * Matches, those not carrying the performer yet; on Unnamed, all of them. Largest first.
-     */
-    faces: z.array(faceReviewFaceSchema),
-    /** Items like those past the ones shown, which come back as the row once these are decided. */
-    more: z.number(),
-    /**
-     * Its faces hold together loosely (`LOOSE_GROUP`): perhaps several people, faces turned away or
-     * obscured. Asked about last, and marked so.
-     */
-    loose: z.boolean(),
-    /** On Matches, a few faces from items already tagged with the performer, to compare with. */
-    reference: z.array(faceReviewFaceSchema),
-    faceCount: z.number(),
-    itemCount: z.number(),
-    /** Who the group is, or might be, on Matches; null on Unnamed. */
-    candidate: z
-        .object({
-            tagId: z.string(),
-            name: z.string(),
-            state: faceMatchStateSchema,
-            /** Items in the group not tagged with them yet. */
-            untagged: z.number(),
-            /**
-             * Their picture, small, to compare the faces with (§6 "A tag's picture"); null when
-             * they have none.
-             */
-            pictureUrl: z.string().nullable(),
-        })
-        .nullable(),
-});
-export type FaceReviewRow = z.infer<typeof faceReviewRowSchema>;
-
-export const faceReviewQuerySchema = z.object({
-    tab: faceReviewTabSchema.default("matches"),
-    /** Matches for one performer only, from their page. */
-    performer: z.string().min(1).max(64).optional(),
-    /**
-     * The visit's list, from its first page (§5f "A list that holds still"): later pages are
-     * slices of it, in the order it had. Made afresh when absent or no longer kept.
-     */
-    list: z.string().min(1).max(64).optional(),
-    /**
-     * Ask only about faces on videos, or on photos; both when absent. Which group is whose is
-     * still judged from every item — this narrows what a row asks, not what decides it.
-     */
-    media: mediaKindSchema.optional(),
-    page: z.coerce.number().int().min(0).default(0),
-    limit: z.coerce.number().int().min(1).max(50).default(20),
-});
-export type FaceReviewQuery = z.infer<typeof faceReviewQuerySchema>;
-
-export const faceReviewPageSchema = z.object({
-    /** The list this page is a slice of: what the next page asks for. */
-    list: z.string(),
-    rows: z.array(faceReviewRowSchema),
-    /** The performer Matches is narrowed to, by name, for the page to say so. */
-    performer: z.object({ id: z.string(), name: z.string() }).nullable(),
-    hasMore: z.boolean(),
-    total: z.number(),
-    /** Rows this tab would have under Videos and under Photos: the counts on the kind control. */
-    byMedia: mediaKindCountsSchema,
-});
-export type FaceReviewPage = z.infer<typeof faceReviewPageSchema>;
-
-/** The items a row's decision is about: those ticked, and those shown and unticked. */
-const shownItems = {
-    groupId: z.string().min(1).max(64),
-    mediaIds: z.array(z.string().min(1).max(64)).min(1).max(100),
-    /** Shown and unticked: "not them", once there is a them. */
-    excludedMediaIds: z.array(z.string().min(1).max(64)).max(100).default([]),
-    /** Shown and marked unsure: left undecided, to be asked about again later (§5f "Unsure"). */
-    unsureMediaIds: z.array(z.string().min(1).max(64)).max(100).default([]),
-    /** Every face that was on screen, ticked or not: decided as `shown`, the rest `inferred`. */
-    shownFaceIds: z.array(z.string().min(1).max(64)).max(100).default([]),
-};
-
-/**
- * Answering a row. `accept` tags the ticked items as the performer, as one batch the undo list
- * can withdraw, confirms their faces, and refuses the unticked ones; `refuse` says the whole
- * group is not them; `name` does what `accept` does for a performer typed in — coined if new —
- * after refusing `instead`, the one proposed, for the ticked items; `skip` is "can't tell".
- */
-export const faceReviewDecisionSchema = z.discriminatedUnion("verdict", [
-    z.object({ verdict: z.literal("accept"), tagId: z.string().min(1).max(64), ...shownItems }),
-    z.object({
-        verdict: z.literal("refuse"),
-        groupId: z.string().min(1).max(64),
-        tagId: z.string().min(1).max(64),
-        shownFaceIds: z.array(z.string().min(1).max(64)).max(100).default([]),
-    }),
-    z.object({
-        verdict: z.literal("name"),
-        name: tagNameSchema,
-        /** The one proposed, refused for the ticked items: they are someone else. */
-        instead: z.string().min(1).max(64).optional(),
-        ...shownItems,
-    }),
-    /** "Not one person": the group's undecided faces out of grouping for good (§5f "Grab bags"). */
-    z.object({
-        verdict: z.literal("scatter"),
-        groupId: z.string().min(1).max(64),
-    }),
-    /** "Can't tell", of an unnamed group's faces on these items. */
-    z.object({
-        verdict: z.literal("skip"),
-        groupId: z.string().min(1).max(64),
-        mediaIds: z.array(z.string().min(1).max(64)).min(1).max(100),
-    }),
-]);
-export type FaceReviewDecision = z.infer<typeof faceReviewDecisionSchema>;
-
-/** What a decision did, for the line that says so. */
-export const faceReviewResultSchema = z.object({
-    name: z.string().nullable(),
-    tagged: z.number(),
-    coined: z.boolean(),
-});
-export type FaceReviewResult = z.infer<typeof faceReviewResultSchema>;
-
-/**
- * How alike each of a row's faces is to the person it is asked about (§5f "Checking faces
- * quickly"): to the performer's confirmed faces where there are some, else to the row's own
- * faces. The row shows the least alike first, flagged below `doubt`.
- */
-export const faceLikenessQuerySchema = z.object({
-    groupId: z.string().min(1).max(64),
-    tagId: z.string().min(1).max(64).optional(),
-    ids: z
-        .string()
-        .max(24 * 40)
-        .transform((value) => value.split(",").filter(Boolean))
-        .pipe(z.array(z.string().min(1).max(64)).min(1).max(24)),
-});
-export type FaceLikenessQuery = z.infer<typeof faceLikenessQuerySchema>;
-
-export const faceLikenessSchema = z.object({
-    /** By face id; a face whose vector cannot be read is absent. */
-    scores: z.record(z.string(), z.number()),
-    /** Whether the scores are against the performer's confirmed faces, not the row's own. */
-    anchored: z.boolean(),
-    doubt: z.number(),
-});
-export type FaceLikeness = z.infer<typeof faceLikenessSchema>;
-
-/** A closer look at one face: the item's other faces in the same group — other moments of them. */
-export const facePeekQuerySchema = z.object({
-    groupId: z.string().min(1).max(64),
-    mediaId: z.string().min(1).max(64),
-});
-export type FacePeekQuery = z.infer<typeof facePeekQuerySchema>;
-
-export const facePeekSchema = z.object({ faces: z.array(faceReviewFaceSchema) });
-export type FacePeek = z.infer<typeof facePeekSchema>;
 
 /**
  * Tagging by itself (§5f "Tagging by itself"): what the rule would tag, to be checked before it
@@ -589,3 +365,51 @@ export const itemPeopleDecisionSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("refuseNamed"), tagId: z.string().min(1).max(64) }),
 ]);
 export type ItemPeopleDecision = z.infer<typeof itemPeopleDecisionSchema>;
+
+/**
+ * New people (§5f "New people"): people in items who match nobody known, gathered across the
+ * library, a few cards each. What replaces Unnamed.
+ */
+export const newPeopleQuerySchema = z.object({
+    page: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(20).default(6),
+});
+export type NewPeopleQuery = z.infer<typeof newPeopleQuerySchema>;
+
+export const newPeoplePageSchema = z.object({
+    people: z.array(
+        z.object({
+            /** The gathering: made anew each references run, so only good for this visit. */
+            id: z.string(),
+            /** Items it is on; its cards are a few of them. */
+            items: z.number(),
+            cards: z.array(personCardSchema),
+        })
+    ),
+    hasMore: z.boolean(),
+    total: z.number(),
+});
+export type NewPeoplePage = z.infer<typeof newPeoplePageSchema>;
+
+const newPeoplePeople = z
+    .array(
+        z.object({
+            mediaId: z.string().min(1).max(64),
+            faceIds: z.array(z.string().min(1).max(64)).min(1).max(24),
+            shownFaceId: z.string().min(1).max(64),
+        })
+    )
+    .min(1)
+    .max(20);
+
+/**
+ * What is said of a new person's cards, those ticked: `name` — they are this performer, coined if
+ * new: their items tagged and their faces confirmed; `notOnePerson` — out of every gathering for
+ * good; `later` — set aside. One decision.
+ */
+export const newPeopleDecisionSchema = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("name"), name: tagNameSchema, people: newPeoplePeople }),
+    z.object({ action: z.literal("notOnePerson"), people: newPeoplePeople }),
+    z.object({ action: z.literal("later"), people: newPeoplePeople }),
+]);
+export type NewPeopleDecision = z.infer<typeof newPeopleDecisionSchema>;

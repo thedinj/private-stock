@@ -440,10 +440,6 @@ export const useRefuseMentions = (tagId: string | null) => {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.facets() });
-
-            if (tagId) {
-                void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
-            }
         },
     });
 };

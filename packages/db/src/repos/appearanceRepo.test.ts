@@ -331,3 +331,41 @@ describe("people in this item", () => {
         expect(appearanceRepo.itemPeople("a")[0].confirmedTagId).toBe("kim");
     });
 });
+
+describe("new people", () => {
+    /** A person matching nobody, on an item of their own, gathered as `newPersonId`. */
+    const stranger = (mediaId: string, newPersonId: string): string[] =>
+        person(mediaId, "jane", 0.2, { matchTagId: null, score: null, second: null, newPersonId });
+
+    it("lists the gatherings on enough items, the most first, and their people", () => {
+        for (const id of ["a1", "a2", "a3", "a4"]) stranger(id, "np-a");
+        for (const id of ["b1", "b2", "b3"]) stranger(id, "np-b");
+        for (const id of ["c1", "c2"]) stranger(id, "np-c");
+
+        const { rows, total } = appearanceRepo.newPeople(["root"], 3, 0, 10);
+
+        expect(rows).toEqual([
+            { newPersonId: "np-a", items: 4 },
+            { newPersonId: "np-b", items: 3 },
+        ]);
+        expect(total).toBe(2);
+        expect(
+            appearanceRepo.newPersonPeople(["np-a"], ["root"], 2).map((row) => row.newPersonId)
+        ).toEqual(["np-a", "np-a"]);
+    });
+
+    it("leaves out people somebody named, put off, or took out", () => {
+        const named = stranger("a1", "np-a");
+        const later = stranger("a2", "np-a");
+        const out = stranger("a3", "np-a");
+        stranger("a4", "np-a");
+
+        appearanceRepo.confirmPerson(named, named[0], "kim", "someone");
+        appearanceRepo.setAsidePeople(later, "someone");
+        appearanceRepo.scatterPeople(out, "someone");
+
+        expect(appearanceRepo.newPeople(["root"], 1, 0, 10).rows).toEqual([
+            { newPersonId: "np-a", items: 1 },
+        ]);
+    });
+});

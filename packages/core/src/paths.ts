@@ -51,9 +51,6 @@ export const vectorFileRelPath = (mediaId: string): string =>
 export const faceFileRelPath = (mediaId: string): string =>
     `faces/${fanout(mediaId)}/${mediaId}.vec`;
 
-/** The library's face groups between runs of the grouping job (§5f). */
-export const FACE_GROUPS_REL_PATH = "faces/groups.bin";
-
 /**
  * Every library performer's face reference, as the `faceAnchors` job last wrote it (§5f "One
  * face, one score"): what a face is scored against, by the review and by tagging that runs by

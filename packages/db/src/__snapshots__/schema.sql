@@ -147,7 +147,6 @@ CREATE TABLE "Face" (
             "h" REAL NOT NULL,
             "eyes" REAL NOT NULL,
             "score" REAL NOT NULL,
-            "groupId" TEXT,
             "tagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME,
@@ -178,7 +177,8 @@ CREATE TABLE "FaceAppearance" (
             "legible" INTEGER CHECK("legible" IN (1)),
             "matchTagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
             "score" REAL,
-            "second" REAL
+            "second" REAL,
+            "newPersonId" TEXT CHECK(length("newPersonId") <= 64)
         );
 
 CREATE TABLE "FaceAutoTag" (
@@ -211,16 +211,6 @@ CREATE TABLE "FaceDecision" (
             "undoneAt" DATETIME,
             "undoneByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL
         );
-
-CREATE TABLE "FaceGroupDissolved" (
-            "groupId" TEXT NOT NULL PRIMARY KEY CHECK(length("groupId") <= 64),
-            "dissolvedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) WITHOUT ROWID;
-
-CREATE TABLE "FaceGroupStat" (
-            "groupId" TEXT NOT NULL PRIMARY KEY CHECK(length("groupId") <= 64),
-            "cohesion" REAL NOT NULL
-        ) WITHOUT ROWID;
 
 CREATE TABLE "FaceMatch" (
             "faceId" TEXT NOT NULL PRIMARY KEY REFERENCES "Face" ("id") ON DELETE CASCADE,
@@ -1183,6 +1173,9 @@ CREATE INDEX "idx_FaceAppearance_match"
 
 CREATE INDEX "idx_FaceAppearance_media" ON "FaceAppearance" ("mediaId");
 
+CREATE INDEX "idx_FaceAppearance_newPerson"
+            ON "FaceAppearance" ("newPersonId") WHERE "newPersonId" IS NOT NULL;
+
 CREATE INDEX "idx_FaceAutoTag_state" ON "FaceAutoTag" ("state", "tagId");
 
 CREATE INDEX "idx_FaceDecision_created" ON "FaceDecision" ("createdAt" DESC);
@@ -1200,8 +1193,6 @@ CREATE INDEX "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");
 CREATE INDEX "idx_Face_appearance" ON "Face" ("appearanceId") WHERE "appearanceId" IS NOT NULL;
 
 CREATE INDEX "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
-
-CREATE INDEX "idx_Face_group" ON "Face" ("groupId") WHERE "groupId" IS NOT NULL;
 
 CREATE INDEX "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
 

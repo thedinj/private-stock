@@ -1,4 +1,4 @@
-import type { FaceReviewTab, ReviewMedia } from "@private-stock/core";
+import type { ReviewMedia } from "@private-stock/core";
 
 /**
  * Every TanStack Query cache key, declared once.
@@ -225,30 +225,23 @@ export const queryKeys = {
          * and every tagging reaches it -- a name, a count or a strip moves with either.
          */
         companions: (tagId: string, seed: number) => ["tags", "companions", tagId, seed],
-        /** "Their face" on a performer's page: the face groups that are, or might be, them (§5f). */
+        /**
+         * Prefix over a library performer's face caches — their picture's confirmed faces — for
+         * whatever moves their faces to reach (§5f).
+         */
         faces: (tagId: string) => ["tags", "faces", tagId],
         /**
          * Every face confirmed as a performer, every page loaded: what their picture is chosen
          * from (§6). Under `faces(tagId)`, so whatever moves their faces moves this.
          */
         confirmedFaces: (tagId: string) => ["tags", "faces", tagId, "confirmed"],
-        /** "Likely" on a performer's page, every page of it: items that are probably them (§5f). */
-        likely: (tagId: string) => ["tags", "likely", tagId],
         /**
-         * "Would tag", "Tagged for you" and a face's closer look (§5f). Under `tags`, so every
-         * tagging and vocabulary change reaches them. Not Matches and Unnamed: `faceReview`.
+         * "Would tag" (§5f). Under `tags`, so every tagging and vocabulary change reaches it. Not
+         * Suggestions, New people or a performer's Faces tab, which hold still: `faceReview`.
          */
         faceReviewAll: () => ["tags", "faceReview"],
         /** "Would tag" (§5f "Tagging by itself"): one state of it, in a visit's random order. */
         autoTags: (state: string, seed: number) => ["tags", "faceReview", "auto", state, seed],
-        /** A closer look at one face: its item's other faces in the group (§5f). */
-        facePeek: (groupId: string, mediaId: string) => [
-            "tags",
-            "faceReview",
-            "peek",
-            groupId,
-            mediaId,
-        ],
     },
 
     /**
@@ -271,15 +264,6 @@ export const queryKeys = {
     },
 
     faceReview: {
-        /** One tab of it, every page loaded so far; `visit` is when it was opened, or refreshed. */
-        list: (tab: FaceReviewTab, performer: string | null, media: ReviewMedia, visit: number) => [
-            "faceReview",
-            "list",
-            tab,
-            performer,
-            media,
-            visit,
-        ],
         /**
          * Suggestions' performers, with how many each (§5f "Suggestions"). Asked for again whenever
          * it is shown: a decision on a performer's page changes their count.
@@ -287,7 +271,7 @@ export const queryKeys = {
         suggestionPeople: (media: ReviewMedia) => ["faceReview", "suggestionPeople", media],
         /**
          * One section of a performer's Faces tab (§5f "Their faces"), every page loaded; holds
-         * still like `list` until a new `visit`.
+         * still until a new `visit`.
          */
         performerPeople: (
             tagId: string,
@@ -295,21 +279,15 @@ export const queryKeys = {
             all: boolean,
             visit: number
         ) => ["faceReview", "performerPeople", tagId, section, all, visit],
-        /** One performer's suggestions, every page loaded; `visit` as for `list`. */
+        /** New people (§5f), every page loaded; holds still until a new `visit`. */
+        newPeople: (visit: number) => ["faceReview", "newPeople", visit],
+        /** One performer's suggestions, every page loaded; holds still until a new `visit`. */
         suggestions: (tagId: string, media: ReviewMedia, visit: number) => [
             "faceReview",
             "suggestions",
             tagId,
             media,
             visit,
-        ],
-        /** How alike a review row's faces are to who it asks about (§5f), by the faces shown. */
-        likeness: (groupId: string, tagId: string | null, faceIds: string) => [
-            "faceReview",
-            "likeness",
-            groupId,
-            tagId,
-            faceIds,
         ],
     },
 

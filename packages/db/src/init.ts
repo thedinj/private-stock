@@ -1193,10 +1193,10 @@ export function initializeDatabase(db: Database): void {
         -- found in -- a sprite tile, or a photograph's cover -- and how large and how sure. The
         -- vector is in the item's faces file, at "vectorIndex".
         --
-        -- **What a person said is on the face, not on a group** (§5f "Grouping"): groups merge and
-        -- split as faces arrive, so a decision filed against one would be lost on the next run.
+        -- **What a person said is on the face**, not on a person in an item or a gathering, which
+        -- are made anew each references run, so a decision filed against one would be lost.
         -- "tagId" is the performer somebody confirmed; a refusal is a "FaceRefusal"; "skippedAt"
-        -- is "can't tell" from the Unnamed review. A re-run of the stage carries all three to the
+        -- is "later" ("can't tell" before 2026-10-11); "scatteredAt" is "not one person". A re-run of the stage carries all three to the
         -- face found again at the same moment and place. "decidedHow" (and a refusal's "how") is
         -- how it was decided: 'shown' on screen, 'item' of the whole item, 'inferred' carried to a
         -- face nobody saw; null from before it was kept (§5f "Corrections stick"). "decisionId"
@@ -1213,7 +1213,6 @@ export function initializeDatabase(db: Database): void {
             "h" REAL NOT NULL,
             "eyes" REAL NOT NULL,
             "score" REAL NOT NULL,
-            "groupId" TEXT,
             "tagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME,
@@ -1228,8 +1227,6 @@ export function initializeDatabase(db: Database): void {
             UNIQUE ("mediaId", "vectorIndex")
         );
 
-        CREATE INDEX IF NOT EXISTS "idx_Face_group" ON "Face" ("groupId") WHERE "groupId" IS NOT NULL;
-
         CREATE INDEX IF NOT EXISTS "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
@@ -1241,6 +1238,8 @@ export function initializeDatabase(db: Database): void {
         -- faces gathered at APPEARANCE_NEAR ("Face"."appearanceId", a plain column), the clearest
         -- of them, whether it is legible, and their centre scored against every reference. Nothing
         -- is filed against one -- decisions land on its faces -- so a run may make them anew.
+        -- "newPersonId": the gathering of people who match nobody known it is part of (§5f "New
+        -- people"), null where none worth asking about.
         CREATE TABLE IF NOT EXISTS "FaceAppearance" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
@@ -1249,10 +1248,14 @@ export function initializeDatabase(db: Database): void {
             "legible" INTEGER CHECK("legible" IN (1)),
             "matchTagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
             "score" REAL,
-            "second" REAL
+            "second" REAL,
+            "newPersonId" TEXT CHECK(length("newPersonId") <= 64)
         );
 
         CREATE INDEX IF NOT EXISTS "idx_FaceAppearance_media" ON "FaceAppearance" ("mediaId");
+
+        CREATE INDEX IF NOT EXISTS "idx_FaceAppearance_newPerson"
+            ON "FaceAppearance" ("newPersonId") WHERE "newPersonId" IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS "idx_FaceAppearance_match"
             ON "FaceAppearance" ("matchTagId", "score" DESC) WHERE "matchTagId" IS NOT NULL;
@@ -1292,19 +1295,6 @@ export function initializeDatabase(db: Database): void {
             "tagId" TEXT NOT NULL PRIMARY KEY REFERENCES "Tag" ("id") ON DELETE CASCADE,
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) WITHOUT ROWID;
-
-        -- "Not one person" (§5f "Grab bags"): groups dissolved, for the grouping job to drop from
-        -- its sums; and each group's cohesion, written by it, so a loose group is asked about last.
-        -- A face said to be in no one person's group carries "Face"."scatteredAt".
-        CREATE TABLE IF NOT EXISTS "FaceGroupDissolved" (
-            "groupId" TEXT NOT NULL PRIMARY KEY CHECK(length("groupId") <= 64),
-            "dissolvedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) WITHOUT ROWID;
-
-        CREATE TABLE IF NOT EXISTS "FaceGroupStat" (
-            "groupId" TEXT NOT NULL PRIMARY KEY CHECK(length("groupId") <= 64),
-            "cohesion" REAL NOT NULL
         ) WITHOUT ROWID;
 
         -- One face, one score (§5f): every library performer's face reference — what it is built

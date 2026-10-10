@@ -8,7 +8,7 @@ import type { FaceReviewFace, ItemPeople, MentionField } from "@private-stock/co
 import { SectionLabel } from "@/components/media/SectionLabel";
 import { useDecideItemPeople, useItemPeople } from "@/lib/api/faces";
 
-import { NameBox } from "./FaceReviewRow";
+import { NameBox } from "./faceControls";
 import { MARKS, PersonCardView } from "./PersonCardView";
 
 /**

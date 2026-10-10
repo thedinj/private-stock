@@ -2022,6 +2022,8 @@ scope, read from their covers, which are already in `dataDir`.
 
 ### Grouping
 
+_Superseded 2026-10-11: face groups, the `faceGroups` job, Matches, Unnamed and Likely are gone. What replaced them is "A person in a video", "Suggestions", "New people" and "Their faces"; this section is kept for what it decided and why._
+
 Faces of one person are gathered into **groups**, incrementally and disjointly — the pattern §10b
 already uses for duplicates: new faces seed the work, a face joins the group it is close to, and two
 groups that a face bridges merge.
@@ -2062,6 +2064,8 @@ the groups and the tags as both change, and a stored copy would only fall behind
   to be checked against the tags once the first pass has run.
 
 ### One review, two sources
+
+_Superseded 2026-10-11: face groups, the `faceGroups` job, Matches, Unnamed and Likely are gone. What replaced them is "A person in a video", "Suggestions", "New people" and "Their faces"; this section is kept for what it decided and why._
 
 Review gets a **Faces** section shaped like OCR's queue, so that confirming who is in a video
 is one experience whichever evidence proposed it:
@@ -2384,6 +2388,34 @@ backs:
 - **Matches stays for now**, off the tab list, behind a link in Suggestions, and goes once
   Suggestions has carried the work for a while.
 
+### New people
+
+**Replaces Unnamed** (2026-10-11). Unnamed asked "Who is this?" of library-wide groups, which
+chained unrelated faces together — the largest held 1,537 faces from 171 items — and of any group
+on two items. New people asks only of strangers seen often enough to be somebody:
+
+- **Who is a stranger**: a legible person in an item matching no reference (best match below
+  `NEW_PERSON_UNMATCHED` 0.40), with a clear face (`NEW_PERSON_EYES` 20 px, `NEW_PERSON_SCORE`
+  0.7 — stricter than to be shown, since a stranger is named from a few faces alone), and none of
+  their faces confirmed, put off or taken out.
+- **Gathered in the references run** (`gatherNewPeople`): each stranger joins the gathering whose
+  centre is `NEW_PERSON_NEAR` 0.55 like them, or starts one; nothing merges by a bridging face. A
+  gathering on fewer than `NEW_PERSON_MIN_ITEMS` 3 items is a face in passing and is not asked
+  about. `FaceAppearance.newPersonId` holds it, made anew each run — decisions land on faces, so
+  nothing depends on a gathering surviving. Measured: about 110 gatherings of three or more,
+  covering some 460 videos, median four items.
+- **Asked a few at a time**: up to eight of a gathering's items, one card each, all ticked; press
+  one that is somebody else to leave it out. **Name** them — picked, or coined with the typo check
+  — and the ticked items are tagged and the people's faces confirmed, which is a reference the
+  next run matches all their other items against. **Not one person** takes their faces out of
+  every person and gathering for good (`scatteredAt`); **Later** puts them off (`skippedAt`). Each
+  is one decision in History.
+- **What went with the groups**: `Face.groupId`, `FaceGroupStat`, `FaceGroupDissolved`,
+  `faces/groups.bin` (swept as an orphan), the `faceGroups` job — the faces stage now queues the
+  references run itself, once a burst has settled — and with them Matches, Unnamed, Likely (a face
+  and their name together is a suggestion at `SUGGEST_NAMED_LINE`), "Looks like them" and the
+  per-row face scoring.
+
 ### Performers with no single face
 
 **Some performers have no one face** (2026-10-09): theirs never shows — masked, their own point of
@@ -2430,6 +2462,8 @@ Each section holds still while worked (`faceReview.performerPeople`), as Suggest
 
 ### Grab bags
 
+_Superseded 2026-10-11: face groups, the `faceGroups` job, Matches, Unnamed and Likely are gone. What replaced them is "A person in a video", "Suggestions", "New people" and "Their faces"; this section is kept for what it decided and why._
+
 **Faces turned away or obscured have vague fingerprints**, each weakly like the average of the
 rest, so they pile into one group of many people — the largest unnamed group in the library was 480
 faces on 51 items (2026-10-08). Measured: faces from two of its items matched at 0.22 typically,
@@ -2453,6 +2487,8 @@ no floor on size or confidence would have kept them out.
   worth it only if the button and the mark are not enough.
 
 ### A list that holds still
+
+_Superseded 2026-10-11: face groups, the `faceGroups` job, Matches, Unnamed and Likely are gone. What replaced them is "A person in a video", "Suggestions", "New people" and "Their faces"; this section is kept for what it decided and why._
 
 **Matches and Unnamed were a list that moved while it was worked** (2026-10-09): every decision
 re-read every page loaded — each one counting every group in the library again, 0.8–3 s a page —
@@ -2478,6 +2514,8 @@ they came. So it was slow, it shifted, it jolted, and things vanished and flew i
   down; what went right is said in the row.
 
 ### Checking faces quickly
+
+_Superseded 2026-10-11: face groups, the `faceGroups` job, Matches, Unnamed and Likely are gone. What replaced them is "A person in a video", "Suggestions", "New people" and "Their faces"; this section is kept for what it decided and why._
 
 **Twenty-four faces that all look equally likely are twenty-four to inspect** (2026-10-08). And the
 only way to look closer was "Open", which left the review, lost the ticks, and came back to a list

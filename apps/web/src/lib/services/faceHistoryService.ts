@@ -154,10 +154,11 @@ export const undoFaceDecision = (
         batchUndone(live, items, tagIds);
     }
 
-    // References, matches and pictures rest on what was confirmed; groups on what was scattered.
+    // References, matches and pictures rest on what was confirmed.
     jobRepo.enqueueKind("faceAnchors", 200, 120);
     jobRepo.enqueueKind("tagPictures", 200, 120);
-    if (scattered > 0) jobRepo.enqueueKind("faceGroups", 200, 60);
+    // People and new people are made again without what was taken out, or with it back.
+    if (scattered > 0) jobRepo.enqueueKind("faceAnchors", 200, 60);
 
     return { undone: true };
 };
