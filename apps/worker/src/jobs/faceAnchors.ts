@@ -20,6 +20,7 @@ import {
     changeLogRepo,
     db,
     faceAutoTagRepo,
+    faceDecisionRepo,
     faceRepo,
     searchRepo,
     settingRepo,
@@ -120,28 +121,33 @@ const applyAutoTags = (proposals: readonly { mediaId: string; tagId: string }[])
 
         const mediaIds = rows.map((row) => row.mediaId);
 
-        db.transaction(() => {
-            tagged += tagBatchRepo.applyAssignments({
-                userId: byUserId,
-                scope: null,
-                summary: `${tag.name} on ${mediaIds.length} ${mediaIds.length === 1 ? "item" : "items"}, tagged from their face`,
-                assignments: mediaIds.map((mediaId) => ({ mediaId, tagId })),
-                source: "ai",
-            }).assigned;
+        // The app's own decision, listed in History and undone there with "Wrong".
+        faceDecisionRepo.record(
+            { actor: "app", userId: byUserId, verdict: "is", tagId, surface: "auto" },
+            () => {
+                tagged += tagBatchRepo.applyAssignments({
+                    userId: byUserId,
+                    scope: null,
+                    summary: `${tag.name} on ${mediaIds.length} ${mediaIds.length === 1 ? "item" : "items"}, tagged from their face`,
+                    assignments: mediaIds.map((mediaId) => ({ mediaId, tagId })),
+                    source: "ai",
+                }).assigned;
 
-            for (const mediaId of mediaIds) faceAutoTagRepo.decide(mediaId, tagId, "applied", null);
+                for (const mediaId of mediaIds)
+                    faceAutoTagRepo.decide(mediaId, tagId, "applied", null);
 
-            // Tags are in the search document, and an open grid is told the way an edit tells it.
-            searchRepo.requestReindex(mediaIds);
-            changeLogRepo.recordMany(
-                mediaIds.map((mediaId) => ({
-                    entity: "media",
-                    entityId: mediaId,
-                    op: "update",
-                    detail: "tags:faces",
-                }))
-            );
-        })();
+                // Tags are in the search document, and an open grid is told the way an edit tells it.
+                searchRepo.requestReindex(mediaIds);
+                changeLogRepo.recordMany(
+                    mediaIds.map((mediaId) => ({
+                        entity: "media",
+                        entityId: mediaId,
+                        op: "update",
+                        detail: "tags:faces",
+                    }))
+                );
+            }
+        );
     }
 
     return tagged;

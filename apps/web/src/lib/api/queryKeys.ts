@@ -261,6 +261,20 @@ export const queryKeys = {
      * once a visit and only ever changes when somebody asks — a decision settles its own row in
      * place, and no tag edit anywhere re-reads or re-sorts it under the person working through it.
      */
+    /**
+     * History (§5f "Decisions you can take back"): face decisions newest first, everybody's or by
+     * who made them, and of one performer if given. Its own root: decisions are made everywhere,
+     * so it is asked for again whenever it is opened rather than reached by each of them.
+     */
+    faceHistory: {
+        all: () => ["faceHistory"],
+        list: (actor: "all" | "user" | "app", tagId: string | null) => [
+            "faceHistory",
+            actor,
+            tagId,
+        ],
+    },
+
     faceReview: {
         /** One tab of it, every page loaded so far; `visit` is when it was opened, or refreshed. */
         list: (tab: FaceReviewTab, performer: string | null, media: ReviewMedia, visit: number) => [

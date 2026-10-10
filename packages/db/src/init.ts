@@ -1161,6 +1161,33 @@ export function initializeDatabase(db: Database): void {
 
         CREATE INDEX IF NOT EXISTS "idx_MediaMention_tag" ON "MediaMention" ("tagId", "mediaId");
 
+        -- Every face decision, one row a press (§5f "Decisions you can take back"): by a person,
+        -- or by the app tagging by itself. What was said -- "is", "isNot", "notOnePerson",
+        -- "later" -- of whom, from where ("surface"), the tag batch it made, and when it was
+        -- undone. The confirmations, refusals, can't-tells and not-one-persons it wrote point at
+        -- it ("decisionId"), so undoing it takes back exactly those. "faceCount" and "itemCount"
+        -- are what it wrote, as it wrote it. "surface" 'earlier' is a decision made before they
+        -- were kept, gathered from the rows one press wrote.
+        CREATE TABLE IF NOT EXISTS "FaceDecision" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "actor" TEXT NOT NULL CHECK("actor" IN ('user', 'app')),
+            "userId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "verdict" TEXT NOT NULL CHECK("verdict" IN ('is', 'isNot', 'notOnePerson', 'later')),
+            "tagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
+            "surface" TEXT NOT NULL CHECK(length("surface") <= 32),
+            "tagBatchId" TEXT REFERENCES "TagBatch" ("id") ON DELETE SET NULL,
+            "faceCount" INTEGER NOT NULL DEFAULT 0,
+            "itemCount" INTEGER NOT NULL DEFAULT 0,
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "undoneAt" DATETIME,
+            "undoneByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS "idx_FaceDecision_created" ON "FaceDecision" ("createdAt" DESC);
+
+        CREATE INDEX IF NOT EXISTS "idx_FaceDecision_tag"
+            ON "FaceDecision" ("tagId", "createdAt" DESC) WHERE "tagId" IS NOT NULL;
+
         -- The faces an item shows (§5f), one row for each face the "faces" stage kept: at most
         -- twelve an item, the largest and surest. Where it is, as fractions of the picture it was
         -- found in -- a sprite tile, or a photograph's cover -- and how large and how sure. The
@@ -1172,7 +1199,9 @@ export function initializeDatabase(db: Database): void {
         -- is "can't tell" from the Unnamed review. A re-run of the stage carries all three to the
         -- face found again at the same moment and place. "decidedHow" (and a refusal's "how") is
         -- how it was decided: 'shown' on screen, 'item' of the whole item, 'inferred' carried to a
-        -- face nobody saw; null from before it was kept (§5f "Corrections stick").
+        -- face nobody saw; null from before it was kept (§5f "Corrections stick"). "decisionId"
+        -- is the "FaceDecision" that set its confirmation, can't-tell or not-one-person: a plain
+        -- column, not a foreign key, so it can be dropped; decisions are never deleted.
         CREATE TABLE IF NOT EXISTS "Face" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
@@ -1194,6 +1223,7 @@ export function initializeDatabase(db: Database): void {
             "decidedHow" TEXT CHECK("decidedHow" IN ('shown', 'item', 'inferred')),
             "scatteredAt" DATETIME,
             "scatteredByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "decisionId" TEXT CHECK(length("decisionId") <= 64),
             UNIQUE ("mediaId", "vectorIndex")
         );
 
@@ -1201,17 +1231,24 @@ export function initializeDatabase(db: Database): void {
 
         CREATE INDEX IF NOT EXISTS "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
 
+        CREATE INDEX IF NOT EXISTS "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
+
         -- "Not this performer", said of a face (§5f). Per face for the reason the confirmation is.
+        -- "decisionId": the "FaceDecision" that wrote it.
         CREATE TABLE IF NOT EXISTS "FaceRefusal" (
             "faceId" TEXT NOT NULL REFERENCES "Face" ("id") ON DELETE CASCADE,
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "how" TEXT CHECK("how" IN ('shown', 'item', 'inferred')),
+            "decisionId" TEXT CHECK(length("decisionId") <= 64),
             PRIMARY KEY ("faceId", "tagId")
         ) WITHOUT ROWID;
 
         CREATE INDEX IF NOT EXISTS "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");
+
+        CREATE INDEX IF NOT EXISTS "idx_FaceRefusal_decision"
+            ON "FaceRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
         -- A confirmation follows the item's tag (§5f "Corrections stick"): whichever path takes a
         -- library performer off an item — an undo, a withdrawn rule, an untag — the item's faces
@@ -1221,7 +1258,7 @@ export function initializeDatabase(db: Database): void {
         BEGIN
             UPDATE "Face"
                SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL,
-                   "decidedHow" = NULL
+                   "decidedHow" = NULL, "decisionId" = NULL
              WHERE "mediaId" = OLD."mediaId" AND "tagId" = OLD."tagId";
         END;
 
@@ -1287,15 +1324,33 @@ export function initializeDatabase(db: Database): void {
 
         CREATE INDEX IF NOT EXISTS "idx_FaceAutoTag_state" ON "FaceAutoTag" ("state", "tagId");
 
-        -- "Not them", said of an item whose own text names a tag (§5d "Find untagged"). The match
-        -- stays in "MediaMention"; this takes the item out of "Find untagged" and "Likely".
-        CREATE TABLE IF NOT EXISTS "MentionRefusal" (
+        -- "Not them on this item" (§5f "Decisions you can take back"): said from "Find untagged"
+        -- (§5d), by taking the tag off by hand, or of the item from its page. The item leaves
+        -- "Find untagged", "Likely" and everything that would tag it by itself. Adding the tag
+        -- again withdraws it (trigger below): the later word wins. "decisionId": the press.
+        CREATE TABLE IF NOT EXISTS "ItemRefusal" (
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "decisionId" TEXT REFERENCES "FaceDecision" ("id") ON DELETE SET NULL,
             PRIMARY KEY ("tagId", "mediaId")
         ) WITHOUT ROWID;
+
+        CREATE INDEX IF NOT EXISTS "idx_ItemRefusal_decision"
+            ON "ItemRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
+
+        -- The tag added again, by whatever path: "not them on this item" is withdrawn, and so are
+        -- the item's face refusals that untagging made ('item'). Refusals of faces seen on screen
+        -- stay: the tag says the performer is on the item, not that every face on it is theirs.
+        CREATE TRIGGER IF NOT EXISTS "MediaTag_refusal_ai"
+            AFTER INSERT ON "MediaTag" WHEN NEW."userId" IS NULL
+        BEGIN
+            DELETE FROM "ItemRefusal" WHERE "mediaId" = NEW."mediaId" AND "tagId" = NEW."tagId";
+            DELETE FROM "FaceRefusal"
+             WHERE "tagId" = NEW."tagId" AND "how" = 'item'
+               AND "faceId" IN (SELECT "id" FROM "Face" WHERE "mediaId" = NEW."mediaId");
+        END;
 
         -- The OCR test bench (§5d "Settings and the test bench"): one video read under the current
         -- settings and under a candidate, side by side.

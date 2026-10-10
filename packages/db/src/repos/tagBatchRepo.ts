@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { db } from "../db.js";
+import { attachBatch } from "./faceDecisionRepo.js";
 import { pruneUnused } from "./tagRepo.js";
 
 /**
@@ -88,6 +89,9 @@ export const applyAssignments = (input: ApplyAssignmentsInput): ApplyBatchResult
             `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount")
              VALUES (?, ?, ?, ?)`
         ).run(batchId, input.userId, input.summary, mediaCount);
+
+        // A face decision being recorded made this batch: undoing it withdraws the batch.
+        attachBatch(batchId);
 
         const insert = db.prepare(
             // `scope` is the assignment's audience: NULL is library-wide, a user id is that

@@ -52,6 +52,14 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@private-stock/db", () => ({
+    // A press runs its writes, as one decision (§5f "Decisions you can take back").
+    faceDecisionRepo: {
+        record: (_decision: unknown, write: () => unknown) => ({
+            decisionId: "d1",
+            result: write(),
+        }),
+        nameActive: () => undefined,
+    },
     db: { transaction: <T>(fn: () => T) => fn },
     tagRepo: {
         findById: (id: string) =>
@@ -171,6 +179,10 @@ vi.mock("@private-stock/db", () => ({
         untaggedMentions: () => state.mentions,
         untaggedPerformersNamedOn: () => state.namedOn,
         refuse: (tagId: string, mediaIds: string[]) => {
+            state.mentionRefused.push([tagId, mediaIds]);
+            return mediaIds.length;
+        },
+        refuseItems: (tagId: string, mediaIds: string[]) => {
             state.mentionRefused.push([tagId, mediaIds]);
             return mediaIds.length;
         },
@@ -870,7 +882,7 @@ describe("maybe in this item", () => {
 
         decideItemSuspect("m1", { tagId: "jane", verdict: "refuse", faceId: null }, admin);
 
-        expect(state.notThem).toEqual([[["m1"], "jane", "u1"]]);
+        expect(state.notThem).toEqual([[["m1"], "jane", "u1", "item"]]);
     });
 });
 

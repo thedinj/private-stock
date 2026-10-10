@@ -27,6 +27,14 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@private-stock/db", () => ({
+    // A press runs its writes, as one decision (§5f "Decisions you can take back").
+    faceDecisionRepo: {
+        record: (_decision: unknown, write: () => unknown) => ({
+            decisionId: "d1",
+            result: write(),
+        }),
+        nameActive: () => undefined,
+    },
     db: { transaction: <T>(fn: () => T) => fn },
     faceAutoTagRepo: {
         inState: () => state.rows,
@@ -166,7 +174,7 @@ describe("would tag", () => {
         decideAutoTag({ mediaId: "m1", tagId: "jane", verdict: "wrong" }, admin);
 
         expect(state.unassigned).toEqual([["m1", "jane", null]]);
-        expect(state.notThem).toEqual([[["m1"], "jane", "u1"]]);
+        expect(state.notThem).toEqual([[["m1"], "jane", "u1", "wouldTag"]]);
         expect(state.assigned).toEqual([]);
     });
 });

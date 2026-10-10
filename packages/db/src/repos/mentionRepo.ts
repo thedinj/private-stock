@@ -2,6 +2,8 @@ import type { Mention, MentionField, TagNameEntry } from "@private-stock/core";
 
 import { db } from "../db.js";
 
+import { activeDecision } from "./faceDecisionRepo.js";
+
 /**
  * Which tags an item's own text names (§5b "One rule for names").
  *
@@ -128,7 +130,7 @@ export const writeChanged = (entries: { mediaId: string; mentions: Mention[] }[]
  * test. Its own parameter so it composes with the search box, ANDed like every other filter.
  */
 export const MENTION_FILTER_SQL = `m."id" IN (SELECT "mediaId" FROM "MediaMention" WHERE "tagId" = :mentions)
-    AND m."id" NOT IN (SELECT "mediaId" FROM "MentionRefusal" WHERE "tagId" = :mentions)`;
+    AND m."id" NOT IN (SELECT "mediaId" FROM "ItemRefusal" WHERE "tagId" = :mentions)`;
 
 /**
  * The same items as a row source, one per item, for a query driven from the mentions rather
@@ -136,7 +138,7 @@ export const MENTION_FILTER_SQL = `m."id" IN (SELECT "mediaId" FROM "MediaMentio
  */
 export const MENTIONED_IDS_SQL = `SELECT DISTINCT mm."mediaId" FROM "MediaMention" mm
      WHERE mm."tagId" = :mentions
-       AND NOT EXISTS (SELECT 1 FROM "MentionRefusal" r
+       AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" r
                         WHERE r."tagId" = mm."tagId" AND r."mediaId" = mm."mediaId")`;
 
 /** How many items name the tag, from `idx_MediaMention_tag` alone. */
@@ -172,7 +174,7 @@ export const untaggedMentions = (
                 AND m."listRootId" IN (${rootIds.map((_, i) => `:root${i}`).join(", ")})
                 AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                  WHERE mt."mediaId" = mm."mediaId" AND mt."tagId" = :tagId)
-                AND NOT EXISTS (SELECT 1 FROM "MentionRefusal" r
+                AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" r
                                  WHERE r."tagId" = :tagId AND r."mediaId" = mm."mediaId")`
         )
         .all(params) as { mediaId: string; field: MentionField }[];
@@ -192,7 +194,7 @@ export const untaggedPerformersNamedOn = (
               WHERE mm."mediaId" = ?
                 AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                  WHERE mt."mediaId" = mm."mediaId" AND mt."tagId" = mm."tagId")
-                AND NOT EXISTS (SELECT 1 FROM "MentionRefusal" r
+                AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" r
                                  WHERE r."mediaId" = mm."mediaId" AND r."tagId" = mm."tagId")`
         )
         .all(mediaId) as { tagId: string; field: MentionField }[];
@@ -204,8 +206,22 @@ export const untaggedPerformersNamedOn = (
 export const refuse = (tagId: string, mediaIds: readonly string[], userId: string): number =>
     db
         .prepare(
-            `INSERT OR IGNORE INTO "MentionRefusal" ("tagId", "mediaId", "decidedByUserId")
-             SELECT ?, value, ? FROM json_each(?)
+            `INSERT OR IGNORE INTO "ItemRefusal" ("tagId", "mediaId", "decidedByUserId", "decisionId")
+             SELECT ?, value, ?, ? FROM json_each(?)
               WHERE value IN (SELECT "mediaId" FROM "MediaMention" WHERE "tagId" = ?)`
         )
-        .run(tagId, userId, JSON.stringify(mediaIds), tagId).changes;
+        .run(tagId, userId, activeDecision(), JSON.stringify(mediaIds), tagId).changes;
+
+/**
+ * "Not them on these items" (§5f "Decisions you can take back"): what taking a library performer
+ * off items by hand says, whether or not their text names them. The items leave everything that
+ * would offer or tag them as the performer, until the tag is added again. Returns the refusals
+ * added.
+ */
+export const refuseItems = (tagId: string, mediaIds: readonly string[], userId: string): number =>
+    db
+        .prepare(
+            `INSERT OR IGNORE INTO "ItemRefusal" ("tagId", "mediaId", "decidedByUserId", "decisionId")
+             SELECT ?, value, ?, ? FROM json_each(?)`
+        )
+        .run(tagId, userId, activeDecision(), JSON.stringify(mediaIds)).changes;

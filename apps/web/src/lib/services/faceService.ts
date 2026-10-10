@@ -48,6 +48,7 @@ import {
 import {
     artifactRepo,
     db,
+    faceDecisionRepo,
     faceRepo,
     jobRepo,
     mentionRepo,
@@ -87,6 +88,14 @@ const requireAdmin = (auth: AuthContext): void => {
         throw new AuthorizationError("Only an administrator can confirm faces");
     }
 };
+
+/** One press by a person, for `faceDecisionRepo.record` (§5f "Decisions you can take back"). */
+const pressBy = (
+    auth: AuthContext,
+    verdict: "is" | "isNot" | "notOnePerson" | "later",
+    tagId: string | null,
+    surface: "review" | "performer" | "item"
+) => ({ actor: "user" as const, userId: auth.userId, verdict, tagId, surface });
 
 const libraryPerformer = (tagId: string) => {
     const tag = tagRepo.findById(tagId);
@@ -476,24 +485,31 @@ export const pickOwnFace = (
         throw new NotFoundError("Face not found");
     }
 
-    const changed = db.transaction(() => {
-        if (!pick.theirs) return faceRepo.unconfirmFace(pick.faceId, tagId);
-
-        let taken = 0;
-
-        for (const face of faceRepo.ownFaces(tagId, [mediaId], Number.MAX_SAFE_INTEGER)) {
-            if (face.theirs && face.id !== pick.faceId) {
-                taken += faceRepo.unconfirmFace(face.id, tagId);
-            }
-        }
-
-        return taken + faceRepo.confirmFace(pick.faceId, tagId, auth.userId);
-    })();
+    // Taking a pick back undoes it; picking is a decision of its own.
+    const changed = pick.theirs
+        ? faceDecisionRepo.record(pressBy(auth, "is", tagId, "performer"), () =>
+              pickTheirs(tagId, mediaId, pick.faceId, auth.userId)
+          ).result
+        : faceRepo.unconfirmFace(pick.faceId, tagId);
 
     if (changed > 0) confirmationsChanged();
 
     return { changed };
 };
+
+/** One face on an item theirs, and no other there. Returns the faces changed. */
+const pickTheirs = (tagId: string, mediaId: string, faceId: string, userId: string): number =>
+    db.transaction(() => {
+        let taken = 0;
+
+        for (const face of faceRepo.ownFaces(tagId, [mediaId], Number.MAX_SAFE_INTEGER)) {
+            if (face.theirs && face.id !== faceId) {
+                taken += faceRepo.unconfirmFace(face.id, tagId);
+            }
+        }
+
+        return taken + faceRepo.confirmFace(faceId, tagId, userId);
+    })();
 
 /** "That's them" or "Not them", of a whole group. */
 export const decideFaceGroup = (
@@ -504,12 +520,16 @@ export const decideFaceGroup = (
     requireAdmin(auth);
     libraryPerformer(tagId);
 
-    const changed = faceRepo.decideGroup(
-        decision.groupId,
-        tagId,
-        decision.verdict,
-        auth.userId,
-        decision.faceIds
+    const { result: changed } = faceDecisionRepo.record(
+        pressBy(auth, decision.verdict === "confirm" ? "is" : "isNot", tagId, "performer"),
+        () =>
+            faceRepo.decideGroup(
+                decision.groupId,
+                tagId,
+                decision.verdict,
+                auth.userId,
+                decision.faceIds
+            )
     );
 
     confirmationsChanged();
@@ -647,7 +667,8 @@ export const decideLikely = (
         const groups = performerMatchGroups(tagId, auth.accessibleRootIds);
 
         return {
-            changed: db.transaction(
+            changed: faceDecisionRepo.record(
+                pressBy(auth, "isNot", tagId, "performer"),
                 () =>
                     // Said of the item, not of a face on screen.
                     faceRepo.refuseOnItem(
@@ -657,8 +678,8 @@ export const decideLikely = (
                         auth.userId,
                         [],
                         "item"
-                    ) + mentionRepo.refuse(tagId, [decision.mediaId], auth.userId)
-            )(),
+                    ) + mentionRepo.refuseItems(tagId, [decision.mediaId], auth.userId)
+            ).result,
         };
     }
 
@@ -673,7 +694,7 @@ export const decideLikely = (
         throw new ValidationError("None of those items can be tagged from here");
     }
 
-    const { assigned } = db.transaction(() => {
+    const { assigned } = faceDecisionRepo.record(pressBy(auth, "is", tagId, "performer"), () => {
         const result = tagBatchRepo.applyAssignments({
             userId: auth.userId,
             scope: null,
@@ -684,7 +705,7 @@ export const decideLikely = (
         searchRepo.requestReindex(visible);
 
         return result;
-    })();
+    }).result;
 
     return { changed: assigned };
 };
@@ -1073,13 +1094,33 @@ const decideShown = (
     return assigned;
 };
 
-/** Answer a Review › Faces row. */
+const VERDICT = {
+    accept: "is",
+    name: "is",
+    refuse: "isNot",
+    skip: "later",
+    scatter: "notOnePerson",
+} as const;
+
+/** Answer a Review › Faces row: one decision, listed in History and undoable there. */
 export const decideFaceReview = (
     decision: FaceReviewDecision,
     auth: AuthContext
 ): FaceReviewResult => {
     requireAdmin(auth);
 
+    return faceDecisionRepo.record(
+        pressBy(
+            auth,
+            VERDICT[decision.verdict],
+            "tagId" in decision ? decision.tagId : null,
+            "review"
+        ),
+        () => answerRow(decision, auth)
+    ).result;
+};
+
+const answerRow = (decision: FaceReviewDecision, auth: AuthContext): FaceReviewResult => {
     if (decision.verdict === "scatter") {
         faceRepo.scatterGroup(decision.groupId, auth.userId);
         // The grouping job drops the group's sums; its faces leave every reference.
@@ -1131,6 +1172,8 @@ export const decideFaceReview = (
     const named = db.transaction((): FaceReviewResult => {
         const tagId = tagRepo.ensureTag("performer", decision.name, null, auth.userId);
         const tag = libraryPerformer(tagId);
+
+        faceDecisionRepo.nameActive(tag.id);
 
         // The ticked faces are someone else; the rest of the group may still be who it was.
         if (instead && instead.id !== tag.id) {
@@ -1333,12 +1376,12 @@ export const decideItemSuspect = (
     }
 
     if (decision.verdict === "refuse") {
-        db.transaction(() => notThem([mediaId], tag.id, auth.userId))();
+        db.transaction(() => notThem([mediaId], tag.id, auth.userId, "item"))();
 
         return { changed: 1 };
     }
 
-    const { assigned } = db.transaction(() => {
+    const { assigned } = faceDecisionRepo.record(pressBy(auth, "is", tag.id, "item"), () => {
         if (decision.faceId) faceRepo.confirmFace(decision.faceId, tag.id, auth.userId);
 
         const result = tagBatchRepo.applyAssignments({
@@ -1351,7 +1394,7 @@ export const decideItemSuspect = (
         searchRepo.requestReindex([mediaId]);
 
         return result;
-    })();
+    }).result;
 
     confirmationsChanged();
 

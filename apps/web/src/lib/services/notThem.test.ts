@@ -9,6 +9,14 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@private-stock/db", () => ({
+    // A press runs its writes, as one decision (§5f "Decisions you can take back").
+    faceDecisionRepo: {
+        record: (_decision: unknown, write: () => unknown) => ({
+            decisionId: "d1",
+            result: write(),
+        }),
+        nameActive: () => undefined,
+    },
     tagRepo: {
         findById: (id: string) =>
             ({
@@ -18,7 +26,7 @@ vi.mock("@private-stock/db", () => ({
             })[id],
     },
     faceRepo: { refuseOnItems: (...args: unknown[]) => state.faces.push(args) },
-    mentionRepo: { refuse: (...args: unknown[]) => state.names.push(args) },
+    mentionRepo: { refuseItems: (...args: unknown[]) => state.names.push(args) },
     jobRepo: { enqueueKind: () => undefined },
     faceAutoTagRepo: { markRemoved: (...args: unknown[]) => state.removed.push(args) },
 }));

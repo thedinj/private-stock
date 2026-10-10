@@ -1,5 +1,5 @@
 import { AuthorizationError, NotFoundError, type MentionRefusal } from "@private-stock/core";
-import { mentionRepo, tagRepo } from "@private-stock/db";
+import { faceDecisionRepo, mentionRepo, tagRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { lookupMedia } from "./mediaService";
@@ -28,5 +28,17 @@ export const refuseMentions = (
 
     const visible = lookupMedia(input.mediaIds, auth).items.map((item) => item.id);
 
-    return { refused: mentionRepo.refuse(tag.id, visible, auth.userId) };
+    // One decision, listed in History and undoable there (§5f "Decisions you can take back").
+    return {
+        refused: faceDecisionRepo.record(
+            {
+                actor: "user",
+                userId: auth.userId,
+                verdict: "isNot",
+                tagId: tag.id,
+                surface: "findUntagged",
+            },
+            () => mentionRepo.refuse(tag.id, visible, auth.userId)
+        ).result,
+    };
 };

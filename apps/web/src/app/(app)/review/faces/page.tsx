@@ -6,6 +6,7 @@ import { Stack, Tabs } from "@mantine/core";
 import { reviewMedia } from "@private-stock/core";
 
 import { AutoTagSheet } from "@/components/faces/AutoTagSheet";
+import { FaceHistorySheet } from "@/components/faces/FaceHistorySheet";
 import { FaceReviewSheet } from "@/components/faces/FaceReviewSheet";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
@@ -19,13 +20,15 @@ import { defineView, enumField, textField, useUrlView } from "@/lib/urlView";
  * - **Would tag**: what faces would tag by themselves, checked before they are allowed to, and
  *   the switch that allows them.
  * - **Tagged for you**: what they tagged, to take back what is wrong.
+ * - **History**: every face decision, yours and the app's, each undoable (§5f "Decisions you can
+ *   take back").
  *
  * Matches and Unnamed open on faces in videos; photos are behind their kind control, since they
  * are the exception in this collection. Would tag and Tagged for you have no such control: the
  * first is a fair sample of what the rule would do, and narrowing it would no longer be one.
  */
 const facesView = defineView("/review/faces", {
-    tab: enumField("tab", ["matches", "unnamed", "wouldTag", "taggedForYou"], "matches"),
+    tab: enumField("tab", ["matches", "unnamed", "wouldTag", "taggedForYou", "history"], "matches"),
     // A performer's page links here narrowed to them.
     performer: textField("performer"),
     media: enumField("media", reviewMedia, "video"),
@@ -55,6 +58,7 @@ const FacesReview: React.FC = () => {
                     <Tabs.Tab value="unnamed">Unnamed</Tabs.Tab>
                     <Tabs.Tab value="wouldTag">Would tag</Tabs.Tab>
                     <Tabs.Tab value="taggedForYou">Tagged for you</Tabs.Tab>
+                    <Tabs.Tab value="history">History</Tabs.Tab>
                 </Tabs.List>
 
                 <Tabs.Panel value="matches">
@@ -83,6 +87,10 @@ const FacesReview: React.FC = () => {
 
                 <Tabs.Panel value="taggedForYou">
                     <AutoTagSheet mode="applied" />
+                </Tabs.Panel>
+
+                <Tabs.Panel value="history">
+                    <FaceHistorySheet />
                 </Tabs.Panel>
             </Tabs>
         </Stack>

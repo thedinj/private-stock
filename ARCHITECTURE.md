@@ -549,7 +549,8 @@ candidates is what remains.
 
 **"Not ‹tag›" beside it** (2026-10-08). A common first name or a short alias names files that are
 somebody else, and a list that cannot be cleared stops being looked at. So the bar also offers
-**Not ‹tag›** for what is ticked: a `MentionRefusal` row per item and tag. The match stays in
+**Not ‹tag›** for what is ticked: an `ItemRefusal` row per item and tag (it was
+`MentionRefusal`; see "Decisions you can take back"). The match stays in
 `MediaMention` — it is a fact about the text — and the mentions filter (both its forms, the
 membership test and the driven source) leaves refused items out, as a performer's "Likely" does.
 Whoever may file things under the tag may say it: an administrator for the library's tags, the
@@ -2169,7 +2170,7 @@ confirmation). The rows are the same component and the same reads wherever they 
   other place shows. Confirmed faces first, then proposed, then resembling; more names first
   within each. Each card has "Add ‹name›" — a `TagBatch` the undo list can withdraw — and "Not
   ‹name›", which refuses both what put it there: its faces in their groups and its name match
-  (`MentionRefusal`), so it is asked about nowhere again. "Add ‹name› to all N" tags the whole list
+  (`ItemRefusal`), so it is asked about nowhere again. "Add ‹name› to all N" tags the whole list
   as the server counts it, not the pages that happen to be loaded. Above it, "N with only their
   name → Find untagged". It was a list of every kind of
   evidence, which duplicated both, and its "add to all shown" swept weak name-only cards in with
@@ -2295,6 +2296,43 @@ eight confirmed faces is one item's say, and used to outvote seven items refused
 Naming a leftover face as the very performer it was unticked for withdraws that refusal and tags
 it; it used to tag nothing, say so, and come back. The grouping job writes `groups.bin` with each
 batch, so a run that dies midway leaves the file and the rows in step.
+
+### Decisions you can take back
+
+**A face decision had no identity** (2026-10-10, from a review of the whole workflow): nothing
+recorded which rows one press wrote, so nothing could be listed or undone exactly. 84% of
+confirmations and 95% of refusals were never on screen; refusals, "can't tell" and "not one person"
+had no list and no undo; undoing a review's tags cleared its confirmations but kept the refusals the
+same press made; an untag's refusals outlived the tag being added back; and a single refusal carried
+to an unseen face vetoed tagging the whole item by itself, unseen.
+
+- **`FaceDecision`, one row a press**, by a person or by the app tagging by itself: the verdict
+  (`is`, `isNot`, `notOnePerson`, `later`), of whom, from which surface, the tag batch it made, what
+  it wrote, and when it was undone. Every row a press writes points at it — `Face.decisionId`
+  (confirmations, can't-tells, not-one-persons), `FaceRefusal.decisionId`, `ItemRefusal.decisionId`
+  — stamped by `faceDecisionRepo.record`, which wraps the writes: while it runs, `activeDecision()`
+  is the press, and a batch made inside it is attached (`attachBatch`). A press that wrote nothing
+  leaves nothing; one inside another is part of it. Writes outside any press carry none, as before.
+- **Undo takes back exactly what one decision wrote that still stands**: its tag batch withdrawn if
+  it still stands, its confirmations and can't-tells cleared, its refusals deleted. A later
+  decision's rows are that decision's. Undoing a refusal makes faces undecided again; it does not
+  restore a confirmation the refusal had taken back. For the app's own tags the action is
+  **Wrong**: undone, and "not them" on those items, counted against tagging by itself.
+- **History** (Review › Faces) lists every decision newest first — everybody's, yours, or the
+  app's — with a few of its faces, what it did, where, and Undo.
+- **`ItemRefusal` replaces `MentionRefusal`**: "not them on this item", said from "Find untagged",
+  by untagging by hand (now on every item, not only those whose text names them), from "Likely",
+  or from an item's page. Adding the tag again withdraws it, and the item's face refusals the
+  untag made (`item`), by trigger (`MediaTag_refusal_ai`): the later word wins. Refusals of faces
+  seen on screen stay.
+- **A refusal carried to an unseen face no longer vetoes an item** for tagging by itself; a refused
+  item, or a face somebody saw, still does.
+- **What was decided before is carried over** as decisions ("Before history was kept"), grouped by
+  the press that wrote it — one statement stamps one `CURRENT_TIMESTAMP`, so its rows share their
+  performer, person and second. A confirmation and the refusals made with it are one decision, its
+  tag batch attached where one of the same second still stands. The app's tags are one decision a
+  batch. On production that was 290 confirming presses (2,007 items), 26 refusing ones, 3 can't-tell
+  or not-one-person, and 386 of the app's batches (537 items), in under a second.
 
 ### Performers with no single face
 

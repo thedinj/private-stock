@@ -1,11 +1,6 @@
 "use client";
 
-import {
-    useInfiniteQuery,
-    useMutation,
-    useQuery,
-    useQueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
     NoSingleFace,
@@ -23,6 +18,8 @@ import type {
     FaceReviewPage,
     FaceReviewResult,
     FaceReviewTab,
+    FaceHistoryPage,
+    FaceUndo,
     LikelyDecision,
     LikelyPage,
     OwnFacePick,
@@ -358,6 +355,45 @@ export const useSetNoSingleFace = (tagId: string) => {
             void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faces(tagId) });
             void queryClient.invalidateQueries({ queryKey: queryKeys.tags.likely(tagId) });
             void queryClient.invalidateQueries({ queryKey: queryKeys.tags.faceReviewAll() });
+        },
+    });
+};
+
+/**
+ * History (§5f "Decisions you can take back"), a page at a time. Asked for again whenever it is
+ * opened: decisions are made on every face surface, and none of them has to reach it.
+ */
+export const useFaceHistory = (actor: "all" | "user" | "app", tagId: string | null) =>
+    useInfiniteQuery({
+        queryKey: queryKeys.faceHistory.list(actor, tagId),
+        queryFn: ({ pageParam }) =>
+            api<FaceHistoryPage>(
+                `/api/faces/history?actor=${actor}` +
+                    (tagId ? `&tagId=${encodeURIComponent(tagId)}` : "") +
+                    (pageParam ? `&before=${encodeURIComponent(pageParam)}` : "")
+            ),
+        initialPageParam: null as string | null,
+        getNextPageParam: (last) => last.next,
+        refetchOnMount: "always",
+    });
+
+/**
+ * Undo a face decision. Its tags may go with it, so it moves what any tag edit does — every
+ * performer's faces and "Likely", the library's pages and facets, the undo list — and History.
+ * Not the review's lists, which hold still until refreshed.
+ */
+export const useUndoFaceDecision = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, ...input }: FaceUndo & { id: string }) =>
+            api<{ undone: true }>(`/api/faces/history/${encodeURIComponent(id)}/undo`, {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: () => {
+            invalidateVocabulary(queryClient);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
         },
     });
 };

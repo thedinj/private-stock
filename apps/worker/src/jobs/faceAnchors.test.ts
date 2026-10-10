@@ -23,6 +23,7 @@ import {
 const dataDir = mkdtempSync(path.join(tmpdir(), "ps-faceanchors-"));
 
 const state = vi.hoisted(() => ({
+    decisions: [] as unknown[],
     confirmed: [] as { tagId: string; mediaId: string; vectorIndex: number }[],
     tagged: [] as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[],
     faces: [] as { id: string; mediaId: string; vectorIndex: number }[],
@@ -39,6 +40,13 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@private-stock/db", () => ({
     db: { transaction: <T>(fn: () => T) => fn },
+    // A press runs its writes, as one decision (§5f "Decisions you can take back").
+    faceDecisionRepo: {
+        record: (decision: unknown, write: () => unknown) => {
+            state.decisions.push(decision);
+            return { decisionId: "d1", result: write() };
+        },
+    },
     faceAutoTagRepo: {
         candidates: () => state.candidates,
         replaceProposals: () => undefined,
@@ -130,6 +138,7 @@ beforeEach(() => {
     state.counts = { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 };
     state.setting = {};
     state.decided = [];
+    state.decisions = [];
     state.batches = [];
 });
 
@@ -214,6 +223,11 @@ describe("face references", () => {
                 ["admin-1", "ai", 1],
             ]);
             expect(state.decided.map((d) => d[2])).toEqual(["applied", "applied", "applied"]);
+            // Each performer's batch is the app's own decision, undone in History with "Wrong".
+            expect(state.decisions).toEqual([
+                expect.objectContaining({ actor: "app", verdict: "is", surface: "auto" }),
+                expect.objectContaining({ actor: "app", verdict: "is", surface: "auto" }),
+            ]);
         });
 
         it("stops when too much of what it tagged was taken back", async () => {

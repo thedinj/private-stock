@@ -9,6 +9,14 @@ import type { AuthContext } from "../auth/withAuth";
 const state = vi.hoisted(() => ({ refused: [] as [string, string[]][] }));
 
 vi.mock("@private-stock/db", () => ({
+    // A press runs its writes, as one decision (§5f "Decisions you can take back").
+    faceDecisionRepo: {
+        record: (_decision: unknown, write: () => unknown) => ({
+            decisionId: "d1",
+            result: write(),
+        }),
+        nameActive: () => undefined,
+    },
     tagRepo: {
         findById: (id: string) =>
             ({

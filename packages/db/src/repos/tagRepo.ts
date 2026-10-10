@@ -661,8 +661,10 @@ const carryPicture = (fromTagId: string, toTagId: string): void => {
 const carryFaceDecisions = (sourceTagId: string, targetTagId: string): void => {
     db.prepare(`UPDATE "Face" SET "tagId" = ? WHERE "tagId" = ?`).run(targetTagId, sourceTagId);
     db.prepare(
-        `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "decidedAt", "how")
-         SELECT "faceId", ?, "decidedByUserId", "decidedAt", "how" FROM "FaceRefusal" WHERE "tagId" = ?`
+        `INSERT OR IGNORE INTO "FaceRefusal"
+             ("faceId", "tagId", "decidedByUserId", "decidedAt", "how", "decisionId")
+         SELECT "faceId", ?, "decidedByUserId", "decidedAt", "how", "decisionId"
+           FROM "FaceRefusal" WHERE "tagId" = ?`
     ).run(targetTagId, sourceTagId);
     db.prepare(
         `DELETE FROM "FaceRefusal"
@@ -673,9 +675,15 @@ const carryFaceDecisions = (sourceTagId: string, targetTagId: string): void => {
          SELECT ?, "decidedByUserId", "decidedAt" FROM "PerformerNoFace" WHERE "tagId" = ?`
     ).run(targetTagId, sourceTagId);
     db.prepare(
-        `INSERT OR IGNORE INTO "MentionRefusal" ("tagId", "mediaId", "decidedByUserId", "decidedAt")
-         SELECT ?, "mediaId", "decidedByUserId", "decidedAt" FROM "MentionRefusal" WHERE "tagId" = ?`
+        `INSERT OR IGNORE INTO "ItemRefusal" ("tagId", "mediaId", "decidedByUserId", "decidedAt", "decisionId")
+         SELECT ?, "mediaId", "decidedByUserId", "decidedAt", "decisionId"
+           FROM "ItemRefusal" WHERE "tagId" = ?`
     ).run(targetTagId, sourceTagId);
+    // The decisions about them are the target's now: History lists them under its name.
+    db.prepare(`UPDATE "FaceDecision" SET "tagId" = ? WHERE "tagId" = ?`).run(
+        targetTagId,
+        sourceTagId
+    );
 };
 
 export const mergeTags = (

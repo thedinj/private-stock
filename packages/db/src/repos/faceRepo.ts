@@ -4,6 +4,8 @@ import type { MediaKind } from "@private-stock/core";
 
 import { db } from "../db.js";
 
+import { activeDecision } from "./faceDecisionRepo.js";
+
 /**
  * The faces each item shows, and what people have said about them (§5f).
  *
@@ -40,6 +42,7 @@ interface FaceRow extends FoundFace {
     skippedByUserId: string | null;
     scatteredAt: string | null;
     scatteredByUserId: string | null;
+    decisionId: string | null;
 }
 
 interface RefusalRow {
@@ -48,6 +51,7 @@ interface RefusalRow {
     decidedByUserId: string | null;
     decidedAt: string;
     how: DecidedHow | null;
+    decisionId: string | null;
 }
 
 /** How much two boxes are the same box: intersection over union. */
@@ -79,17 +83,19 @@ const insertFace = (row: Omit<FaceRow, "eyes"> & { eyes: number; mediaId: string
     db.prepare(
         `INSERT INTO "Face" ("id", "mediaId", "vectorIndex", "atMs", "x", "y", "w", "h", "eyes",
                              "score", "tagId", "decidedByUserId", "decidedAt", "decidedHow",
-                             "skippedAt", "skippedByUserId", "scatteredAt", "scatteredByUserId")
+                             "skippedAt", "skippedByUserId", "scatteredAt", "scatteredByUserId",
+                             "decisionId")
          VALUES (@id, @mediaId, @vectorIndex, @atMs, @x, @y, @w, @h, @eyes,
                  @score, @tagId, @decidedByUserId, @decidedAt, @decidedHow,
-                 @skippedAt, @skippedByUserId, @scatteredAt, @scatteredByUserId)`
+                 @skippedAt, @skippedByUserId, @scatteredAt, @scatteredByUserId, @decisionId)`
     ).run(row);
 };
 
 const insertRefusal = (row: RefusalRow): void => {
     db.prepare(
-        `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "decidedAt", "how")
-         VALUES (@faceId, @tagId, @decidedByUserId, @decidedAt, @how)`
+        `INSERT OR IGNORE INTO "FaceRefusal"
+             ("faceId", "tagId", "decidedByUserId", "decidedAt", "how", "decisionId")
+         VALUES (@faceId, @tagId, @decidedByUserId, @decidedAt, @how, @decisionId)`
     ).run(row);
 };
 
@@ -98,7 +104,7 @@ const facesOf = (mediaId: string): FaceRow[] =>
         .prepare(
             `SELECT "id", "vectorIndex", "atMs", "x", "y", "w", "h", "eyes", "score",
                     "tagId", "decidedByUserId", "decidedAt", "decidedHow",
-                    "skippedAt", "skippedByUserId", "scatteredAt", "scatteredByUserId"
+                    "skippedAt", "skippedByUserId", "scatteredAt", "scatteredByUserId", "decisionId"
                FROM "Face" WHERE "mediaId" = ? ORDER BY "vectorIndex"`
         )
         .all(mediaId) as FaceRow[];
@@ -106,7 +112,8 @@ const facesOf = (mediaId: string): FaceRow[] =>
 const refusalsOf = (mediaId: string): RefusalRow[] =>
     db
         .prepare(
-            `SELECT r."faceId", r."tagId", r."decidedByUserId", r."decidedAt", r."how"
+            `SELECT r."faceId", r."tagId", r."decidedByUserId", r."decidedAt", r."how",
+                    r."decisionId"
                FROM "FaceRefusal" r JOIN "Face" f ON f."id" = r."faceId"
               WHERE f."mediaId" = ?`
         )
@@ -194,6 +201,7 @@ export const replaceForMedia = (mediaId: string, faces: readonly FoundFace[]): v
                 skippedByUserId: was?.skippedByUserId ?? null,
                 scatteredAt: was?.scatteredAt ?? null,
                 scatteredByUserId: was?.scatteredByUserId ?? null,
+                decisionId: was?.decisionId ?? null,
             });
         }
 
@@ -231,23 +239,33 @@ export const copyFromTwin = (fromMediaId: string, toMediaId: string): number => 
             if (face.tagId !== null) {
                 db.prepare(
                     `UPDATE "Face"
-                        SET "tagId" = ?, "decidedByUserId" = ?, "decidedAt" = ?, "decidedHow" = ?
+                        SET "tagId" = ?, "decidedByUserId" = ?, "decidedAt" = ?, "decidedHow" = ?,
+                            "decisionId" = ?
                       WHERE "id" = ? AND "tagId" IS NULL`
-                ).run(face.tagId, face.decidedByUserId, face.decidedAt, face.decidedHow, copy);
+                ).run(
+                    face.tagId,
+                    face.decidedByUserId,
+                    face.decidedAt,
+                    face.decidedHow,
+                    face.decisionId,
+                    copy
+                );
             }
 
             if (face.skippedAt !== null) {
                 db.prepare(
-                    `UPDATE "Face" SET "skippedAt" = ?, "skippedByUserId" = ?
+                    `UPDATE "Face" SET "skippedAt" = ?, "skippedByUserId" = ?,
+                            "decisionId" = coalesce("decisionId", ?)
                       WHERE "id" = ? AND "skippedAt" IS NULL`
-                ).run(face.skippedAt, face.skippedByUserId, copy);
+                ).run(face.skippedAt, face.skippedByUserId, face.decisionId, copy);
             }
 
             if (face.scatteredAt !== null) {
                 db.prepare(
-                    `UPDATE "Face" SET "scatteredAt" = ?, "scatteredByUserId" = ?
+                    `UPDATE "Face" SET "scatteredAt" = ?, "scatteredByUserId" = ?,
+                            "decisionId" = coalesce("decisionId", ?)
                       WHERE "id" = ? AND "scatteredAt" IS NULL`
-                ).run(face.scatteredAt, face.scatteredByUserId, copy);
+                ).run(face.scatteredAt, face.scatteredByUserId, face.decisionId, copy);
             }
         }
 
@@ -306,10 +324,11 @@ export const scatterGroup = (groupId: string, userId: string): number =>
         const changed = db
             .prepare(
                 `UPDATE "Face"
-                    SET "scatteredAt" = CURRENT_TIMESTAMP, "scatteredByUserId" = ?, "groupId" = NULL
+                    SET "scatteredAt" = CURRENT_TIMESTAMP, "scatteredByUserId" = ?, "groupId" = NULL,
+                        "decisionId" = ?
                   WHERE "groupId" = ? AND "tagId" IS NULL`
             )
-            .run(userId, groupId).changes;
+            .run(userId, activeDecision(), groupId).changes;
 
         db.prepare(`INSERT OR IGNORE INTO "FaceGroupDissolved" ("groupId") VALUES (?)`).run(
             groupId
@@ -660,11 +679,12 @@ export const groupSizes = (
 export const skipFaces = (groupId: string, mediaIds: readonly string[], userId: string): number =>
     db
         .prepare(
-            `UPDATE "Face" SET "skippedAt" = CURRENT_TIMESTAMP, "skippedByUserId" = ?
-              WHERE "groupId" = ? AND "skippedAt" IS NULL
+            `UPDATE "Face" SET "skippedAt" = CURRENT_TIMESTAMP, "skippedByUserId" = ?,
+                    "decisionId" = ?
+              WHERE "groupId" = ? AND "skippedAt" IS NULL AND "tagId" IS NULL
                 AND "mediaId" IN (SELECT value FROM json_each(?))`
         )
-        .run(userId, groupId, JSON.stringify(mediaIds)).changes;
+        .run(userId, activeDecision(), groupId, JSON.stringify(mediaIds)).changes;
 
 /** Faces as a list shows them, by id. */
 export const shownFaces = (faceIds: readonly string[]): ShownFace[] =>
@@ -689,16 +709,16 @@ export const refuseMatchedOnItem = (
 ): number =>
     db
         .prepare(
-            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how")
+            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how", "decisionId")
              SELECT f."id", :tagId, :userId,
-                    CASE WHEN f."id" = :shown THEN 'shown' ELSE 'inferred' END
+                    CASE WHEN f."id" = :shown THEN 'shown' ELSE 'inferred' END, :decision
                FROM "Face" f
               WHERE f."mediaId" = :mediaId
                 AND (f."id" = :shown
                      OR EXISTS (SELECT 1 FROM "FaceMatch" fm
                                  WHERE fm."faceId" = f."id" AND fm."tagId" = :tagId))`
         )
-        .run({ mediaId, tagId, shown: shownFaceId, userId }).changes;
+        .run({ mediaId, tagId, shown: shownFaceId, userId, decision: activeDecision() }).changes;
 
 /** "That's them", said of one face on screen. Returns whether it was confirmed. */
 export const confirmFace = (faceId: string, tagId: string, userId: string): number =>
@@ -706,10 +726,10 @@ export const confirmFace = (faceId: string, tagId: string, userId: string): numb
         .prepare(
             `UPDATE "Face"
                 SET "tagId" = ?, "decidedByUserId" = ?, "decidedAt" = CURRENT_TIMESTAMP,
-                    "decidedHow" = 'shown'
+                    "decidedHow" = 'shown', "decisionId" = ?
               WHERE "id" = ? AND "tagId" IS NULL`
         )
-        .run(tagId, userId, faceId).changes;
+        .run(tagId, userId, activeDecision(), faceId).changes;
 
 /**
  * An item's faces whose best match is a library performer the item does not carry — not refused
@@ -1107,7 +1127,8 @@ export const unconfirmFace = (faceId: string, tagId: string): number =>
     db
         .prepare(
             `UPDATE "Face"
-                SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL, "decidedHow" = NULL
+                SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL, "decidedHow" = NULL,
+                    "decisionId" = NULL
               WHERE "id" = ? AND "tagId" = ?`
         )
         .run(faceId, tagId).changes;
@@ -1304,14 +1325,21 @@ export const decideGroup = (
     shownFaceIds: readonly string[]
 ): number =>
     db.transaction((): number => {
-        const params = { tagId, userId, groupId, shown: ids(shownFaceIds) };
+        const params = {
+            tagId,
+            userId,
+            groupId,
+            shown: ids(shownFaceIds),
+            decision: activeDecision(),
+        };
 
         if (verdict === "confirm") {
             return db
                 .prepare(
                     `UPDATE "Face"
                         SET "tagId" = :tagId, "decidedByUserId" = :userId,
-                            "decidedAt" = CURRENT_TIMESTAMP, "decidedHow" = 'shown'
+                            "decidedAt" = CURRENT_TIMESTAMP, "decidedHow" = 'shown',
+                            "decisionId" = :decision
                       WHERE "groupId" = :groupId AND "tagId" IS NULL
                         AND "id" IN (SELECT value FROM json_each(:shown))
                         AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
@@ -1323,14 +1351,14 @@ export const decideGroup = (
         db.prepare(
             `UPDATE "Face"
                 SET "tagId" = NULL, "decidedByUserId" = :userId, "decidedAt" = CURRENT_TIMESTAMP,
-                    "decidedHow" = NULL
+                    "decidedHow" = NULL, "decisionId" = NULL
               WHERE "groupId" = :groupId AND "tagId" = :tagId`
         ).run({ tagId, userId, groupId });
 
         return db
             .prepare(
-                `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how")
-                 SELECT "id", :tagId, :userId, ${howSql("inferred")} FROM "Face"
+                `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how", "decisionId")
+                 SELECT "id", :tagId, :userId, ${howSql("inferred")}, :decision FROM "Face"
                   WHERE "groupId" = :groupId
                     AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                      WHERE mt."mediaId" = "Face"."mediaId" AND mt."tagId" = :tagId)`
@@ -1354,13 +1382,20 @@ export const confirmOnItems = (
         .prepare(
             `UPDATE "Face"
                 SET "tagId" = :tagId, "decidedByUserId" = :userId, "decidedAt" = CURRENT_TIMESTAMP,
-                    "decidedHow" = ${howSql("inferred")}
+                    "decidedHow" = ${howSql("inferred")}, "decisionId" = :decision
               WHERE "groupId" = :groupId AND "tagId" IS NULL
                 AND "mediaId" IN (SELECT value FROM json_each(:mediaIds))
                 AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
                                  WHERE r."faceId" = "Face"."id" AND r."tagId" = :tagId)`
         )
-        .run({ tagId, userId, groupId, mediaIds: ids(mediaIds), shown: ids(shownFaceIds) }).changes;
+        .run({
+            tagId,
+            userId,
+            groupId,
+            mediaIds: ids(mediaIds),
+            shown: ids(shownFaceIds),
+            decision: activeDecision(),
+        }).changes;
 
 /**
  * "Not them", said of whole items: every face on them refused for the performer. What taking a
@@ -1369,10 +1404,10 @@ export const confirmOnItems = (
 export const refuseOnItems = (mediaIds: readonly string[], tagId: string, userId: string): number =>
     db
         .prepare(
-            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how")
-             SELECT "id", ?, ?, 'item' FROM "Face" WHERE "mediaId" IN (SELECT value FROM json_each(?))`
+            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how", "decisionId")
+             SELECT "id", ?, ?, 'item', ? FROM "Face" WHERE "mediaId" IN (SELECT value FROM json_each(?))`
         )
-        .run(tagId, userId, JSON.stringify(mediaIds)).changes;
+        .run(tagId, userId, activeDecision(), JSON.stringify(mediaIds)).changes;
 
 /**
  * "Them after all", said of items' faces in a group that were refused for the performer: the
@@ -1409,11 +1444,18 @@ export const refuseOnItem = (
 
     return db
         .prepare(
-            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how")
-             SELECT "id", :tagId, :userId, ${howSql(otherwise)} FROM "Face"
+            `INSERT OR IGNORE INTO "FaceRefusal" ("faceId", "tagId", "decidedByUserId", "how", "decisionId")
+             SELECT "id", :tagId, :userId, ${howSql(otherwise)}, :decision FROM "Face"
               WHERE "mediaId" = :mediaId AND "groupId" IN (SELECT value FROM json_each(:groups))`
         )
-        .run({ tagId, userId, mediaId, groups: ids(groupIds), shown: ids(shownFaceIds) }).changes;
+        .run({
+            tagId,
+            userId,
+            mediaId,
+            groups: ids(groupIds),
+            shown: ids(shownFaceIds),
+            decision: activeDecision(),
+        }).changes;
 };
 
 /**

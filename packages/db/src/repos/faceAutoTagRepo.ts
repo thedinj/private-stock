@@ -21,9 +21,10 @@ export interface AutoTagCandidate {
 /**
  * Every untagged item with a face whose best match is a performer at `line` with `margin`, the
  * evidence counted: faces at distinct moments at `strongLine`, the best score and its face,
- * whether their name is on the item, how many items their reference rests on. Not where anything
- * on the item was refused for them, by face or by name, or a person already checked the pair, or
- * the item carries them.
+ * whether their name is on the item, how many items their reference rests on. Not where the item
+ * was refused for them, or a face on it somebody saw — a refusal carried to a face nobody saw no
+ * longer speaks for the whole item (§5f "Decisions you can take back") — or a person already
+ * checked the pair, or the item carries them.
  */
 export const candidates = (line: number, strongLine: number, margin: number): AutoTagCandidate[] =>
     db
@@ -37,7 +38,7 @@ export const candidates = (line: number, strongLine: number, margin: number): Au
                                         THEN coalesce(f."atMs", f."vectorIndex") END) AS "strongFaces",
                     EXISTS (SELECT 1 FROM "MediaMention" mm
                              WHERE mm."mediaId" = f."mediaId" AND mm."tagId" = fm."tagId"
-                               AND NOT EXISTS (SELECT 1 FROM "MentionRefusal" mr
+                               AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" mr
                                                 WHERE mr."mediaId" = mm."mediaId"
                                                   AND mr."tagId" = mm."tagId")) AS "named",
                     a."items" AS "anchorItems"
@@ -50,8 +51,9 @@ export const candidates = (line: number, strongLine: number, margin: number): Au
                 AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                  WHERE mt."mediaId" = f."mediaId" AND mt."tagId" = fm."tagId")
                 AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r JOIN "Face" rf ON rf."id" = r."faceId"
-                                 WHERE rf."mediaId" = f."mediaId" AND r."tagId" = fm."tagId")
-                AND NOT EXISTS (SELECT 1 FROM "MentionRefusal" mr
+                                 WHERE rf."mediaId" = f."mediaId" AND r."tagId" = fm."tagId"
+                                   AND r."how" IS NOT 'inferred')
+                AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" mr
                                  WHERE mr."mediaId" = f."mediaId" AND mr."tagId" = fm."tagId")
                 AND NOT EXISTS (SELECT 1 FROM "FaceAutoTag" t
                                  WHERE t."mediaId" = f."mediaId" AND t."tagId" = fm."tagId"

@@ -13,6 +13,7 @@ import {
 import {
     db,
     faceAutoTagRepo,
+    faceDecisionRepo,
     faceRepo,
     jobRepo,
     searchRepo,
@@ -162,7 +163,7 @@ export const decideAutoTag = (decision: AutoTagDecision, auth: AuthContext): { t
         if (decision.verdict === "wrong") {
             db.transaction(() => {
                 tagRepo.unassign(decision.mediaId, tag.id, null);
-                notThem([decision.mediaId], tag.id, auth.userId);
+                notThem([decision.mediaId], tag.id, auth.userId, "wouldTag");
                 searchRepo.requestReindex([decision.mediaId]);
             })();
         }
@@ -170,7 +171,14 @@ export const decideAutoTag = (decision: AutoTagDecision, auth: AuthContext): { t
         return { tagged: 0 };
     }
 
-    const tagged = db.transaction((): number => {
+    const press = {
+        actor: "user" as const,
+        userId: auth.userId,
+        verdict: decision.verdict === "right" ? ("is" as const) : ("isNot" as const),
+        tagId: tag.id,
+        surface: "wouldTag" as const,
+    };
+    const { result: tagged } = faceDecisionRepo.record(press, (): number => {
         faceAutoTagRepo.decide(decision.mediaId, decision.tagId, decision.verdict, auth.userId);
 
         if (decision.verdict === "wrong") {
@@ -191,7 +199,7 @@ export const decideAutoTag = (decision: AutoTagDecision, auth: AuthContext): { t
         searchRepo.requestReindex([decision.mediaId]);
 
         return assigned;
-    })();
+    });
 
     // A confirmation or a refusal moves their reference.
     jobRepo.enqueueKind("faceAnchors", 200, 120);

@@ -157,6 +157,7 @@ CREATE TABLE "Face" (
             "decidedHow" TEXT CHECK("decidedHow" IN ('shown', 'item', 'inferred')),
             "scatteredAt" DATETIME,
             "scatteredByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "decisionId" TEXT CHECK(length("decisionId") <= 64),
             UNIQUE ("mediaId", "vectorIndex")
         );
 
@@ -183,6 +184,21 @@ CREATE TABLE "FaceAutoTag" (
             PRIMARY KEY ("mediaId", "tagId")
         ) WITHOUT ROWID;
 
+CREATE TABLE "FaceDecision" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "actor" TEXT NOT NULL CHECK("actor" IN ('user', 'app')),
+            "userId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "verdict" TEXT NOT NULL CHECK("verdict" IN ('is', 'isNot', 'notOnePerson', 'later')),
+            "tagId" TEXT REFERENCES "Tag" ("id") ON DELETE SET NULL,
+            "surface" TEXT NOT NULL CHECK(length("surface") <= 32),
+            "tagBatchId" TEXT REFERENCES "TagBatch" ("id") ON DELETE SET NULL,
+            "faceCount" INTEGER NOT NULL DEFAULT 0,
+            "itemCount" INTEGER NOT NULL DEFAULT 0,
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "undoneAt" DATETIME,
+            "undoneByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL
+        );
+
 CREATE TABLE "FaceGroupDissolved" (
             "groupId" TEXT NOT NULL PRIMARY KEY CHECK(length("groupId") <= 64),
             "dissolvedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -206,6 +222,7 @@ CREATE TABLE "FaceRefusal" (
             "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "how" TEXT CHECK("how" IN ('shown', 'item', 'inferred')),
+            "decisionId" TEXT CHECK(length("decisionId") <= 64),
             PRIMARY KEY ("faceId", "tagId")
         ) WITHOUT ROWID;
 
@@ -240,6 +257,15 @@ CREATE TABLE "Invitation" (
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE SET NULL
         );
+
+CREATE TABLE "ItemRefusal" (
+            "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
+            "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "decisionId" TEXT REFERENCES "FaceDecision" ("id") ON DELETE SET NULL,
+            PRIMARY KEY ("tagId", "mediaId")
+        ) WITHOUT ROWID;
 
 CREATE TABLE "Job" (
             "id" TEXT NOT NULL PRIMARY KEY,
@@ -662,14 +688,6 @@ CREATE TABLE "MediaTextString" (
             "confidenceSum" REAL NOT NULL,
             "stabilitySum" REAL NOT NULL
         );
-
-CREATE TABLE "MentionRefusal" (
-            "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
-            "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
-            "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
-            "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY ("tagId", "mediaId")
-        ) WITHOUT ROWID;
 
 CREATE TABLE "OcrTagMatch" (
             "id" TEXT NOT NULL PRIMARY KEY,
@@ -1149,13 +1167,26 @@ CREATE INDEX "idx_ErrorLog_createdAt" ON "ErrorLog" ("createdAt");
 
 CREATE INDEX "idx_FaceAutoTag_state" ON "FaceAutoTag" ("state", "tagId");
 
+CREATE INDEX "idx_FaceDecision_created" ON "FaceDecision" ("createdAt" DESC);
+
+CREATE INDEX "idx_FaceDecision_tag"
+            ON "FaceDecision" ("tagId", "createdAt" DESC) WHERE "tagId" IS NOT NULL;
+
 CREATE INDEX "idx_FaceMatch_tag" ON "FaceMatch" ("tagId", "score");
 
+CREATE INDEX "idx_FaceRefusal_decision"
+            ON "FaceRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
+
 CREATE INDEX "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");
+
+CREATE INDEX "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
 CREATE INDEX "idx_Face_group" ON "Face" ("groupId") WHERE "groupId" IS NOT NULL;
 
 CREATE INDEX "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
+
+CREATE INDEX "idx_ItemRefusal_decision"
+            ON "ItemRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
 CREATE INDEX "idx_Job_claim"
             ON "Job" ("priority", "mediaAddedAt" DESC, "createdAt", "availableAt", "kind")
@@ -1587,8 +1618,17 @@ CREATE TRIGGER "MediaTag_face_ad"
         BEGIN
             UPDATE "Face"
                SET "tagId" = NULL, "decidedByUserId" = NULL, "decidedAt" = NULL,
-                   "decidedHow" = NULL
+                   "decidedHow" = NULL, "decisionId" = NULL
              WHERE "mediaId" = OLD."mediaId" AND "tagId" = OLD."tagId";
+        END;
+
+CREATE TRIGGER "MediaTag_refusal_ai"
+            AFTER INSERT ON "MediaTag" WHEN NEW."userId" IS NULL
+        BEGIN
+            DELETE FROM "ItemRefusal" WHERE "mediaId" = NEW."mediaId" AND "tagId" = NEW."tagId";
+            DELETE FROM "FaceRefusal"
+             WHERE "tagId" = NEW."tagId" AND "how" = 'item'
+               AND "faceId" IN (SELECT "id" FROM "Face" WHERE "mediaId" = NEW."mediaId");
         END;
 
 CREATE TRIGGER "MediaText_string_ad"

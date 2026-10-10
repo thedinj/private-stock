@@ -457,3 +457,56 @@ export const itemSuspectDecisionSchema = z.object({
     faceId: z.string().min(1).max(64).nullable().default(null),
 });
 export type ItemSuspectDecision = z.infer<typeof itemSuspectDecisionSchema>;
+
+/**
+ * History (§5f "Decisions you can take back"): every face decision, newest first — by a person or
+ * by the app tagging by itself — each with what it wrote, and undoable.
+ */
+export const faceDecisionActorSchema = z.enum(["user", "app"]);
+export const faceDecisionVerdictSchema = z.enum(["is", "isNot", "notOnePerson", "later"]);
+export type FaceDecisionVerdict = z.infer<typeof faceDecisionVerdictSchema>;
+
+export const faceHistoryQuerySchema = z.object({
+    /** Whose decisions: everybody's, the people's, or the app's own. */
+    actor: z.enum(["all", "user", "app"]).default("all"),
+    /** One performer's decisions only. */
+    tagId: z.string().min(1).max(64).optional(),
+    /** The page after this decision: its `createdAt` and id, as `next` gave them. */
+    before: z.string().min(1).max(120).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(30),
+});
+export type FaceHistoryQuery = z.infer<typeof faceHistoryQuerySchema>;
+
+export const faceHistoryEntrySchema = z.object({
+    id: z.string(),
+    actor: faceDecisionActorSchema,
+    verdict: faceDecisionVerdictSchema,
+    /** Where it was said: "review", "performer", "item", "wouldTag", "untag", "auto", … */
+    surface: z.string(),
+    /** Who it was about; null for "can't tell" and "not one person", or a performer since deleted. */
+    performer: z.object({ id: z.string(), name: z.string() }).nullable(),
+    faceCount: z.number(),
+    itemCount: z.number(),
+    /** A few of the faces it still holds, the largest first. */
+    faces: z.array(faceReviewFaceSchema),
+    /** Whether it made tags (a batch the undo takes back with it). */
+    tagged: z.boolean(),
+    createdAt: z.string(),
+    undoneAt: z.string().nullable(),
+});
+export type FaceHistoryEntry = z.infer<typeof faceHistoryEntrySchema>;
+
+export const faceHistoryPageSchema = z.object({
+    entries: z.array(faceHistoryEntrySchema),
+    /** What to ask for the next page with; null at the end. */
+    next: z.string().nullable(),
+});
+export type FaceHistoryPage = z.infer<typeof faceHistoryPageSchema>;
+
+/**
+ * Undo a decision: everything it wrote that still stands is taken back, its tags with it. `wrong`
+ * is for the app's own: also "not them" on those items, so it never tags them again, and counted
+ * against tagging by itself.
+ */
+export const faceUndoSchema = z.object({ wrong: z.boolean().default(false) });
+export type FaceUndo = z.infer<typeof faceUndoSchema>;
