@@ -102,18 +102,42 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({ compact }) => {
         focused && suggest !== null && suggest.scopes.length > 1
     );
     /**
+     * Whether the list on screen belongs to this search.
+     *
+     * The tag search keeps its previous answer up while the next is asked for, so the list does
+     * not blank between keystrokes. That is right within one search and wrong across two: after
+     * finding "anna" among performers, switching to Source and typing showed Anna's names under
+     * Source until the new answer came. So a carried-over answer is shown only once this search
+     * has had a real one of its own -- for the words actually in the box -- and a finished search
+     * or a change of kind starts again from nothing.
+     */
+    const [live, setLive] = useState(false);
+    const typed = text.trim();
+    const answered = [first, second].some((query) => query.data && !query.isPlaceholderData);
+
+    useEffect(() => {
+        if (typed === "") setLive(false);
+        else if (answered && debounced === typed) setLive(true);
+    }, [answered, debounced, typed]);
+
+    /**
      * Close spellings only when nothing matched as typed in either system: a near miss among
      * your keywords is not worth showing above an exact shared one.
      */
-    const answers = (
-        suggest?.scopes.length === 1 ? [first.data] : [first.data, second.data]
-    ).filter(
-        (answer): answer is TagSearchResponse => answer !== undefined && answer.tags.length > 0
-    );
+    const answers = (suggest?.scopes.length === 1 ? [first] : [first, second])
+        .filter((query) => !query.isPlaceholderData || live)
+        .map((query) => query.data)
+        .filter(
+            (answer): answer is TagSearchResponse =>
+                answer !== undefined &&
+                answer.tags.length > 0 &&
+                // Belt and braces: never another kind's names, whatever the cache holds.
+                answer.tags.every((tag) => tag.kind === suggest?.kind)
+        );
     const exact = answers.filter((answer) => !answer.near);
     const near = exact.length === 0 && answers.length > 0;
     const suggestions: Tag[] =
-        suggest === null || text.trim() === ""
+        suggest === null || typed === ""
             ? []
             : (near ? answers : exact).flatMap((answer) => answer.tags).slice(0, SUGGESTION_LIMIT);
 
@@ -131,6 +155,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({ compact }) => {
 
     const finish = () => {
         setText("");
+        setLive(false);
         combobox.closeDropdown();
         inputRef.current?.blur();
         setExpanded(false);
@@ -186,6 +211,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({ compact }) => {
                             leftSection={<OptionGlyph size={16} />}
                             onClick={() => {
                                 setType(option);
+                                setLive(false);
                                 focusBox();
                             }}
                             data-active={option === type || undefined}
