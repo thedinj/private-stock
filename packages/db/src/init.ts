@@ -931,14 +931,15 @@ export function initializeDatabase(db: Database): void {
             ON "MediaTag" ("createdAt", "id") WHERE "source" = 'ocr' AND "userId" IS NULL;
 
         -- Deliberate EAV escape hatch for scraped long-tail fields (§5b). For display and
-        -- search only — anything the app branches on gets a real column.
+        -- search only — anything the app branches on gets a real column. 'embedded' is what
+        -- the file says about itself in its own tags: a title, a comment, an artist.
         CREATE TABLE IF NOT EXISTS "MediaAttribute" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "mediaId" TEXT NOT NULL,
             "key" TEXT NOT NULL CHECK(length("key") BETWEEN 1 AND 100),
             "value" TEXT NOT NULL CHECK(length("value") <= 2000),
             "source" TEXT NOT NULL DEFAULT 'scraper'
-                CHECK("source" IN ('user', 'filename', 'scraper', 'ai', 'ocr')),
+                CHECK("source" IN ('user', 'filename', 'scraper', 'ai', 'ocr', 'embedded')),
             FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
             UNIQUE ("mediaId", "key")
         );

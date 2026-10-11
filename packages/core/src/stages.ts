@@ -216,6 +216,23 @@ export const STAGES: StageDefinition[] = [
         describe: "The search document",
     },
     /**
+     * The descriptive tags a file carries about itself -- title, comment, artist (§5b).
+     *
+     * Separate from the probe so it can be swept: a re-probe chains every rendering stage
+     * behind it, and this chains only the search document. Videos only: the photographs in the
+     * library carry nothing of the kind, and reading 5k of them to learn that is not worth it.
+     */
+    {
+        name: "metadata",
+        version: 1,
+        mode: "automatic",
+        appliesTo: "video",
+        priority: 95,
+        maxAttempts: 2,
+        needsProbe: true,
+        describe: "Titles, comments and artists written into the file, so they can be searched",
+    },
+    /**
      * Ahead of previews and sprites, which it used to trail at 180.
      *
      * Those two share its CPU budget and cost far more — a sprite decodes the whole file — so

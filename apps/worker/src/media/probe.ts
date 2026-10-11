@@ -109,6 +109,51 @@ const parseCapturedAt = (tags: Record<string, string> | undefined): string | nul
     return parsed.toISOString();
 };
 
+/**
+ * The descriptive tags worth keeping, in the order they are stored (§5b).
+ *
+ * Sampled on the real library (2026-10-11): about one video in fourteen carries any of these,
+ * and in the ones that do they are often the only record of who is in it or where it was
+ * posted -- a creator's handle in a title or comment, a site in an artist or album. Everything
+ * else the containers carry is the encoder talking: brands, handler names, `Lavf58.29.100`.
+ */
+const EMBEDDED_KEYS = ["title", "comment", "description", "artist", "album", "show"] as const;
+
+/** `MediaAttribute.value`'s CHECK. */
+const MAX_EMBEDDED_LENGTH = 2000;
+
+/**
+ * Descriptive text the file carries about itself, keyed by tag.
+ *
+ * Container-level tags only. Stream titles are already `MediaStream.title`, and the keys are
+ * matched case-insensitively because Matroska writes `TITLE` where MP4 writes `title`.
+ */
+export const readEmbeddedText = async (absolutePath: string): Promise<Map<string, string>> => {
+    const ffprobe = await resolveFfprobe();
+
+    const { stdout } = await execFileAsync(
+        ffprobe,
+        ["-v", "error", "-show_entries", "format_tags", "-of", "json", absolutePath],
+        { timeout: PROBE_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 }
+    );
+
+    const tags = (JSON.parse(stdout) as FfprobeOutput).format?.tags ?? {};
+    const byKey = new Map(
+        Object.entries(tags).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
+    );
+    const found = new Map<string, string>();
+
+    for (const key of EMBEDDED_KEYS) {
+        const value = byKey.get(key);
+
+        if (value) {
+            found.set(key, value.slice(0, MAX_EMBEDDED_LENGTH));
+        }
+    }
+
+    return found;
+};
+
 export const probeFile = async (absolutePath: string): Promise<FullProbe> => {
     const ffprobe = await resolveFfprobe();
 

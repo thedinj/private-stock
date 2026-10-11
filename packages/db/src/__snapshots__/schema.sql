@@ -417,7 +417,7 @@ CREATE TABLE "MediaAttribute" (
             "key" TEXT NOT NULL CHECK(length("key") BETWEEN 1 AND 100),
             "value" TEXT NOT NULL CHECK(length("value") <= 2000),
             "source" TEXT NOT NULL DEFAULT 'scraper'
-                CHECK("source" IN ('user', 'filename', 'scraper', 'ai', 'ocr')),
+                CHECK("source" IN ('user', 'filename', 'scraper', 'ai', 'ocr', 'embedded')),
             FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
             UNIQUE ("mediaId", "key")
         );

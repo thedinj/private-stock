@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { assessPlayback, findStage, NotFoundError } from "@private-stock/core";
+import { assessPlayback, findStage, NotFoundError, stageApplies } from "@private-stock/core";
 import { libraryFilePath } from "@private-stock/core/server";
 import { changeLogRepo, db, mediaFileRepo, mediaRootRepo, mediaRepo } from "@private-stock/db";
 
@@ -13,6 +13,7 @@ import { enqueue, type JobRow } from "../queue.js";
  */
 const COVER_PRIORITY = findStage("cover")?.priority ?? 70;
 const PHASH_PRIORITY = findStage("phash")?.priority ?? 100;
+const METADATA_STAGE = findStage("metadata");
 
 /**
  * The `probe` job: read real metadata out of a file and record it.
@@ -122,6 +123,18 @@ export const runProbe = async (job: JobRow): Promise<void> => {
     // filename reads as search being broken, and during a long scan that state would
     // otherwise last minutes.
     enqueue(db, { kind: "index", mediaId: job.mediaId, priority: 90 });
+
+    // A changed file's tags are new too, and its stage row says the old ones were read.
+    const kind = mediaRepo.findBasic(job.mediaId)?.kind;
+
+    if (METADATA_STAGE && kind && stageApplies(METADATA_STAGE, kind)) {
+        enqueue(db, {
+            kind: "metadata",
+            mediaId: job.mediaId,
+            fileId: job.fileId,
+            priority: METADATA_STAGE.priority,
+        });
+    }
 
     /**
      * Perceptual hashing, after the probe, behind the cover and ahead of previews and sprites

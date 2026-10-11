@@ -57,6 +57,8 @@ export const CONCURRENCY: Record<string, number> = {
     // gain, and the work is one volume's I/O either way.
     variantPurge: 1,
     index: 2,
+    // One header read per file, like the probe's.
+    metadata: 2,
     // One at a time, and for a different reason than transcoding: these copy whole files
     // between volumes, so two at once halve each other's throughput and the second one is
     // waiting on the same disk either way.

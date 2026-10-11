@@ -62,6 +62,7 @@ import { runScan } from "./jobs/scan.js";
 import { runOrphanSweep } from "./jobs/orphans.js";
 import { runPurge, runRestore, runTrash } from "./jobs/trash.js";
 import { runIndex } from "./jobs/searchIndex.js";
+import { runMetadata } from "./jobs/metadata.js";
 import { resolveSource } from "./media/sourcePath.js";
 import { COLLECT_INTERVAL_MS, collectGarbage } from "./memory.js";
 import {
@@ -230,6 +231,7 @@ const handlers: Record<string, JobHandler> = {
     transcode: runTranscodeJob,
     variantPurge: runVariantPurge,
     index: runIndex,
+    metadata: runMetadata,
     phash: runPhash,
     dupes: runDupes,
     embed: runEmbed,

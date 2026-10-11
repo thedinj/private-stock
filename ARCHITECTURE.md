@@ -444,6 +444,16 @@ fields — **MediaAttribute** (`mediaId, key, value, source`) is a deliberate EA
 hatch. Rules: it is for _display and search_, never for logic; anything the app branches on
 gets a real column. `Media.sourceUrl` is common enough to be a real column from the start.
 
+**What a file says about itself** is the first thing to arrive here (2026-10-11), under
+`source = 'embedded'`: a video's container `title`, `comment`, `description`, `artist`, `album`
+and `show`. Sampled on the real library, about one video in fourteen carries any of them, and
+where they say anything it is often the only record of who is in it or where it was posted — a
+creator's handle in a comment, a site in an artist field. The other tags are the encoder
+talking and are not kept; photographs carry nothing comparable and are not read. The `metadata`
+stage keeps them, separate from the probe because a re-probe chains every rendering stage
+behind it and this chains only the search document — so a version bump here is a cheap sweep.
+It replaces only its own rows: a key somebody typed, or a scraper filled, keeps its value.
+
 Two structural properties make all of this cheap:
 
 1. `Media` holds objective facts, `UserMedia` holds opinions, and descriptive metadata is a
@@ -3231,7 +3241,7 @@ Watchers are unreliable on NAS shares and SMB mounts, so detection is layered:
    destroy user metadata.
 
 Each discovered file enqueues a chain: `filehash → probe → cover → sprite → preview → phash →
-websafeCheck → index → (later) aiTag`. Stages are independent `Job` rows, so one failure retries one
+websafeCheck → index → metadata → (later) aiTag`. Stages are independent `Job` rows, so one failure retries one
 stage, and adding a stage later backfills the library without a full rescan. The identity hash
 leads so that an exact copy is known before anything renders it (§10f).
 
