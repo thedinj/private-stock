@@ -53,6 +53,7 @@ describe("readEmbeddedText", () => {
             title: "  A title  ",
             comment: "Posted by @someone",
             artist: "Some Site",
+            description: "<p>Copied from   <b>a post</b></p>",
             genre: "ignored",
         });
 
@@ -60,6 +61,7 @@ describe("readEmbeddedText", () => {
             title: "A title",
             comment: "Posted by @someone",
             artist: "Some Site",
+            description: "Copied from a post",
         });
     });
 

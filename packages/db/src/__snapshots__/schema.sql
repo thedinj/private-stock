@@ -476,7 +476,7 @@ CREATE TABLE "MediaFileLink" (
 CREATE TABLE "MediaMention" (
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
-            "field" TEXT NOT NULL CHECK("field" IN ('filename', 'title', 'screen')),
+            "field" TEXT NOT NULL CHECK("field" IN ('filename', 'title', 'screen', 'metadata')),
             PRIMARY KEY ("mediaId", "tagId", "field")
         ) WITHOUT ROWID;
 

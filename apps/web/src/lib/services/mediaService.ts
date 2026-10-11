@@ -30,6 +30,7 @@ import {
     db,
     dupeRepo,
     jobRepo,
+    mediaAttributeRepo,
     mediaRepo,
     mediaRootRepo,
     mediaTextRepo,
@@ -438,6 +439,7 @@ export const getMediaDetail = (mediaId: string, auth: AuthContext): MediaDetail 
                 reviewState: finding.reviewState,
                 originalText: finding.originalText,
             })),
+        attributes: mediaAttributeRepo.listForMedia(mediaId),
     };
 };
 

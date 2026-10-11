@@ -453,6 +453,13 @@ talking and are not kept; photographs carry nothing comparable and are not read.
 stage keeps them, separate from the probe because a re-probe chains every rendering stage
 behind it and this chains only the search document — so a version bump here is a cheap sweep.
 It replaces only its own rows: a key somebody typed, or a scraper filled, keeps its value.
+Markup is stripped on the way in, because descriptions arrive as the HTML of the post.
+
+The values are shown on the item under **In the file**, absent when there are none, and they are
+a mention field (`metadata`, "One rule for names" below): a handle glued into a comment —
+`@AuntMargaret` — names Aunt Margaret, so the item is offered in her Find untagged and among the
+performers its text names. Values only, so a tag that happens to be called "Artist" is not named
+by every file that has one.
 
 Two structural properties make all of this cheap:
 
@@ -484,8 +491,8 @@ highlights and corrects what was there. Misreadings (`near`) are a switch: on fo
 everything else.
 
 **`MediaMention(mediaId, tagId, field)` is what that matcher found** in each item's own text —
-`filename` (with its folders), `title`, `screen` (what OCR read) — for every tag, private ones
-included. Facts, not decisions, written two ways: the index stage rewrites an item's rows whenever
+`filename` (with its folders), `title`, `screen` (what OCR read), `metadata` (the file's own
+tags, values only, §5b) — for every tag, private ones included. Facts, not decisions, written two ways: the index stage rewrites an item's rows whenever
 it rebuilds the item's search document, from the same text; and the `mentionMatch` job rematches
 the library whenever the vocabulary changes — any facet, any owner, coined, renamed, aliased,
 merged, deleted or published — and once after startup, skipping a vocabulary it has already

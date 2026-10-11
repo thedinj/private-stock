@@ -171,6 +171,7 @@ describe("mentionsIn", () => {
                     filename: "Holidays AuntMargaret Aunt Margaret beach 2019",
                     title: "Beach Day",
                     screen: "EXAMPLESITE.COM auntmargaret",
+                    metadata: "Posted by @AuntMargaret on examplesite.com",
                 },
                 names
             )
@@ -180,10 +181,14 @@ describe("mentionsIn", () => {
             { tagId: "beach", field: "title" },
             { tagId: "site", field: "screen" },
             { tagId: "aunt", field: "screen" },
+            { tagId: "aunt", field: "metadata" },
+            { tagId: "site", field: "metadata" },
         ]);
     });
 
     it("finds nothing in empty text, and no misreadings even on screen", () => {
-        expect(mentionsIn({ filename: "", title: "", screen: "AUNT MARGARE7" }, names)).toEqual([]);
+        expect(
+            mentionsIn({ filename: "", title: "", screen: "AUNT MARGARE7", metadata: "" }, names)
+        ).toEqual([]);
     });
 });

@@ -1148,15 +1148,16 @@ export function initializeDatabase(db: Database): void {
         CREATE INDEX IF NOT EXISTS "idx_OcrTagMatchSkip_mediaId" ON "OcrTagMatchSkip" ("mediaId");
 
         -- Which tags an item's own text names: its filename and folders, its title, the text read
-        -- out of its picture (§5b "One rule for names"). Written by the one name matcher -- the
-        -- OCR review's -- so "does this text name this tag" has one answer everywhere: Find
-        -- untagged reads it, and so will the evidence a tag's page shows. Facts, not decisions:
-        -- rebuilt for an item whenever its search document is, and for the library whenever the
-        -- vocabulary changes. Every tag, private ones included; who may ask is the query's rule.
+        -- out of its picture, the file's own tags (§5b "One rule for names"). Written by the one
+        -- name matcher -- the OCR review's -- so "does this text name this tag" has one answer
+        -- everywhere: Find untagged reads it, and so will the evidence a tag's page shows.
+        -- Facts, not decisions: rebuilt for an item whenever its search document is, and for the
+        -- library whenever the vocabulary changes. Every tag, private ones included; who may ask
+        -- is the query's rule.
         CREATE TABLE IF NOT EXISTS "MediaMention" (
             "mediaId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
-            "field" TEXT NOT NULL CHECK("field" IN ('filename', 'title', 'screen')),
+            "field" TEXT NOT NULL CHECK("field" IN ('filename', 'title', 'screen', 'metadata')),
             PRIMARY KEY ("mediaId", "tagId", "field")
         ) WITHOUT ROWID;
 

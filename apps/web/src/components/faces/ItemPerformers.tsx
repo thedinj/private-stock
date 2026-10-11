@@ -40,6 +40,7 @@ const FIELD_WORDS: Record<MentionField, string> = {
     filename: "filename",
     title: "title",
     screen: "on screen",
+    metadata: "file metadata",
 };
 
 type Person = ItemPeople["people"][number];

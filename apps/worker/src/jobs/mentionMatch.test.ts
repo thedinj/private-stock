@@ -11,9 +11,13 @@ const state = vi.hoisted(() => ({
         {
             cursor: 1,
             mediaId: "m1",
-            texts: { filename: "AuntMargaret beach", title: "", screen: "" },
+            texts: { filename: "AuntMargaret beach", title: "", screen: "", metadata: "" },
         },
-        { cursor: 2, mediaId: "m2", texts: { filename: "garden", title: "", screen: "" } },
+        {
+            cursor: 2,
+            mediaId: "m2",
+            texts: { filename: "garden", title: "", screen: "", metadata: "" },
+        },
     ],
     writes: [] as { mediaId: string; mentions: { tagId: string; field: string }[] }[][],
 }));

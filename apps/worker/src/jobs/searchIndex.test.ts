@@ -27,6 +27,9 @@ vi.mock("@private-stock/db", () => ({
         publicNameVocabulary: () => new Map([["auntmargaret", "aunt margaret"]]),
     },
     mediaTextRepo: { listForMedia: () => [] },
+    mediaAttributeRepo: {
+        listForMedia: () => [{ key: "comment", value: "Posted by @JaneDoe", source: "embedded" }],
+    },
     searchRepo: {
         upsertDocument: (document: (typeof stored)[number]) => {
             stored.push(document);
@@ -58,10 +61,19 @@ describe("indexMedia", () => {
         mentionWrites.length = 0;
         indexMedia("m1");
 
-        // `Family/AuntMargaret.beach.mp4` names Aunt Margaret; Jane Doe is only a tag on the item,
-        // which is not the item's own text naming her.
+        // `Family/AuntMargaret.beach.mp4` names Aunt Margaret, and the file's own comment names
+        // Jane Doe -- by its value, never by the key beside it. Her tag on the item is not the
+        // item's own text naming her.
         expect(mentionWrites).toEqual([
-            [{ mediaId: "m1", mentions: [{ tagId: "t-aunt", field: "filename" }] }],
+            [
+                {
+                    mediaId: "m1",
+                    mentions: [
+                        { tagId: "t-aunt", field: "filename" },
+                        { tagId: "t-jane", field: "metadata" },
+                    ],
+                },
+            ],
         ]);
     });
 
@@ -71,6 +83,8 @@ describe("indexMedia", () => {
         expect(stored.at(-1)).toMatchObject({
             performers: "Jane Doe Jane Smith",
             tags: "beach seaside",
+            // Keys as well as values, so searching "comment" finds the items that have one.
+            attributes: "comment Posted by @JaneDoe",
         });
     });
 

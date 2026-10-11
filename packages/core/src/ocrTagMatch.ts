@@ -396,8 +396,13 @@ export const correctedText = (
     return at < 0 ? text : text.slice(0, at) + name + text.slice(at + match.matchedText.length);
 };
 
-/** Where on an item a tag's name was found (§5b "One rule for names"). */
-export const mentionFields = ["filename", "title", "screen"] as const;
+/**
+ * Where on an item a tag's name was found (§5b "One rule for names").
+ *
+ * `metadata` is the file's own tags — a title, a comment, an artist — values only, so a tag
+ * named for one of the keys is not mentioned by every file that has one.
+ */
+export const mentionFields = ["filename", "title", "screen", "metadata"] as const;
 export type MentionField = (typeof mentionFields)[number];
 
 /** One tag an item's text names, and where. */

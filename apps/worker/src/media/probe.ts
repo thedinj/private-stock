@@ -123,6 +123,18 @@ const EMBEDDED_KEYS = ["title", "comment", "description", "artist", "album", "sh
 const MAX_EMBEDDED_LENGTH = 2000;
 
 /**
+ * A tag's value as text: markup out, whitespace collapsed.
+ *
+ * Descriptions arrive as the HTML of the post they were copied from (`<p>Here…`), and a `p` is
+ * not something to show, search or match a name against.
+ */
+const plainText = (value: string): string =>
+    value
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+/**
  * Descriptive text the file carries about itself, keyed by tag.
  *
  * Container-level tags only. Stream titles are already `MediaStream.title`, and the keys are
@@ -139,7 +151,7 @@ export const readEmbeddedText = async (absolutePath: string): Promise<Map<string
 
     const tags = (JSON.parse(stdout) as FfprobeOutput).format?.tags ?? {};
     const byKey = new Map(
-        Object.entries(tags).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
+        Object.entries(tags).map(([key, value]) => [key.toLowerCase(), plainText(String(value))])
     );
     const found = new Map<string, string>();
 

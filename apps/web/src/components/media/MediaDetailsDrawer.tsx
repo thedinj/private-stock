@@ -106,9 +106,32 @@ const STAGE_NAMES: Record<string, string> = {
     phash: "Fingerprinted",
     ocr: "OCR",
     embed: "Searchable by look",
+    metadata: "File metadata read",
 };
 
 const stageLabel = (stage: string): string => STAGE_NAMES[stage] ?? stage;
+
+/**
+ * The file's own tags, in the order worth reading them: what it is called and what it says
+ * about itself, then who it credits. A key with no entry here is shown under its own name.
+ */
+const ATTRIBUTE_LABELS: [key: string, label: string][] = [
+    ["title", "Title"],
+    ["description", "Description"],
+    ["comment", "Comment"],
+    ["artist", "Artist"],
+    ["album", "Album"],
+    ["show", "Show"],
+];
+
+const attributeOrder = (key: string): number => {
+    const at = ATTRIBUTE_LABELS.findIndex(([known]) => known === key);
+
+    return at < 0 ? ATTRIBUTE_LABELS.length : at;
+};
+
+const attributeLabel = (key: string): string =>
+    ATTRIBUTE_LABELS.find(([known]) => known === key)?.[1] ?? key;
 
 /**
  * "Do this now", drawn rather than written.
@@ -374,6 +397,27 @@ export const MediaDetailsDrawer: React.FC<MediaDetailsDrawerProps> = ({
                     <Row label="Size" value={formatBytes(detail.sizeBytes)} />
                     <Row label="Path" value={detail.relPath} />
                 </Box>
+
+                {/* What the file says about itself (§5b) -- absent when it says nothing, which
+                    is most files. Above OCR for OCR's own reason: it is content, and the one
+                    place a creator's handle or a site's name is written down as text. */}
+                {detail.attributes.length > 0 && (
+                    <Box>
+                        <Title order={5}>In the file</Title>
+                        <Box className={classes.rule} mt={8} mb={12} />
+                        <Box className={classes.list}>
+                            {[...detail.attributes]
+                                .sort((a, b) => attributeOrder(a.key) - attributeOrder(b.key))
+                                .map((attribute) => (
+                                    <Row
+                                        key={attribute.key}
+                                        label={attributeLabel(attribute.key)}
+                                        value={attribute.value}
+                                    />
+                                ))}
+                        </Box>
+                    </Box>
+                )}
 
                 {/* The cover used to be chosen here. It is on the page now, under the title,
                     with every frame the item has -- generated or captured -- so choosing it is

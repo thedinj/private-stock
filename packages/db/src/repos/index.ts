@@ -21,6 +21,7 @@ export * as appearanceRepo from "./appearanceRepo.js";
 export * as mentionRepo from "./mentionRepo.js";
 export * as searchRepo from "./searchRepo.js";
 export * as mediaTextRepo from "./mediaTextRepo.js";
+export * as mediaAttributeRepo from "./mediaAttributeRepo.js";
 export * as ocrTrialRepo from "./ocrTrialRepo.js";
 export * as ocrTuneRepo from "./ocrTuneRepo.js";
 export * as phashRepo from "./phashRepo.js";

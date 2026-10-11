@@ -620,6 +620,29 @@ export const mediaTextSchema = z.object({
 });
 export type MediaText = z.infer<typeof mediaTextSchema>;
 
+/** Where a `MediaAttribute` came from — the column's CHECK, in the same order. */
+export const mediaAttributeSourceSchema = z.enum([
+    "user",
+    "filename",
+    "scraper",
+    "ai",
+    "ocr",
+    "embedded",
+]);
+
+/**
+ * One long-tail descriptive field (§5b): today, a tag the file carries about itself.
+ *
+ * For reading and searching, never for logic. `key` is the field's own name — `title`,
+ * `comment`, `artist` — and the reader decides how to label it.
+ */
+export const mediaAttributeSchema = z.object({
+    key: z.string(),
+    value: z.string(),
+    source: mediaAttributeSourceSchema,
+});
+export type MediaAttribute = z.infer<typeof mediaAttributeSchema>;
+
 export const mediaFrameSchema = z.object({
     artifactId: z.string(),
     kind: z.enum(["cover", "poster", "capture"]),
@@ -792,6 +815,13 @@ export const mediaDetailSchema = mediaListItemSchema.extend({
      * Text that is stored but has no reader is text nobody can check.
      */
     text: z.array(mediaTextSchema),
+    /**
+     * What the file says about itself in its own tags, and any other long-tail field (§5b).
+     *
+     * On the detail for `text`'s reason: it is searched, and a search that matches on text the
+     * page never shows reads as a search that matched nothing.
+     */
+    attributes: z.array(mediaAttributeSchema),
     /**
      * Where this item stands among its duplicates, or null when it has none (§10c).
      *

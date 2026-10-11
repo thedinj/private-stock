@@ -36,13 +36,22 @@ export interface DocumentTexts {
  * The document rather than the file, the title and the findings separately, because it is what
  * the index stage just assembled from all three — one row per item, and the same text search
  * itself reads.
+ *
+ * Except the file's own tags: the document holds them with their keys, for searching "artist",
+ * and a mention is matched on the values alone. So they are read from `MediaAttribute`, in key
+ * order and space-joined exactly as the index stage joins them — two writers of one item's
+ * mentions that read different text would rewrite each other's rows on every pass.
  */
 export const documentsAfter = (cursor: number, limit: number): DocumentTexts[] =>
     (
         db
             .prepare(
-                `SELECT "rowid" AS "cursor", "mediaId", "filename", "title", "ocr"
-                   FROM "MediaSearchDoc" WHERE "rowid" > ? ORDER BY "rowid" LIMIT ?`
+                `SELECT d."rowid" AS "cursor", d."mediaId", d."filename", d."title", d."ocr",
+                        COALESCE((SELECT group_concat("value", ' ') FROM (
+                            SELECT a."value" FROM "MediaAttribute" a
+                             WHERE a."mediaId" = d."mediaId" ORDER BY a."key"
+                        )), '') AS "metadata"
+                   FROM "MediaSearchDoc" d WHERE d."rowid" > ? ORDER BY d."rowid" LIMIT ?`
             )
             .all(cursor, limit) as {
             cursor: number;
@@ -50,11 +59,17 @@ export const documentsAfter = (cursor: number, limit: number): DocumentTexts[] =
             filename: string;
             title: string;
             ocr: string;
+            metadata: string;
         }[]
     ).map((row) => ({
         cursor: row.cursor,
         mediaId: row.mediaId,
-        texts: { filename: row.filename, title: row.title, screen: row.ocr },
+        texts: {
+            filename: row.filename,
+            title: row.title,
+            screen: row.ocr,
+            metadata: row.metadata,
+        },
     }));
 
 const keyOf = (mention: Mention): string => `${mention.tagId}\t${mention.field}`;

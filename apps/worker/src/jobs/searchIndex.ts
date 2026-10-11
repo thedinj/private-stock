@@ -1,7 +1,14 @@
 import * as path from "node:path";
 
-import { expandCompounds, searchVariants } from "@private-stock/core";
-import { db, mediaTextRepo, mentionRepo, searchRepo, tagRepo } from "@private-stock/db";
+import { expandCompounds, searchVariants, type MediaAttribute } from "@private-stock/core";
+import {
+    db,
+    mediaAttributeRepo,
+    mediaTextRepo,
+    mentionRepo,
+    searchRepo,
+    tagRepo,
+} from "@private-stock/db";
 
 import type { JobRow } from "../queue.js";
 
@@ -128,14 +135,8 @@ const nameVocabulary = (): Map<string, string> => {
  * carries the lowest BM25 weight precisely because it is the least curated text in the
  * document and would otherwise let a verbose description outrank a title.
  */
-const attributeText = (mediaId: string): string =>
-    (
-        db
-            .prepare(`SELECT "key", "value" FROM "MediaAttribute" WHERE "mediaId" = ?`)
-            .all(mediaId) as { key: string; value: string }[]
-    )
-        .map((row) => `${row.key} ${row.value}`)
-        .join(" ");
+const attributeText = (attributes: MediaAttribute[]): string =>
+    attributes.map((row) => `${row.key} ${row.value}`).join(" ");
 
 /**
  * Text read out of the picture, joined into one field (§5d).
@@ -194,7 +195,11 @@ export const indexMedia = (mediaId: string): void => {
      * outright -- no busy wait -- when the web process committed in between; on the NAS these
      * reads are slow enough that a sign-in or a tag save landed in the gap often (§4, §20).
      */
-    const attributes = attributeText(mediaId);
+    const attributeRows = mediaAttributeRepo.listForMedia(mediaId);
+    const attributes = attributeText(attributeRows);
+    // The values alone, in key order, joined as the library-wide rematch joins them
+    // (`mentionRepo.documentsAfter`): two writers of one item's mentions must read one text.
+    const metadata = attributeRows.map((row) => row.value).join(" ");
     const ocr = ocrText(mediaId);
     const filename = expandCompounds(segments.join(" "));
     const expandedTitle = expandCompounds(title);
@@ -223,7 +228,7 @@ export const indexMedia = (mediaId: string): void => {
     mentionRepo.writeChanged([
         {
             mediaId,
-            mentions: mentionsForItem({ filename, title: expandedTitle, screen: ocr }),
+            mentions: mentionsForItem({ filename, title: expandedTitle, screen: ocr, metadata }),
         },
     ]);
 };
