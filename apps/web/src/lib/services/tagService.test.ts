@@ -565,6 +565,27 @@ describe("applying a tag", () => {
         expect(libraryTags("m1")).toEqual([]);
     });
 
+    /** The item page's two choices on a performer (§5f "People in this item"). */
+    it("says not them on a removal unless asked only to take the tag off", async () => {
+        const { notThem } = await import("./notThem");
+
+        vi.mocked(notThem).mockClear();
+        applyTags("m1", { kind: "genre", names: ["Drama"], scope: "public", mode: "add" }, ANNA);
+        applyTags(
+            "m1",
+            { kind: "genre", names: ["Drama"], scope: "public", mode: "remove", notThem: false },
+            ANNA
+        );
+
+        expect(libraryTags("m1")).toEqual([]);
+        expect(notThem).not.toHaveBeenCalled();
+
+        applyTags("m1", { kind: "genre", names: ["Drama"], scope: "public", mode: "add" }, ANNA);
+        applyTags("m1", { kind: "genre", names: ["Drama"], scope: "public", mode: "remove" }, ANNA);
+
+        expect(notThem).toHaveBeenCalledTimes(1);
+    });
+
     it("does not coin a name it is asked to remove, nor touch the other system", () => {
         applyTags("m1", { kind: "genre", names: ["Slow"], scope: "private", mode: "add" }, ANNA);
 

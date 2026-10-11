@@ -2148,6 +2148,18 @@ faces".)
   as an untag by hand). Pressing a face goes to its moment. Each is one decision in History. Above
   the item's tags, for administrators. Who is on screen _now_, during playback, is not built: it
   is a way of watching more than of organising.
+- **One with Performers** (2026-10-11). Two lists — who the item is tagged with, and who the faces
+  found in it — were one question asked twice: a confirmed person is a performer tag, so they
+  showed in both. The viewer's Performers section (`ItemPerformers`, across the page's width) is
+  now the only one. A tagged performer is one card, carrying their face in the item where one was
+  found — solid when confirmed, dashed when it only looks like them — whose menu goes to the
+  moment, says "Yes, that's their face" or "Not their face" (the tag stays). After the cards, for
+  administrators, who else may be in it as dashed cards: "‹name›?" with Yes / No for a face that
+  looks clearly like somebody not tagged, "‹name›?" with Add / Not them for a name in the item's
+  text; and the faces nobody matched, folded under "N other faces" with "Name…". A performer's ×
+  asks how: **Remove tag** only takes it off (`notThem: false` on the tag edit), and their face may
+  be suggested again; **Not them** is the untag-by-hand of "Corrections stick", refused on the
+  item's faces and name. Everybody else sees the cards, without the faces.
 
 **As built (2026-10-07)** — `apps/web/src/lib/services/faceService.ts`, `components/faces/`:
 

@@ -35,6 +35,8 @@ interface PendingEdit {
     id: number;
     op: EditOp;
     name: string;
+    /** A removal that is also "not them" (§5f "Corrections stick"); the server's default. */
+    notThem?: boolean;
 }
 
 /** Contention and a dropped connection are worth another go; anything else is an answer. */
@@ -110,7 +112,13 @@ const useQueuedFacetTags = <T extends SavedTag>({
         mutationFn: (edit: PendingEdit) =>
             api<{ tags: T[] }>(url, {
                 method: "PUT",
-                body: JSON.stringify({ kind, names: [edit.name], scope, mode: edit.op }),
+                body: JSON.stringify({
+                    kind,
+                    names: [edit.name],
+                    scope,
+                    mode: edit.op,
+                    notThem: edit.notThem,
+                }),
             }),
         retry: (failureCount, cause) => failureCount < 3 && isTransient(cause),
         retryDelay: (attempt) => 1_000 * (attempt + 1),
@@ -131,10 +139,10 @@ const useQueuedFacetTags = <T extends SavedTag>({
     const chips = useMemo(() => applyEdits(saved, pending), [saved, pending]);
 
     const send = useCallback(
-        (op: EditOp, name: string) => {
+        (op: EditOp, name: string, notThem?: boolean) => {
             if (!name.trim()) return;
 
-            const edit = { id: nextId.current++, op, name: name.trim() };
+            const edit = { id: nextId.current++, op, name: name.trim(), notThem };
 
             setError(null);
             setPending((current) => [...current, edit]);
@@ -151,7 +159,11 @@ const useQueuedFacetTags = <T extends SavedTag>({
         [chips, send]
     );
 
-    const remove = useCallback((name: string) => send("remove", name), [send]);
+    /** Taken off; `notThem: false` for a plain untag, which the faces may suggest again. */
+    const remove = useCallback(
+        (name: string, notThem?: boolean) => send("remove", name, notThem),
+        [send]
+    );
 
     return { chips, add, remove, error };
 };
@@ -208,6 +220,10 @@ export const useItemFacetTags = (
 
             // Every filter's counts move. See docs/CACHE_KEYS.md "Tag edits on one item".
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.facets() });
+            // A performer on or off moves who the faces say is in it (§5f "People in this item").
+            if (kind === "performer") {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.people(mediaId) });
+            }
             refreshSuggestions(queryClient, kind, scope, op);
         },
     });

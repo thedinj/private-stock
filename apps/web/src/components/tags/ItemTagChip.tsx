@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Loader, Menu, UnstyledButton } from "@mantine/core";
+import { Loader, Menu, Text, UnstyledButton } from "@mantine/core";
 
 import type { TagPicture } from "@private-stock/core";
 
@@ -33,6 +33,11 @@ import classes from "./ItemTagChip.module.scss";
  *
  * A chip still being saved has no tag id yet, so it is drawn but goes nowhere: a link to a tag
  * that may yet fail to be created would be a link to a 404.
+ *
+ * **A performer's × asks how** (§5f "People in this item"): "Remove tag" only takes it off, and
+ * the faces may suggest them again; "Not them" also says they are not in it, so nothing puts them
+ * back. And where the faces found them in the item, the card carries that face (`face`), so who is
+ * tagged and who was seen are one card, not two lists.
  */
 
 /** The moment of the item on screen, for "use this as their picture". */
@@ -45,7 +50,12 @@ export interface ItemMoment {
 
 interface ItemTagChipProps {
     chip: Chip;
-    onRemove: (name: string) => void;
+    /** `notThem` is the choice `removeChoice` offers; absent, the server's default. */
+    onRemove: (name: string, notThem?: boolean) => void;
+    /** Ask "Remove tag" or "Not them" rather than taking it off at once: a performer's. */
+    removeChoice?: boolean;
+    /** Their face in the item, under the name; a chip with one is drawn as a card. */
+    face?: React.ReactNode;
     /** The tag's facet, which decides the picture's shape. */
     kind?: string;
     picture?: TagPicture | null;
@@ -55,6 +65,8 @@ interface ItemTagChipProps {
 export const ItemTagChip: React.FC<ItemTagChipProps> = ({
     chip,
     onRemove,
+    removeChoice,
+    face,
     kind,
     picture,
     moment,
@@ -92,6 +104,29 @@ export const ItemTagChip: React.FC<ItemTagChipProps> = ({
         <span className={classes.end} aria-label="Saving">
             <Loader size={10} color="brass" />
         </span>
+    ) : removeChoice ? (
+        <Menu position="bottom-end" shadow="md" withinPortal>
+            <Menu.Target>
+                <UnstyledButton className={classes.end} aria-label={`Remove ${name}…`}>
+                    <CloseGlyph size={10} />
+                </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown maw={280}>
+                <Menu.Label>{name}</Menu.Label>
+                <Menu.Item onClick={() => onRemove(name, false)}>
+                    Remove tag
+                    <Text size="xs" c="dimmed">
+                        Only take it off. Their face may be suggested again.
+                    </Text>
+                </Menu.Item>
+                <Menu.Item onClick={() => onRemove(name, true)}>
+                    Not them
+                    <Text size="xs" c="dimmed">
+                        They are not in this item: never suggest or tag them on it again.
+                    </Text>
+                </Menu.Item>
+            </Menu.Dropdown>
+        </Menu>
     ) : (
         <UnstyledButton
             className={classes.end}
@@ -112,24 +147,28 @@ export const ItemTagChip: React.FC<ItemTagChipProps> = ({
         />
     );
 
-    if (picture && tagId) {
+    if ((picture || face) && tagId) {
         return (
             <span
                 className={classes.card}
                 data-portrait={kind === "performer" || undefined}
                 data-source={source}
             >
-                {menu(
-                    <UnstyledButton className={classes.cardPicture} title={name}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={picture.smallUrl} alt="" loading="lazy" decoding="async" />
-                    </UnstyledButton>
-                )}
-                {menu(
-                    <UnstyledButton className={classes.cardName} title={name}>
-                        <span className={classes.cardLabel}>{name}</span>
-                    </UnstyledButton>
-                )}
+                {picture &&
+                    menu(
+                        <UnstyledButton className={classes.cardPicture} title={name}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={picture.smallUrl} alt="" loading="lazy" decoding="async" />
+                        </UnstyledButton>
+                    )}
+                <span className={classes.cardBody}>
+                    {menu(
+                        <UnstyledButton className={classes.cardName} title={name}>
+                            <span className={classes.cardLabel}>{name}</span>
+                        </UnstyledButton>
+                    )}
+                    {face}
+                </span>
                 {remove}
                 {dialog}
             </span>

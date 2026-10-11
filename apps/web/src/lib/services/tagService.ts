@@ -369,7 +369,9 @@ export const applyTags = (
             });
 
             // Whoever left the facet was taken off on purpose.
-            for (const tagId of removed) notThem([mediaId], tagId, auth.userId);
+            if (input.notThem !== false) {
+                for (const tagId of removed) notThem([mediaId], tagId, auth.userId);
+            }
         } else if (input.mode === "remove") {
             /**
              * Resolved, never created: removing a name nobody has used is a no-op, not a
@@ -380,7 +382,11 @@ export const applyTags = (
             for (const name of input.names) {
                 const resolved = tagRepo.resolveName(input.kind, name, scope);
 
-                if (resolved && tagRepo.unassign(mediaId, resolved.tag.id, scope) > 0) {
+                if (
+                    resolved &&
+                    tagRepo.unassign(mediaId, resolved.tag.id, scope) > 0 &&
+                    input.notThem !== false
+                ) {
                     notThem([mediaId], resolved.tag.id, auth.userId);
                 }
             }

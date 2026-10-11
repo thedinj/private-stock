@@ -285,6 +285,13 @@ export const applyTagsSchema = z
          * replaced the first away. "replace" stays for callers that really mean the full set.
          */
         mode: z.enum(["replace", "add", "remove"]).default("replace"),
+        /**
+         * Whether a performer taken off means "not them" (§5f "Corrections stick"): the item
+         * refused for them, faces and name, so nothing that tags by itself puts them back. The
+         * item page's "Remove tag" sends false — a plain untag, which the faces may suggest
+         * again; its "Not them", and every other caller, absent: yes.
+         */
+        notThem: z.boolean().optional(),
     })
     .refine(scopeFitsFacet, privateFacetRefinement);
 export type ApplyTagsInput = z.infer<typeof applyTagsSchema>;

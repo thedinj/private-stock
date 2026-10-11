@@ -148,8 +148,16 @@
     }
 }
 
-.cardName {
+// The name, and under it their face in the item where the faces found one.
+.cardBody {
     flex: 1 1 auto;
+    min-width: 5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.cardName {
+    flex: 0 0 auto;
     min-width: 5rem;
     display: flex;
     align-items: flex-start;

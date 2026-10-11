@@ -27,7 +27,7 @@ import type { MediaDetail } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { MediaDetailsDrawer } from "@/components/media/MediaDetailsDrawer";
-import { PeopleInItemPanel } from "@/components/faces/PeopleInItemPanel";
+import { ItemPerformers } from "@/components/faces/ItemPerformers";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
 import { LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
@@ -751,6 +751,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         );
     }
 
+    // The moment a tag's menu offers as its picture: the playhead, read when the menu is
+    // pressed, or the photograph itself (§6 "A tag's picture").
+    const moment = {
+        mediaId: data.id,
+        kind: data.kind,
+        atMs: () => (data.kind === "video" ? Math.round(positionRef.current) : null),
+    };
+
     return (
         <Stack gap="lg">
             {/* The way back to *where you were*, not to the front door.
@@ -1160,22 +1168,23 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 the navigation treats Performers, Sources and Keywords as separate things and
                 so does this. The note is keyed by the item because Prev and Next reuse this
                 page, and a draft must not follow you onto the next one. */}
-            {/* Who else might be in it (§5f "In the viewer"): for administrators, whose answers
-                tag the library. Above the tags it would add to; nothing when nobody is suggested. */}
-            {hasScope("admin") && <PeopleInItemPanel mediaId={data.id} onSeek={seekAndShow} />}
+            {/* Performers across the page's width, the rest beside the note: who is tagged and
+                who the faces found in it are one list (§5f "People in this item"), with room for
+                a card each and, for administrators, who else may be in it. */}
+            <ItemPerformers
+                mediaId={data.id}
+                values={data.tags.filter((tag) => tag.kind === "performer" && !tag.private)}
+                faces={hasScope("admin")}
+                moment={moment}
+                onSeek={seekAndShow}
+            />
 
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" verticalSpacing="lg">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg" verticalSpacing="lg">
                 <TagEditor
                     mediaId={data.id}
                     tags={data.tags}
-                    // The moment a tag's menu offers as its picture: the playhead, read when
-                    // the menu is pressed, or the photograph itself (§6 "A tag's picture").
-                    moment={{
-                        mediaId: data.id,
-                        kind: data.kind,
-                        atMs: () =>
-                            data.kind === "video" ? Math.round(positionRef.current) : null,
-                    }}
+                    except={["performer"]}
+                    moment={moment}
                 />
                 <Stack gap="xs">
                     <SectionLabel>Note</SectionLabel>

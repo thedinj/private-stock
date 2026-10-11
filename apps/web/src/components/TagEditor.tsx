@@ -37,6 +37,8 @@ import { TagNameInput } from "@/components/tags/TagNameInput";
 interface TagEditorProps {
     mediaId: string;
     tags: MediaTag[];
+    /** Facets drawn elsewhere on the page: the viewer's Performers (§5f "People in this item"). */
+    except?: string[];
     /** The moment on screen, which a tag's menu offers as its picture (§6 "A tag's picture"). */
     moment?: ItemMoment;
 }
@@ -65,6 +67,12 @@ interface FacetBoxProps {
     scope: TagScope;
     values: MediaTag[];
     moment?: ItemMoment;
+    /** Ask "Remove tag" or "Not them" on ×: a performer's. */
+    removeChoice?: boolean;
+    /** A tag's face in the item, for its card. */
+    faceFor?: (tagId: string) => React.ReactNode;
+    /** After the chips: who else may be in it. */
+    children?: React.ReactNode;
 }
 
 /**
@@ -79,13 +87,27 @@ interface FacetBoxProps {
  * started at a different height -- one line down under Keywords, one down under Performers only
  * when somebody had tagged it, none under Sources.
  */
-const FacetBox: React.FC<FacetBoxProps> = ({ mediaId, kind, scope, values, moment }) => {
+export const FacetBox: React.FC<FacetBoxProps> = ({
+    mediaId,
+    kind,
+    scope,
+    values,
+    moment,
+    removeChoice,
+    faceFor,
+    children,
+}) => {
     const { chips, add, remove, error } = useItemFacetTags(mediaId, kind, scope, values);
     const pictures = new Map(values.map((tag) => [tag.tagId, tag.picture ?? null]));
     const pictureOf = (chip: (typeof chips)[number]) =>
         chip.tagId ? (pictures.get(chip.tagId) ?? null) : null;
-    const cards = chips.filter((chip) => pictureOf(chip) !== null);
-    const plain = chips.filter((chip) => pictureOf(chip) === null);
+    const faceOf = (chip: (typeof chips)[number]) =>
+        chip.tagId && faceFor ? faceFor(chip.tagId) : null;
+    // A card where there is a picture of them or their face in the item; a chip otherwise.
+    const asCard = (chip: (typeof chips)[number]) =>
+        pictureOf(chip) !== null || Boolean(faceOf(chip));
+    const cards = chips.filter(asCard);
+    const plain = chips.filter((chip) => !asCard(chip));
 
     // Both read the chips as drawn, not the item as last fetched: removing the only chip left
     // its author's name over an empty box until the page was reloaded.
@@ -150,8 +172,10 @@ const FacetBox: React.FC<FacetBoxProps> = ({ mediaId, kind, scope, values, momen
                             key={chip.name}
                             chip={chip}
                             onRemove={remove}
+                            removeChoice={removeChoice}
                             kind={kind}
                             picture={pictureOf(chip)}
+                            face={faceOf(chip)}
                             moment={moment}
                         />
                     ))}
@@ -165,12 +189,15 @@ const FacetBox: React.FC<FacetBoxProps> = ({ mediaId, kind, scope, values, momen
                             key={chip.name}
                             chip={chip}
                             onRemove={remove}
+                            removeChoice={removeChoice}
                             kind={kind}
                             moment={moment}
                         />
                     ))}
                 </Group>
             )}
+
+            {children}
         </Stack>
     );
 };
@@ -223,10 +250,18 @@ const FacetSection: React.FC<FacetSectionProps> = ({ mediaId, kind, tags, moment
  * A fragment on purpose: the caller lays them out beside the note, and a wrapper here would
  * make the facets one cell of that layout — the single "Tags" block this replaced.
  */
-export const TagEditor: React.FC<TagEditorProps> = ({ mediaId, tags, moment }) => (
+export const TagEditor: React.FC<TagEditorProps> = ({ mediaId, tags, except, moment }) => (
     <>
-        {editableFacets(tags).map((kind) => (
-            <FacetSection key={kind} mediaId={mediaId} kind={kind} tags={tags} moment={moment} />
-        ))}
+        {editableFacets(tags)
+            .filter((kind) => !except?.includes(kind))
+            .map((kind) => (
+                <FacetSection
+                    key={kind}
+                    mediaId={mediaId}
+                    kind={kind}
+                    tags={tags}
+                    moment={moment}
+                />
+            ))}
     </>
 );
