@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Box, NavLink, Text, type NavLinkProps } from "@mantine/core";
+import { Box, CloseButton, NavLink, Text, type NavLinkProps } from "@mantine/core";
 
 import type { CollectionKind } from "@private-stock/core";
 
@@ -14,6 +14,7 @@ import { useLibraries } from "@/lib/api/libraries";
 import { useProcessingPause } from "@/lib/api/processing";
 import {
     FIRST_LIBRARY_QUERY,
+    forgetLastLibrarySearch,
     useLastLibrarySearch,
     useRememberedHref,
     useRememberedSectionHref,
@@ -253,22 +254,36 @@ export const AppNavbar: React.FC<{
                 words -- "Alice +2" -- cut with an ellipsis if even that is too long, and the
                 whole of it on hover. */}
             {lastSearch !== null && lastSearchSummary !== null && (
-                <NavLink
-                    component={Link}
-                    prefetch={false}
-                    href={`/?${lastSearch}`}
-                    label="Last search"
-                    description={lastSearchSummary}
-                    title={lastSearchSummary}
-                    active={onLastSearch}
-                    color="brass"
-                    classNames={{ description: classes.oneLine }}
-                    style={{
-                        ...navPadding,
-                        paddingInlineStart: "calc(var(--app-shell-padding) - 6px + 16px)",
-                    }}
-                    onClick={onNavigate}
-                />
+                /* The × beside the row forgets it. A sibling laid over the row's right edge
+                   rather than its `rightSection`: the row is a link, and a button inside an
+                   anchor is invalid markup that some browsers follow anyway. */
+                <Box className={classes.lastSearch}>
+                    <NavLink
+                        component={Link}
+                        prefetch={false}
+                        href={`/?${lastSearch}`}
+                        label="Last search"
+                        description={lastSearchSummary}
+                        title={lastSearchSummary}
+                        active={onLastSearch}
+                        color="brass"
+                        classNames={{ description: classes.oneLine }}
+                        style={{
+                            ...navPadding,
+                            paddingInlineStart: "calc(var(--app-shell-padding) - 6px + 16px)",
+                            paddingInlineEnd: 44,
+                        }}
+                        onClick={onNavigate}
+                    />
+                    <CloseButton
+                        className={classes.lastSearchClose}
+                        size={44}
+                        iconSize={14}
+                        aria-label="Forget the last search"
+                        title="Forget the last search"
+                        onClick={forgetLastLibrarySearch}
+                    />
+                </Box>
             )}
 
             {/* The libraries, kept apart rather than merged into one list (§14). Listed only

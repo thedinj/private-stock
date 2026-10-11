@@ -28,6 +28,19 @@
  * The "Last search" line, kept to one (§14b). The words are already cut down to a term and a
  * count, so this only ever catches a very long name -- and the row's title has the whole of it.
  */
+/** The row and its ×, which sits over the right edge the row leaves free for it. */
+.lastSearch {
+    position: relative;
+}
+
+.lastSearchClose {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    color: var(--mantine-color-dimmed);
+}
+
 .oneLine {
     overflow: hidden;
     text-overflow: ellipsis;

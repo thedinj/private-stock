@@ -8734,6 +8734,10 @@ sort is said only when it is the one thing that differs. Tag names come from the
 which writes them down as its facets arrive: the sidebar asking for them would be the cost the
 clean link exists to avoid.
 
+An × at the row's right edge forgets the search and the row goes with it, until the next search
+is made. It sits beside the link rather than inside it, since a button inside an anchor is
+invalid markup.
+
 ### A saved view can be closed
 
 There was no way out of one. Opening a view put its name in the page title and its id in the

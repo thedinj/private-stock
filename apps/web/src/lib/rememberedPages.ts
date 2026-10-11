@@ -230,6 +230,28 @@ export const useRememberedHref = (path: string): string => {
 export const useLastLibrarySearch = (): string | null => useRememberedQuery("/");
 
 /**
+ * Drops the library's last search, so its row leaves the sidebar -- the × beside it.
+ *
+ * Only until the next one: a search made afterwards is remembered as any other is.
+ */
+export const forgetLastLibrarySearch = (): void => {
+    const entry = entryFor("/");
+
+    if (!entry) return;
+
+    try {
+        localStorage.removeItem(entry.key);
+    } catch {
+        // Nothing was stored to forget, or it cannot be reached; either way there is no row.
+        return;
+    }
+
+    for (const listener of listeners) {
+        listener();
+    }
+};
+
+/**
  * The names of the tags the library's searches have used, by id (§14b).
  *
  * The line under "Last search" says a search by its tags' names, and the sidebar cannot ask for
