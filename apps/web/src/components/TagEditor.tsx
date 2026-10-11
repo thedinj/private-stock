@@ -103,9 +103,10 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
         chip.tagId ? (pictures.get(chip.tagId) ?? null) : null;
     const faceOf = (chip: (typeof chips)[number]) =>
         chip.tagId && faceFor ? faceFor(chip.tagId) : null;
-    // A card where there is a picture of them or their face in the item; a chip otherwise.
+    // A card where there is a picture of them or their face in the item, and a performer always
+    // (§6 "A tag's picture"); a chip otherwise.
     const asCard = (chip: (typeof chips)[number]) =>
-        pictureOf(chip) !== null || Boolean(faceOf(chip));
+        kind === "performer" || pictureOf(chip) !== null || Boolean(faceOf(chip));
     const cards = chips.filter(asCard);
     const plain = chips.filter((chip) => !asCard(chip));
 
@@ -176,6 +177,7 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
                             kind={kind}
                             picture={pictureOf(chip)}
                             face={faceOf(chip)}
+                            card={kind === "performer"}
                             moment={moment}
                         />
                     ))}

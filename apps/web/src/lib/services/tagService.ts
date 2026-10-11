@@ -42,6 +42,7 @@ import {
 import {
     changeLogRepo,
     db,
+    jobRepo,
     mediaRepo,
     searchRepo,
     tagRepo,
@@ -431,6 +432,12 @@ export const applyTags = (
     // pair of the item's strings rather than the tags named, because a replace does not say which
     // tags it took off; one item's strings are a few pairs.
     tagsChangedOn([mediaId], input.kind, scope, null);
+
+    // A performer new to an item may be one with no picture yet: the pass gives them one, a
+    // stand-in at least, so they are a card like every other (§6 "A tag's picture").
+    if (input.kind === "performer" && input.mode !== "remove" && scope === null) {
+        jobRepo.enqueueKind("tagPictures", 200, 120);
+    }
 
     return tags;
 };

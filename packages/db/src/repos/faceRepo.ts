@@ -460,9 +460,10 @@ export interface PictureCandidate {
     /**
      * How good a source of their picture it is (§6 "A tag's picture"): 1, a confirmed face that
      * clears the bars; 2, a face their automatic tag rests on that clears them; 3, a confirmed
-     * face that does not -- the last resort, cut at a smaller size.
+     * face that does not, cut at a smaller size; 4, on an item tagged with them, the person who
+     * looks most like them, nobody having said so -- for a performer with no face of their own.
      */
-    tier: 1 | 2 | 3;
+    tier: 1 | 2 | 3 | 4;
 }
 
 /**
@@ -475,11 +476,16 @@ export interface PictureCandidate {
  * that tag stands -- applied and not taken back, or checked as right, and still on the item -- and the face itself was
  * not refused for them. Whether one is large enough in the original is known only once the frame
  * is read, so a few are offered in case the first is not.
+ *
+ * The last tier is a guess, for a performer nobody has confirmed a face of: on an item the library
+ * tags with them, the person matched to them at least `matchLine` (§5f "A person in a video"),
+ * whose face is not confirmed as somebody else nor refused for them.
  */
 export const pictureCandidates = (
     minScore: number,
     minShare: number,
-    perTier: number
+    perTier: number,
+    matchLine: number
 ): PictureCandidate[] =>
     db
         .prepare(
@@ -502,6 +508,17 @@ export const pictureCandidates = (
                                    AND mt."userId" IS NULL)
                     AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
                                      WHERE r."faceId" = f."id" AND r."tagId" = a."tagId")
+                 UNION ALL
+                 SELECT f."id", p."matchTagId", f."mediaId", f."atMs", f."x", f."y", f."w", f."h",
+                        f."score", 4
+                   FROM "FaceAppearance" p JOIN "Face" f ON f."id" = p."bestFaceId"
+                  WHERE p."matchTagId" IS NOT NULL AND p."score" >= :matchLine
+                    AND f."tagId" IS NULL
+                    AND EXISTS (SELECT 1 FROM "MediaTag" mt
+                                 WHERE mt."mediaId" = p."mediaId" AND mt."tagId" = p."matchTagId"
+                                   AND mt."userId" IS NULL)
+                    AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
+                                     WHERE r."faceId" = f."id" AND r."tagId" = p."matchTagId")
              )
              SELECT "tagId", "mediaId", "kind", "atMs", "x", "y", "w", "h", "score", "fileId",
                     "tier"
@@ -523,7 +540,7 @@ export const pictureCandidates = (
              ) WHERE "n" <= :perTier
               ORDER BY "tagId", "tier", "n"`
         )
-        .all({ minScore, minShare, perTier }) as PictureCandidate[];
+        .all({ minScore, minShare, perTier, matchLine }) as PictureCandidate[];
 
 /**
  * "Not them", said of whole items: every face on them refused for the performer. What taking a

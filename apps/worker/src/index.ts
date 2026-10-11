@@ -981,9 +981,11 @@ const main = async (): Promise<void> => {
 
         scheduleDeferred(firstRunAfter("housekeeping"), null, scheduleOcrMatch),
 
-        // Sources' and keywords' pictures from their looks: at startup, then daily.
+        // Sources' and keywords' pictures from their looks: at startup, then daily. Performers'
+        // too, daily: a stand-in for one tagged by a path that does not ask for a pass itself.
         scheduleDeferred(firstRunAfter("housekeeping"), LOOK_PICTURES_INTERVAL_MS, () => {
             enqueue(db, { kind: "tagLookPictures", priority: 210 });
+            enqueue(db, { kind: "tagPictures", priority: 210 });
         }),
 
         // Last, and by a distance: the heaviest sweep, and the one whose startup pass (a reset

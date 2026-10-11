@@ -380,7 +380,7 @@ describe("faces for a performer's picture", () => {
 
         expect(
             faceRepo
-                .pictureCandidates(0.7, 0.2, 3)
+                .pictureCandidates(0.7, 0.2, 3, 0.45)
                 .map((row) => [row.mediaId, row.atMs, row.fileId, row.tier])
         ).toEqual([
             // The surest-largest of each item, the larger item's first; too small and too unsure
@@ -423,11 +423,38 @@ describe("faces for a performer's picture", () => {
         autoTag("d", "applied");
 
         expect(
-            faceRepo.pictureCandidates(0.7, 0.2, 3).map((row) => [row.mediaId, row.tier])
+            faceRepo.pictureCandidates(0.7, 0.2, 3, 0.45).map((row) => [row.mediaId, row.tier])
         ).toEqual([
             ["a", 1],
             ["b", 2],
         ]);
+    });
+
+    it("guesses, last, the person most like them on an item tagged with them", () => {
+        const appearance = (mediaId: string, score: number): void => {
+            db.prepare(
+                `INSERT INTO "FaceAppearance" ("id", "mediaId", "faceCount", "bestFaceId",
+                                               "legible", "matchTagId", "score", "second")
+                 VALUES (?, ?, 1, ?, 1, 'jane', ?, 0)`
+            ).run(`p-${mediaId}`, mediaId, faces(mediaId)[0].id, score);
+        };
+
+        for (const mediaId of ["a", "b"]) {
+            original(mediaId);
+            faceRepo.replaceForMedia(mediaId, [face(0, 1000, 0.1, { h: 0.5 })]);
+        }
+
+        // Tagged with her and like her; like her, but not tagged with her; too unlike her.
+        db.prepare(
+            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "source") VALUES ('aj', 'a', 'jane', 'user')`
+        ).run();
+        appearance("a", 0.5);
+        appearance("b", 0.6);
+
+        expect(
+            faceRepo.pictureCandidates(0.7, 0.2, 3, 0.45).map((row) => [row.mediaId, row.tier])
+        ).toEqual([["a", 4]]);
+        expect(faceRepo.pictureCandidates(0.7, 0.2, 3, 0.55)).toEqual([]);
     });
 
     it("leaves out unconfirmed faces and items in the trash", () => {
@@ -438,7 +465,7 @@ describe("faces for a performer's picture", () => {
         confirm(faces("b")[0].id, "jane");
         db.prepare(`UPDATE "Media" SET "listable" = NULL WHERE "id" = 'b'`).run();
 
-        expect(faceRepo.pictureCandidates(0.7, 0.2, 3)).toEqual([]);
+        expect(faceRepo.pictureCandidates(0.7, 0.2, 3, 0.45)).toEqual([]);
     });
 });
 

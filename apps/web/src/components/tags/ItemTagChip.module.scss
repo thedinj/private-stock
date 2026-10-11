@@ -117,6 +117,11 @@
         border: 1px dashed var(--mantine-color-brass-8);
     }
 
+    // Still on its way to the server, as a chip is.
+    &[data-pending] {
+        opacity: 0.6;
+    }
+
     // The × at the top, beside the name's first line, rather than centred down a tall card.
     .end {
         align-self: flex-start;

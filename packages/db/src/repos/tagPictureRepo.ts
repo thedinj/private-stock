@@ -175,8 +175,25 @@ export const listableMediaIds = (): string[] =>
     );
 
 /**
- * A moment to picture a source or a keyword by when it has no typical frame (§6 "A tag's
- * picture"): somebody's capture from one of its items, else one of its items' covers. Arbitrary on
+ * Every library performer on a listable item: each is pictured, by a stand-in where their faces
+ * give nothing (§6 "A tag's picture").
+ */
+export const performersCarried = (): string[] =>
+    db
+        .prepare(
+            `SELECT DISTINCT mt."tagId"
+               FROM "MediaTag" mt
+               JOIN "Tag" t ON t."id" = mt."tagId" AND t."kind" = 'performer' AND t."ownerId" IS NULL
+               JOIN "Media" m ON m."id" = mt."mediaId" AND m."listable" = 1
+              WHERE mt."userId" IS NULL`
+        )
+        .pluck()
+        .all() as string[];
+
+/**
+ * A moment to picture a tag by when nothing better does -- a source or a keyword with no typical
+ * frame, a performer with no face (§6 "A tag's picture"): somebody's capture from one of its
+ * items, else one of its items' covers. Arbitrary on
  * purpose and stable from run to run -- the first by artifact id, which is random -- so the
  * picture does not change every time the job looks. Only frames with a known moment: a video's
  * cover without one would be read at the start, which is usually black.

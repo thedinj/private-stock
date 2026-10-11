@@ -56,6 +56,12 @@ interface ItemTagChipProps {
     removeChoice?: boolean;
     /** Their face in the item, under the name; a chip with one is drawn as a card. */
     face?: React.ReactNode;
+    /**
+     * A card whatever it has: a performer's, so every one on an item is the same size (§6 "A
+     * tag's picture"). Without a picture yet -- the pass that draws one is minutes behind a new
+     * performer -- the picture's place is held empty.
+     */
+    card?: boolean;
     /** The tag's facet, which decides the picture's shape. */
     kind?: string;
     picture?: TagPicture | null;
@@ -67,6 +73,7 @@ export const ItemTagChip: React.FC<ItemTagChipProps> = ({
     onRemove,
     removeChoice,
     face,
+    card,
     kind,
     picture,
     moment,
@@ -147,22 +154,27 @@ export const ItemTagChip: React.FC<ItemTagChipProps> = ({
         />
     );
 
-    if ((picture || face) && tagId) {
+    if (picture || face || card) {
+        // A chip still being saved has no tag to open a menu on: drawn, going nowhere.
+        const opens = (target: React.ReactElement) => (tagId ? menu(target) : target);
+
         return (
             <span
                 className={classes.card}
                 data-portrait={kind === "performer" || undefined}
                 data-source={source}
+                data-pending={pending || undefined}
             >
-                {picture &&
-                    menu(
-                        <UnstyledButton className={classes.cardPicture} title={name}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                {opens(
+                    <UnstyledButton className={classes.cardPicture} title={name}>
+                        {picture && (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={picture.smallUrl} alt="" loading="lazy" decoding="async" />
-                        </UnstyledButton>
-                    )}
+                        )}
+                    </UnstyledButton>
+                )}
                 <span className={classes.cardBody}>
-                    {menu(
+                    {opens(
                         <UnstyledButton className={classes.cardName} title={name}>
                             <span className={classes.cardLabel}>{name}</span>
                         </UnstyledButton>

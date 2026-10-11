@@ -7,7 +7,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * A performer's picture from their faces (§6 "A tag's picture"): drawn from the best face that
  * makes one, a tier at a time, left alone while that face is still the best, and withdrawn when
- * none does. ffmpeg and the rows are stood in for; what is asserted is which face was used and when.
+ * none does -- a stand-in from one of their items first, if they are on any. ffmpeg and the rows
+ * are stood in for; what is asserted is which face was used and when.
  */
 
 const dataDir = mkdtempSync(path.join(tmpdir(), "ps-tagpictures-"));
@@ -23,7 +24,7 @@ interface Candidate {
     h: number;
     score: number;
     fileId: string;
-    tier: 1 | 2 | 3;
+    tier: 1 | 2 | 3 | 4;
 }
 
 interface Row {
@@ -41,6 +42,9 @@ const state = vi.hoisted(() => ({
     /** The frame each item's original decodes to. */
     frames: new Map<string, { width: number; height: number }>(),
     reads: [] as string[],
+    /** Performers on an item, and the moment each would be stood in for by. */
+    carried: [] as string[],
+    standIns: new Map<string, { mediaId: string; kind: "video"; atMs: number; fileId: string }>(),
 }));
 
 vi.mock("@private-stock/db", () => ({
@@ -48,6 +52,8 @@ vi.mock("@private-stock/db", () => ({
     faceRepo: { pictureCandidates: () => state.candidates },
     tagPictureRepo: {
         listAuto: () => [...state.rows.values()],
+        performersCarried: () => state.carried,
+        standInFor: (tagId: string) => state.standIns.get(tagId),
         upsert: (input: Row & { crop: unknown }) => {
             state.rows.set(input.tagId, { ...input, source: "auto" });
         },
@@ -98,7 +104,12 @@ afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 /** A tag id: the paths are built from it, and refuse anything that is not one. */
 const JANE = "jane-tag";
 
-const face = (tagId: string, mediaId: string, h: number, tier: 1 | 2 | 3 = 1): Candidate => ({
+const face = (
+    tagId: string,
+    mediaId: string,
+    h: number,
+    tier: Candidate["tier"] = 1
+): Candidate => ({
     tagId,
     mediaId,
     kind: "video",
@@ -117,6 +128,8 @@ beforeEach(() => {
     state.rows.clear();
     state.frames.clear();
     state.reads = [];
+    state.carried = [];
+    state.standIns.clear();
     lastInput.clear();
 });
 
@@ -161,7 +174,40 @@ describe("runTagPictures", () => {
         expect(state.rows.get(JANE)?.mediaId).toBe("soft");
     });
 
-    it("leaves a performer with only a tiny face without a picture", async () => {
+    it("takes the person most like them on an item of theirs, nobody having confirmed one", async () => {
+        state.candidates = [face(JANE, "guess", 0.1, 4)];
+        state.frames.set("guess", { width: 1280, height: 720 });
+
+        await runTagPictures();
+
+        expect(state.rows.get(JANE)?.mediaId).toBe("guess");
+    });
+
+    it("stands in a moment of one of their items when no face of theirs makes a picture", async () => {
+        state.candidates = [face(JANE, "tiny", 0.05, 3)];
+        state.frames.set("tiny", { width: 640, height: 360 });
+        state.frames.set("cover", { width: 1280, height: 720 });
+        state.carried = [JANE];
+        state.standIns.set(JANE, {
+            mediaId: "cover",
+            kind: "video",
+            atMs: 9000,
+            fileId: "file-cover",
+        });
+
+        await runTagPictures();
+
+        expect(state.rows.get(JANE)).toMatchObject({ mediaId: "cover", atMs: 9000 });
+
+        // Kept while it is still the one: the next run reads only the face it tries first.
+        state.reads = [];
+        await runTagPictures();
+
+        expect(state.reads).toEqual(["file-tiny"]);
+        expect(state.rows.get(JANE)?.mediaId).toBe("cover");
+    });
+
+    it("leaves a performer with only a tiny face and nothing to stand in without a picture", async () => {
         state.candidates = [face(JANE, "tiny", 0.05, 3)];
         state.frames.set("tiny", { width: 640, height: 360 });
 

@@ -3045,8 +3045,17 @@ review or a performer taken off items.
   pixels (`FALLBACK_PICTURE_MIN_FACE_PX`). A soft picture of the right person beats a chip;
   smaller than that it is a blur, and the chip is better. Each tier gets its own three tries, so a
   tier whose faces are all too small does not use up the next.
-- **No fallback to a cover.** A performer's picture is their face. A cover often shows somebody
-  else or nobody, and the wrong face beside a name is worse than the name.
+- **~~No fallback to a cover.~~ Every performer on an item has a picture** (decided 2026-10-11,
+  reversing "no fallback to a cover"). Chips beside cards were two sizes of the same thing in one
+  row, and that cost more than an arbitrary picture does. After the three tiers above, a fourth:
+  nobody having confirmed a face of theirs, the person matched most like them (at least
+  `SUGGEST_NAMED_LINE`) on an item the library tags with them, whose face is neither confirmed as
+  somebody else nor refused for them, cut at the smaller size. Then a stand-in, as sources and
+  keywords have (`standInFor`, framed 4:5 and centred), for every library performer on a listable
+  item (`performersCarried`), kept while its item carries them. A wrong picture is the nudge to
+  choose one, and any confirmed face replaces it on the next pass. The pass runs daily too, and two
+  minutes after a performer is added to an item, so a new performer is not long without one; until
+  then the item page holds the picture's place empty, and a performer is always a card there.
 
 **From looks, for sources and keywords** (`tagLookPictures`, §5e). Nothing says what a source or
 a keyword is except the items carrying it, so its picture is its **most typical frame**. Each
