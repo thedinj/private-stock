@@ -9,6 +9,8 @@ import type { FaceReviewFace } from "@private-stock/core";
 import { itemHref } from "@/lib/lookMoment";
 import { useCloseOnBack } from "@/lib/useCloseOnBack";
 
+import { FileName } from "./FileName";
+
 /** A second before the face, so it is seen arriving. */
 const LEAD_MS = 1_000;
 
@@ -34,7 +36,8 @@ export const FaceViewDrawer: React.FC<{
             onClose={onClose}
             position={isPhone ? "bottom" : "right"}
             size={isPhone ? "85%" : "xl"}
-            title="The item"
+            // The file it is, named: the title can be a scraped one.
+            title={face ? <FileName mediaId={face.mediaId} /> : "The item"}
             removeScrollProps={{ allowPinchZoom: true }}
         >
             {face && (

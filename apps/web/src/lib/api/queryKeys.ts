@@ -236,6 +236,11 @@ export const queryKeys = {
          */
         confirmedFaces: (tagId: string) => ["tags", "faces", tagId, "confirmed"],
         /**
+         * Their face from a few of their items, for "Look" beside one that may be them (§5f).
+         * Under `faces(tagId)`; one entry a performer, so a page of their cards asks once.
+         */
+        faceComparison: (tagId: string) => ["tags", "faces", tagId, "comparison"],
+        /**
          * "Would tag" (§5f). Under `tags`, so every tagging and vocabulary change reaches it. Not
          * Suggestions, New people or a performer's Faces tab, which hold still: `faceReview`.
          */

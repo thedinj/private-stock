@@ -61,6 +61,7 @@ vi.mock("./faceService", () => ({
     ],
 }));
 
+vi.mock("./tagPictureService", () => ({ picturesFor: () => new Map() }));
 vi.mock("./mediaService", () => ({
     lookupMedia: (ids: string[]) => ({
         items: ids.filter((id) => id !== "hidden").map((id) => ({ id, kind: "video", title: id })),

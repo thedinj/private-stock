@@ -326,6 +326,34 @@ describe("a performer's faces", () => {
         ]);
     });
 
+    it("compares by one confirmed face an item, or guesses where none is confirmed", () => {
+        setUp([
+            { id: "a", faces: 2, performers: ["jane"] },
+            { id: "b", faces: 1, performers: ["jane"] },
+        ]);
+
+        // Nobody confirmed: the person most like her on an item tagged with her.
+        db.prepare(
+            `INSERT INTO "FaceAppearance" ("id", "mediaId", "faceCount", "bestFaceId", "legible",
+                                           "matchTagId", "score", "second")
+             VALUES ('pb', 'b', 1, ?, 1, 'jane', 0.5, 0)`
+        ).run(faces("b")[0].id);
+
+        expect(faceRepo.comparisonFaces("jane", [ROOT], 5)).toMatchObject({
+            confirmed: false,
+            faces: [{ mediaId: "b" }],
+        });
+
+        for (const row of faces("a")) confirm(row.id, "jane");
+
+        const compared = faceRepo.comparisonFaces("jane", [ROOT], 5);
+
+        // One an item: a's two faces are one comparison.
+        expect(compared.confirmed).toBe(true);
+        expect(compared.faces.map((face) => face.mediaId)).toEqual(["a"]);
+        expect(faceRepo.comparisonFaces("jane", [], 5).faces).toEqual([]);
+    });
+
     it("pages every confirmed face, every moment, largest first", () => {
         setUp([
             { id: "a", faces: 2 },

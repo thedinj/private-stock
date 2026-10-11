@@ -2,6 +2,7 @@ import {
     AuthorizationError,
     NotFoundError,
     ValidationError,
+    type FaceComparison,
     type FaceReviewFace,
     type PerformerPeopleDecision,
     type PerformerPeoplePage,
@@ -43,6 +44,22 @@ const libraryPerformer = (tagId: string) => {
     }
 
     return tag;
+};
+
+/** How many of a performer's items a comparison offers: one more than is shown, for the item asked about. */
+const COMPARED = 5;
+
+/**
+ * Their face from a few of their items, to set beside one that may be them (§5f "Suggestions"):
+ * what "Look" shows under the frame. The caller leaves out the item it is asking about.
+ */
+export const faceComparison = (tagId: string, auth: AuthContext): FaceComparison => {
+    requireAdmin(auth);
+
+    const tag = libraryPerformer(tagId);
+    const { faces, confirmed } = faceRepo.comparisonFaces(tag.id, auth.accessibleRootIds, COMPARED);
+
+    return { faces: faces.flatMap(reviewFace), confirmed };
 };
 
 /** A card from a person's clearest face and the faces it speaks for. */

@@ -2148,6 +2148,14 @@ faces".)
   as an untag by hand). Pressing a face goes to its moment. Each is one decision in History. Above
   the item's tags, for administrators. Who is on screen _now_, during playback, is not built: it
   is a way of watching more than of organising.
+- **Comparing, and which file** (2026-10-11). A face asked about as somebody is set beside them:
+  their picture next to the name on the card (Would tag, the item page's "‹name›?", the head of a
+  performer's Suggestions), and in "Look" their face from up to four of their other items
+  (`comparisonFaces`: one confirmed face an item, the largest and surest first; none confirmed, the
+  person most like them on items tagged with them, which the row says is not confirmed). Fetched
+  when Look opens, once a performer. Look, the "Play it here" drawer's heading and a History
+  face's tooltip name the item by its file — the file name whole, its folder below — since a title
+  may be scraped and the file name is often where a performer or a studio is written.
 - **One with Performers** (2026-10-11). Two lists — who the item is tagged with, and who the faces
   found in it — were one question asked twice: a confirmed person is a performer tag, so they
   showed in both. The viewer's Performers section (`ItemPerformers`, across the page's width) is

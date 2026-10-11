@@ -23,6 +23,7 @@ import { GRID_GAP, GRID_TRACKS } from "@/lib/gridGeometry";
 import { FaceCropView } from "./FaceCropView";
 import { FaceViewDrawer } from "./FaceViewDrawer";
 import { LookButton } from "./LookButton";
+import { PerformerPicture } from "./PerformerPicture";
 
 const errorText = (error: unknown): string =>
     error instanceof Error ? error.message : "That change could not be saved.";
@@ -56,7 +57,9 @@ const AutoTagCard: React.FC<{
         <Stack gap={6}>
             <MediaTile item={entry.item} />
             <Group gap="xs" wrap="nowrap" align="center">
+                {/* The face, and beside it who it may be: compared at a glance. */}
                 {entry.face && <FaceCropView crop={entry.face.crop} size={56} />}
+                <PerformerPicture url={entry.pictureUrl} width={45} />
                 <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                     <Text size="sm" fw={600}>
                         {entry.name}?
@@ -66,7 +69,12 @@ const AutoTagCard: React.FC<{
                     </Text>
                 </Stack>
                 {entry.face && (
-                    <LookButton face={entry.face} others={entry.others} onPlay={onPlay} />
+                    <LookButton
+                        face={entry.face}
+                        others={entry.others}
+                        onPlay={onPlay}
+                        compare={{ tagId: entry.tagId, name: entry.name }}
+                    />
                 )}
             </Group>
             <Group gap="xs" grow>

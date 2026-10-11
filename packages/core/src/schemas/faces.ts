@@ -86,6 +86,8 @@ export const autoTagEntrySchema = z.object({
     item: mediaListItemSchema,
     tagId: z.string(),
     name: z.string(),
+    /** Their picture, beside the name: who the face is being compared with. */
+    pictureUrl: z.string().nullable(),
     /** The face that matched them best, to check it by. */
     face: faceReviewFaceSchema.nullable(),
     /** The same person's other moments in the item, for the closer look. */
@@ -321,6 +323,17 @@ export const performerPeopleDecisionSchema = z.object({
 export type PerformerPeopleDecision = z.infer<typeof performerPeopleDecisionSchema>;
 
 /**
+ * A performer's face from a few of their items, beside one that may be them (§5f "Suggestions").
+ * `confirmed` false: nobody has confirmed a face of theirs, and these are the people most like them
+ * on items tagged with them.
+ */
+export const faceComparisonSchema = z.object({
+    faces: z.array(faceReviewFaceSchema),
+    confirmed: z.boolean(),
+});
+export type FaceComparison = z.infer<typeof faceComparisonSchema>;
+
+/**
  * People in this item (§5f "People in this item"): every person in it, each with what is known —
  * confirmed by you or tagged by the app, suggested, or nobody yet — and the performers its own
  * text names who are not on it. What replaces "Maybe in this item".
@@ -330,8 +343,10 @@ export const itemPeopleSchema = z.object({
         z.object({
             card: personCardSchema,
             state: z.enum(["confirmed", "suggested", "unknown"]),
-            /** Who: confirmed as, or suggested. */
-            performer: z.object({ id: z.string(), name: z.string() }).nullable(),
+            /** Who: confirmed as, or suggested; with their picture, to compare the face with. */
+            performer: z
+                .object({ id: z.string(), name: z.string(), pictureUrl: z.string().nullable() })
+                .nullable(),
             /** Confirmed, and the item's tag was made by the app's own matching. */
             byApp: z.boolean(),
             /** The item already carries them. */

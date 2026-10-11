@@ -289,6 +289,7 @@ const SectionView: React.FC<{
                                                     : () => press(card, group.mediaId)
                                             }
                                             onPlay={setViewing}
+                                            compare={{ tagId, name }}
                                         />
                                     </Box>
                                 ))}
@@ -318,6 +319,7 @@ const SectionView: React.FC<{
                                 saved.has(card.id) ? undefined : () => press(card, card.mediaId)
                             }
                             onPlay={setViewing}
+                            compare={{ tagId, name }}
                         />
                     ))}
                 </Box>

@@ -11,6 +11,7 @@ import type {
     AutoTagState,
     AutoTagSwitch,
     ConfirmedFacesPage,
+    FaceComparison,
     FaceHistoryPage,
     NewPeopleDecision,
     NewPeoplePage,
@@ -46,6 +47,17 @@ export const useConfirmedFaces = (tagId: string, enabled: boolean) =>
         initialPageParam: 0,
         getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
         enabled,
+    });
+
+/**
+ * Their face from a few of their items, for "Look" beside one that may be them: asked for when
+ * the look opens, then shared by every card of theirs for a while. See docs/CACHE_KEYS.md.
+ */
+export const useFaceComparison = (tagId: string) =>
+    useQuery({
+        queryKey: queryKeys.tags.faceComparison(tagId),
+        queryFn: () => api<FaceComparison>(`${base(tagId)}/faces/compare`),
+        staleTime: 10 * 60 * 1000,
     });
 
 /** "Would tag", a page at a time, in the visit's order. See docs/CACHE_KEYS.md. */

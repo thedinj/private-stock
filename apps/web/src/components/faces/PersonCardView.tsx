@@ -50,7 +50,9 @@ export const PersonCardView: React.FC<{
     /** The closer look's them / not them / unsure, where those are what is being said. */
     peekState?: { state: TickState; threeWay: boolean; onSet: (state: TickState) => void };
     onPlay: (face: FaceReviewFace) => void;
-}> = ({ face, others, size, mark, look, caption, label, onPress, peekState, onPlay }) => {
+    /** The performer it may be, for "Look" to compare with. */
+    compare?: { tagId: string; name: string };
+}> = ({ face, others, size, mark, look, caption, label, onPress, peekState, onPlay, compare }) => {
     return (
         <Paper withBorder radius="md" p={4} style={{ opacity: onPress ? 1 : 0.5 }}>
             <Stack gap={0} align="center">
@@ -105,7 +107,13 @@ export const PersonCardView: React.FC<{
                     <Text size="xs" c="dimmed" truncate>
                         {caption}
                     </Text>
-                    <LookButton face={face} others={others} peekState={peekState} onPlay={onPlay} />
+                    <LookButton
+                        face={face}
+                        others={others}
+                        peekState={peekState}
+                        onPlay={onPlay}
+                        compare={compare}
+                    />
                 </Group>
             </Stack>
         </Paper>

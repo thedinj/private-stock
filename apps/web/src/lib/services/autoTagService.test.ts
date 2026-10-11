@@ -68,6 +68,7 @@ vi.mock("@private-stock/db", () => ({
     },
 }));
 
+vi.mock("./tagPictureService", () => ({ picturesFor: () => new Map() }));
 vi.mock("./mediaService", () => ({
     lookupMedia: (ids: string[]) => ({ items: ids.map((id) => ({ id, title: id })) }),
 }));

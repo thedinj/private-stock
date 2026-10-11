@@ -23,6 +23,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 import { notThem } from "./notThem";
+import { picturesFor } from "./tagPictureService";
 
 /**
  * People in this item (§5f "People in this item"): every person in it, with what is known of them
@@ -78,11 +79,16 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
             .filter((tag) => tag.private === null)
             .map((tag) => [tag.tagId, tag])
     );
+    // Everybody the people are confirmed as or matched to: their pictures, to compare with.
+    const pictures = picturesFor(
+        rows.flatMap((row) => [row.confirmedTagId, row.matchTagId]).filter((id) => id !== null),
+        auth
+    );
     const nameOf = (tagId: string) => {
         const tag = tagRepo.findById(tagId);
 
         return tag && tag.kind === "performer" && tag.ownerId === null
-            ? { id: tag.id, name: tag.name }
+            ? { id: tag.id, name: tag.name, pictureUrl: pictures.get(tag.id)?.smallUrl ?? null }
             : null;
     };
 

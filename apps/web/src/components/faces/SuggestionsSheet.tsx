@@ -24,6 +24,7 @@ import { useDecideSuggestions, useSuggestionPeople, useSuggestions } from "@/lib
 import { nextTick, type TickState } from "./faceControls";
 import { FaceViewDrawer } from "./FaceViewDrawer";
 import { MARKS, PersonCardView } from "./PersonCardView";
+import { PerformerPicture } from "./PerformerPicture";
 
 /**
  * Suggestions (§5f "Suggestions"): people in items whose faces together look clearly like a
@@ -42,7 +43,9 @@ const SuggestionCard: React.FC<{
     saved: "is" | "isNot" | null;
     onSet: (state: TickState) => void;
     onPlay: (face: FaceReviewFace) => void;
-}> = ({ suggestion, size, state, saved, onSet, onPlay }) => {
+    /** Who they may be, for "Look" to compare with. */
+    compare?: { tagId: string; name: string };
+}> = ({ suggestion, size, state, saved, onSet, onPlay, compare }) => {
     const said = saved ? (saved === "is" ? "in" : "out") : state;
 
     return (
@@ -74,6 +77,7 @@ const SuggestionCard: React.FC<{
             onPress={saved ? undefined : () => onSet(nextTick(state, true))}
             peekState={saved ? undefined : { state, threeWay: true, onSet }}
             onPlay={onPlay}
+            compare={compare}
         />
     );
 };
@@ -156,6 +160,16 @@ export const PerformerSuggestions: React.FC<{
                 )}
             </Group>
 
+            {/* Who every card below may be, to compare the faces with. */}
+            {performer && (
+                <Group gap="sm" wrap="nowrap">
+                    <PerformerPicture url={performer.pictureUrl} width={56} />
+                    <Text fw={600} size="lg" style={{ minWidth: 0 }} truncate>
+                        {performer.name}
+                    </Text>
+                </Group>
+            )}
+
             <Text size="sm" c="dimmed">
                 People in {performer ? `items that may be ${performer.name}` : "items"}, the surest
                 first. Every card starts as them: press one for not them, again for unsure — unsure
@@ -191,6 +205,7 @@ export const PerformerSuggestions: React.FC<{
                                 setStates((current) => new Map(current).set(card.id, state))
                             }
                             onPlay={setViewing}
+                            compare={performer && { tagId: performer.id, name: performer.name }}
                         />
                     ))}
                 </Box>

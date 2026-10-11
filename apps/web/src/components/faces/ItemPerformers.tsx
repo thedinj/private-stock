@@ -25,6 +25,7 @@ import { FaceCropView } from "./FaceCropView";
 import { NameBox } from "./faceControls";
 import { LookButton } from "./LookButton";
 import { MARKS, PersonCardView } from "./PersonCardView";
+import { PerformerPicture } from "./PerformerPicture";
 
 /**
  * Performers, on the item's page (§5f "People in this item"): who it is tagged with and who the
@@ -148,15 +149,22 @@ const SuggestedCard: React.FC<{
     return (
         <Maybe>
             <Group gap="sm" wrap="nowrap" align="flex-start">
+                {/* The face, and beside it who it may be: compared at a glance. */}
                 <UnstyledButton aria-label="Go to this face" onClick={() => seek(card.face)}>
                     <FaceCropView crop={card.face.crop} size={72} />
                 </UnstyledButton>
+                <PerformerPicture url={performer.pictureUrl} width={58} />
                 <Stack gap={4} style={{ minWidth: 0 }}>
                     <Group gap={4} wrap="nowrap" justify="space-between">
                         <Text size="sm" fw={600} truncate>
                             {performer.name}?
                         </Text>
-                        <LookButton face={card.face} others={card.others} onPlay={seek} />
+                        <LookButton
+                            face={card.face}
+                            others={card.others}
+                            onPlay={seek}
+                            compare={{ tagId: performer.id, name: performer.name }}
+                        />
                     </Group>
                     <Text size="xs" c={decide.error ? "oxblood.4" : "dimmed"}>
                         {decide.error

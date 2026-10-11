@@ -27,6 +27,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
+import { picturesFor } from "./tagPictureService";
 
 /**
  * Tagging by itself, checked first (§5f "Tagging by itself"): the "Would tag" list.
@@ -104,6 +105,11 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
             .map((face) => [face.id, face])
     );
 
+    const pictures = picturesFor(
+        page.map((row) => row.tagId),
+        auth
+    );
+
     return {
         rows: page.flatMap((row): AutoTagEntry[] => {
             const item = tiles.get(row.mediaId);
@@ -116,6 +122,7 @@ export const autoTagList = (query: AutoTagQuery, auth: AuthContext): AutoTagPage
                           item,
                           tagId: tag.id,
                           name: tag.name,
+                          pictureUrl: pictures.get(tag.id)?.smallUrl ?? null,
                           face: face ?? null,
                           others: face
                               ? (people.get(face.id) ?? []).flatMap((id) => faces.get(id) ?? [])

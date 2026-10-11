@@ -309,6 +309,55 @@ export const shownFaces = (faceIds: readonly string[]): ShownFace[] =>
         )
         .all(JSON.stringify(faceIds)) as ShownFace[];
 
+/**
+ * A performer's face from a few of their items, to set beside one that may be them (§5f
+ * "Suggestions"): the largest, surest face confirmed as them on each item, the best items first.
+ * `confirmed` false when nobody has confirmed one, and these are instead the person most like
+ * them on items tagged with them -- what their reference rests on then, and less certain.
+ */
+export const comparisonFaces = (
+    tagId: string,
+    rootIds: readonly string[],
+    limit: number
+): { faces: ShownFace[]; confirmed: boolean } => {
+    const params: Record<string, unknown> = { tagId, limit };
+    const where = visible(rootIds, params);
+    const confirmed = db
+        .prepare(
+            `SELECT "id", "mediaId", "kind", "atMs", "x", "y", "w", "h" FROM (
+                 SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h",
+                        f."h" * f."score" AS "size",
+                        row_number() OVER (PARTITION BY f."mediaId"
+                                           ORDER BY f."h" * f."score" DESC, f."id") AS "n"
+                   FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
+                  WHERE f."tagId" = :tagId AND ${where}
+             ) WHERE "n" = 1 ORDER BY "size" DESC LIMIT :limit`
+        )
+        .all(params) as ShownFace[];
+
+    if (confirmed.length > 0) {
+        return { faces: confirmed, confirmed: true };
+    }
+
+    const guessed = db
+        .prepare(
+            `SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h"
+               FROM "FaceAppearance" p
+               JOIN "Face" f ON f."id" = p."bestFaceId"
+               JOIN "Media" m ON m."id" = p."mediaId"
+              WHERE p."matchTagId" = :tagId AND ${where}
+                AND EXISTS (SELECT 1 FROM "MediaTag" mt
+                             WHERE mt."mediaId" = p."mediaId" AND mt."tagId" = :tagId
+                               AND mt."userId" IS NULL)
+                AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
+                                 WHERE r."faceId" = f."id" AND r."tagId" = :tagId)
+              ORDER BY p."score" DESC LIMIT :limit`
+        )
+        .all(params) as ShownFace[];
+
+    return { faces: guessed, confirmed: false };
+};
+
 /** When a performer was said to have no single face (§5f), if they were. */
 export const noSingleFace = (tagId: string): { decidedAt: string } | undefined =>
     db.prepare(`SELECT "decidedAt" FROM "PerformerNoFace" WHERE "tagId" = ?`).get(tagId) as

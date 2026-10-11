@@ -13,6 +13,7 @@ import {
     SegmentedControl,
     Stack,
     Text,
+    Tooltip,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
@@ -22,6 +23,7 @@ import { useFaceHistory, useUndoFaceDecision } from "@/lib/api/faces";
 import { itemHref } from "@/lib/lookMoment";
 
 import { FaceCropView } from "./FaceCropView";
+import { FileName } from "./FileName";
 
 /**
  * History (§5f "Decisions you can take back"): every face decision, newest first — yours, and the
@@ -132,14 +134,22 @@ const EntryRow: React.FC<{ entry: FaceHistoryEntry }> = ({ entry }) => {
             <Group gap="sm" wrap="nowrap" align="center">
                 <Group gap={4} wrap="nowrap" style={{ flex: "0 0 auto" }}>
                     {entry.faces.slice(0, isPhone ? 2 : 4).map((face) => (
-                        <Link
+                        // Which file, on hover: asked for only when the tip opens.
+                        <Tooltip
                             key={face.id}
-                            href={itemHref(face.mediaId, face.atMs)}
-                            prefetch={false}
-                            aria-label="Open the item"
+                            label={<FileName mediaId={face.mediaId} />}
+                            maw={320}
+                            multiline
+                            openDelay={300}
                         >
-                            <FaceCropView crop={face.crop} size={48} />
-                        </Link>
+                            <Link
+                                href={itemHref(face.mediaId, face.atMs)}
+                                prefetch={false}
+                                aria-label="Open the item"
+                            >
+                                <FaceCropView crop={face.crop} size={48} />
+                            </Link>
+                        </Tooltip>
                     ))}
                 </Group>
                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>

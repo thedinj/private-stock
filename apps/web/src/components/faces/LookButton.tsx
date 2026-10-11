@@ -11,8 +11,8 @@ import { FacePeek } from "./FacePeek";
 import type { TickState } from "./faceControls";
 
 /**
- * "Look" (§5f "A person in a video"): the frame a face was found in, the same person's other
- * moments, and "Play it here", in a popover over the list. Back closes it; so does a tap anywhere
+ * "Look" (§5f "A person in a video"): the frame a face was found in, its file, the same person's
+ * other moments, the performer they may be from other items, and "Play it here", in a popover over the list. Back closes it; so does a tap anywhere
  * in it but a control.
  */
 export const LookButton: React.FC<{
@@ -21,7 +21,9 @@ export const LookButton: React.FC<{
     /** The closer look's them / not them / unsure, where those are what is being said. */
     peekState?: { state: TickState; threeWay: boolean; onSet: (state: TickState) => void };
     onPlay: (face: FaceReviewFace) => void;
-}> = ({ face, others, peekState, onPlay }) => {
+    /** The performer it may be: their face from other items is shown to compare. */
+    compare?: { tagId: string; name: string };
+}> = ({ face, others, peekState, onPlay, compare }) => {
     const [peeking, setPeeking] = useState(false);
 
     useCloseOnBack(peeking, () => setPeeking(false));
@@ -65,6 +67,7 @@ export const LookButton: React.FC<{
                     state={peekState?.state}
                     threeWay={peekState?.threeWay ?? false}
                     onSet={peekState?.onSet}
+                    compare={compare}
                     onPlay={() => {
                         setPeeking(false);
                         onPlay(face);
