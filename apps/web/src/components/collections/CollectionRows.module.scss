@@ -1,0 +1,16 @@
+/**
+ * The blackletter initial that opens a collection's description (§14).
+ *
+ * Inline rather than a dropped capital: the description is one clamped line under the facts,
+ * and a capital floated three lines deep would hang off the bottom of a one-line row. Set a
+ * size up and on the line, in oxblood -- a rubricated initial, as a label or an old cellar
+ * book has it, and the one letter of the label face that leaves the page plate.
+ */
+.initial {
+    font-family: var(--font-label), var(--font-display), serif;
+    font-weight: 700;
+    font-size: 1.45em;
+    line-height: 0;
+    color: var(--mantine-color-oxblood-4);
+    margin-right: 0.04em;
+}

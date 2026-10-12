@@ -1,19 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-    Anchor,
-    Divider,
-    Group,
-    Modal,
-    Stack,
-    Switch,
-    Text,
-    Title,
-    UnstyledButton,
-} from "@mantine/core";
+import { Anchor, Divider, Modal, Stack, Switch, Text, Title, UnstyledButton } from "@mantine/core";
 
-import { SealMark } from "@/components/shell/SealMark";
+import { CorkStamp } from "@/components/shell/CorkStamp";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { buildInfo } from "@/lib/buildInfo";
 import { recordTap, tapsRemaining } from "@/lib/tapUnlock";
@@ -112,10 +102,8 @@ export const AboutModal: React.FC<AboutModalProps> = ({ opened, onClose }) => {
         <Modal opened={opened} onClose={onClose} title="About" centered>
             <Stack gap="md">
                 <Stack gap={4}>
-                    <Group gap="sm" wrap="nowrap">
-                        <SealMark size={40} />
-                        <Title order={3}>private-stock</Title>
-                    </Group>
+                    <CorkStamp size={104} />
+                    <Title order={3}>private-stock</Title>
                     <Text size="sm" c="dimmed">
                         A self-hosted cataloguer and viewer for a large local library.
                     </Text>

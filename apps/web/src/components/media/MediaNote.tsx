@@ -7,6 +7,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 
+import classes from "./MediaNote.module.scss";
+
 /**
  * This viewer's private note on one item (§6, §14b).
  *
@@ -144,6 +146,7 @@ export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
             </Group>
 
             <Textarea
+                classNames={{ input: classes.input }}
                 value={draft}
                 autosize
                 minRows={3}

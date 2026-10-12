@@ -42,14 +42,18 @@
 }
 
 /**
- * One size on every page (§14, "house rules").
+ * One size on every page (§14, "house rules"), set as the label.
  *
  * There were two: a 60px display title for screens you "arrive at" and a section-sized one for
  * screens you "work in". The distinction was real in the reasoning and invisible in use --
  * Reels and Clips sit next to each other in the navigation, and moving between them made the
  * heading jump from 60px to 26px, which reads as inconsistency rather than as meaning. So the
- * plate has one size, the working one: the eyebrow, the rule and the serif carry the
- * letterhead, and the content keeps its room.
+ * plate has one size.
+ *
+ * **Blackletter, as the estate's name is on a German wine label (§14).** The plate is the only
+ * place the label face appears, which is what keeps it a label rather than a costume. It runs
+ * larger than the serif did -- 2.5rem against 1.625 -- because a Gothic's x-height is small and
+ * its counters close up below that; at 700 rather than its 900, which fills them in.
  *
  * At most two lines of a name that is user input -- a directory, a saved view, a playlist --
  * so a long one cannot push the page down.
@@ -60,15 +64,27 @@
     min-width: 0;
     color: var(--ps-title);
     text-wrap: balance;
-    letter-spacing: -0.015em;
     margin: 0;
-    font-size: var(--mantine-h3-font-size);
-    line-height: var(--mantine-h3-line-height);
+    font-family: var(--font-label), var(--font-display), serif;
+    font-weight: 700;
+    font-size: 2.5rem;
+    line-height: 1;
+    // The Gothic's capitals sit a hair outside the column; pulled back so the title's stem
+    // lines up with the eyebrow above it rather than its serif.
+    margin-left: -0.02em;
     overflow-wrap: anywhere;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    // The clamp's overflow cuts a descender on the last line at this leading.
+    padding-bottom: 0.08em;
+}
+
+@media (max-width: 36em) {
+    .plate .title {
+        font-size: 2.125rem;
+    }
 }
 
 // Never wraps under the title on a wide screen, always does on a phone.
@@ -80,15 +96,21 @@
 }
 
 /**
- * The rule that travels and gives out.
+ * The rule that travels and gives out -- doubled, as the label's is.
  *
- * Drawn from the left edge of the title, at brass nearly full strength, gone by two thirds.
- * It is the one place per screen the accent is spent at full volume -- which is the only
- * reason it reads as an accent anywhere else.
+ * Two hairlines three pixels apart, drawn from the left edge of the title at gilt nearly full
+ * strength and gone by two thirds. A wine label rules its name twice; one heavier line read as
+ * an underline under blackletter. It is still the one place per screen the accent is spent at
+ * full volume -- which is the only reason it reads as an accent anywhere else.
+ *
+ * Gilt, not the label's oxblood: oxblood means emphasis and deletion everywhere else (§14), and
+ * a plate on every screen ruled in it would spend that meaning on nothing.
  */
 .rule {
-    height: 2px;
-    background: var(--ps-plate-rule);
+    height: 5px;
+    background:
+        var(--ps-plate-rule) top / 100% 1px no-repeat,
+        var(--ps-plate-rule) bottom / 100% 1px no-repeat;
     transform-origin: left center;
 }
 

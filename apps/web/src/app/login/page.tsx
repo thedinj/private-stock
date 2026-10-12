@@ -9,7 +9,6 @@ import {
     Button,
     Card,
     Center,
-    Group,
     PasswordInput,
     Stack,
     Text,
@@ -19,7 +18,7 @@ import {
 
 import type { SetupStatus } from "@private-stock/core";
 
-import { SealMark } from "@/components/shell/SealMark";
+import { CorkStamp } from "@/components/shell/CorkStamp";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { ApiError } from "@/lib/api/client";
 
@@ -89,10 +88,8 @@ const LoginPage: React.FC = () => {
                 <form onSubmit={submit} noValidate>
                     <Stack gap="lg">
                         <Stack gap={4}>
-                            <Group gap="sm" wrap="nowrap">
-                                <SealMark size={40} />
-                                <Title order={2}>private-stock</Title>
-                            </Group>
+                            <CorkStamp size={120} />
+                            <Title order={2}>private-stock</Title>
                             <Text size="sm" c="dimmed">
                                 Sign in to your library
                             </Text>

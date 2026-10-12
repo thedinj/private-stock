@@ -168,7 +168,7 @@
 
     &:hover,
     &:focus-visible {
-        border-color: rgba(207, 166, 89, 0.45);
+        border-color: rgba(228, 185, 85, 0.45);
         box-shadow: var(--ps-hover-glow);
         transform: translateY(-2px);
         outline: none;
@@ -202,7 +202,7 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, rgba(207, 166, 89, 0.5), rgba(207, 166, 89, 0));
+    background: linear-gradient(90deg, rgba(228, 185, 85, 0.5), rgba(228, 185, 85, 0));
 }
 
 .inviteBody {

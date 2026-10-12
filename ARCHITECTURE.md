@@ -8439,12 +8439,29 @@ every heading in Georgia.
 
 Two constraints come with the pairing and are accepted rather than worked around. Young Serif
 ships **one weight**, so headings are 400 and hierarchy comes from size and colour; a
-synthesised 600 thickens the slabs unevenly at the sizes headings run at. Atkinson ships
-**400 and 700 and nothing between**, so `fw={500}` resolves down to 400 — a real step lost, and
-still better than a synthesised medium.
+synthesised 600 thickens the slabs unevenly at the sizes headings run at. Atkinson shipped
+**400 and 700 and nothing between**, so `fw={500}` resolved down to 400 — a real step lost. Since
+2026-10-11 the interface face is **Atkinson Hyperlegible Next**, the same family redrawn by the
+Braille Institute as a variable font from 200 to 800 with an italic, so the step is back and
+every weight the code asks for is real.
 
 The four pairings this was chosen from, each set on the app's own hero, tile and filter panel:
 <https://claude.ai/artifact/RSCXVzz1b93qHmTVRYhrY2>.
+
+**Two more faces, each with one job (2026-10-11).** The plate title is set in **Grenze Gotisch**,
+blackletter, as an estate's name is on a German wine label; the same face sets the single
+oxblood initial that opens a collection's description, and nothing else. The private note is
+set in **Homemade Apple**, a hand, in chalk white: the app's voice is typeset and a person's is
+written, and the note is the one field that is nobody's words but yours. Both load through
+`next/font` like the first pair, as `--font-label` and `--font-hand`, named for the role. The
+old rule was "no third family"; the rule now is that an extra face has one named job and does
+not leave it, because a blackletter that spreads from the plate to the nav is a costume rather
+than a label. The plate keeps one size on every page, raised to 2.5rem because a Gothic's
+counters close below it, and its rule is doubled -- two hairlines, as a label rules its name.
+The rule stays gilt rather than the label's oxblood, since oxblood means deletion everywhere
+else. The seal is shown large on the sign-in card and in About as a **cork stamp** (`CorkStamp`):
+the estate's words run round it on a ring that turns once a minute and stops under reduced
+motion. The worlds these were chosen from: <https://claude.ai/artifact/1gURobsJMFdZTLcUTxX1QB>.
 
 ### One box for typing a tag, and a list for taking one off
 
@@ -8553,8 +8570,8 @@ hairlines at eight per cent of a warm white, and an accent that appeared almost 
 full strength. Read at candlelight that is one flat brown field with borders drawn on it.
 Three changes, each at the token level so nothing had to be restyled by hand.
 
-**Three planes, far enough apart to be three.** Ground `#14100d`, surface `#251d16`, well
-`#0e0b08`. The rack is furniture: a shelf stands off the wall and a bottle sits back into the
+**Three planes, far enough apart to be three.** Ground `#0f0d0b`, surface `#1e1a16`, well
+`#0a0807` (they were `#14100d`, `#251d16` and `#0e0b08` until the gilt palette below). The rack is furniture: a shelf stands off the wall and a bottle sits back into the
 shelf, and the eye should get that before it finds a single hairline. The lit top edge of
 `rackEdge` doubled, because that edge is what does the lifting and the shadow beneath it is
 only there to let it. Deepening the ground also _raised_ every contrast ratio on it, which is
@@ -8567,6 +8584,15 @@ display face ships one weight**, so every step of the hierarchy has to be carrie
 colour and space, and a scale that steps by a tenth cannot carry it. h1 is fluid because it is
 the one place a heading is meant to be an event; everything below it stays fixed `rem`,
 because fluid type in a dense product UI makes the same row a different size on two machines.
+
+**Gilt and verdigris (2026-10-11).** The accent moved from aged brass (`#cfa659`) to gilt
+(`#e4b955`), and the ground went blacker with it, so the room reads as gold leaf on black
+rather than as brown wood. Oak keeps the text and is pulled a little towards the gold and away
+from red. Verdigris -- what old brass turns into -- joins as the one cool colour, and has one
+job so far: the "ready" state of the warming instrument, which had been a borrowed traffic-light
+green. Oxblood is unchanged. Every text colour still clears 4.5:1 on every plane it sits on;
+the closest is oxblood on an input's fill, at 4.3, and oxblood is not set as text there. The
+Mantine colour is still called `brass`, because §14 and every call site use that word.
 
 **One loud place per screen: the page plate.** Six screens opened identically — a 22px title
 in a 2px stack, a grey subtitle, then the controls — and you could not tell Trash from

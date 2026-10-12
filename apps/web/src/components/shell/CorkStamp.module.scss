@@ -1,0 +1,39 @@
+// The cork stamp: the seal, with the estate's words run round it.
+
+.stamp {
+    display: block;
+    color: var(--mantine-color-brass-4);
+    // It stands over the title in a tight stack; without this the rim touches the cap height.
+    margin-bottom: var(--mantine-spacing-xs);
+}
+
+.rim {
+    fill: none;
+    stroke: currentColor;
+}
+
+.words {
+    font-family: var(--font-ui), sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    fill: currentColor;
+}
+
+// Once a minute, which is slow enough to be noticed only by somebody waiting -- on the sign-in
+// card, that is what the stamp is for. Still under reduced motion, as everything is (globals).
+.turn {
+    transform-origin: 100px 100px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .turn {
+        animation: turn 60s linear infinite;
+    }
+
+    @keyframes turn {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+}

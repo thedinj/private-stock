@@ -1,0 +1,26 @@
+/**
+ * The private note, in the hand of whoever wrote it (§14).
+ *
+ * The app's voice is typeset and a person's is written: this box holds the one thing in the
+ * viewer that is nobody's words but yours, so it is the one box set in handwriting. Chalk
+ * white rather than gilt -- the hand carries it, and a gold script would read as decoration
+ * the app had added rather than a thing you wrote.
+ *
+ * The script is a size up from the body and given a tall line, because a joined hand at body
+ * size and body leading runs its ascenders into the line above. The placeholder stays in the
+ * interface face: it is the app speaking, before you have written anything.
+ */
+.input {
+    font-family: var(--font-hand), var(--font-ui), cursive;
+    font-size: 1rem;
+    line-height: 2;
+    color: var(--mantine-color-dark-0);
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+
+    &::placeholder {
+        font-family: var(--font-ui), sans-serif;
+        font-size: var(--mantine-font-size-sm);
+        line-height: 1.55;
+    }
+}

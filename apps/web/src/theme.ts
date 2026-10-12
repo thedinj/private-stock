@@ -10,32 +10,40 @@ import { createTheme, type MantineColorsTuple } from "@mantine/core";
  * the media. A thumbnail sits in a rack; it is not printed on wood.
  */
 
-/** Aged brass — the primary accent. Candle-warm rather than yellow. */
+/**
+ * Gilt — the primary accent. Still called brass, because that is what every call site and
+ * the whole of §14 call it; it is brighter than it was, gold leaf rather than aged metal, so
+ * that it holds its own against a blacker ground and a blackletter plate.
+ */
 const brass: MantineColorsTuple = [
-    "#fbf6ec",
-    "#f2e9d7",
-    "#e6d2ad",
-    "#d9ba7f",
-    "#cfa659",
-    "#c99a41",
-    "#c69334",
-    "#ae7f27",
-    "#9b7120",
-    "#866014",
+    "#fdf7e8",
+    "#f7ebcd",
+    "#efd9a3",
+    "#e9c879",
+    "#e4b955",
+    "#dbab44",
+    "#cf9d33",
+    "#b48526",
+    "#9c721e",
+    "#835e14",
 ];
 
-/** Oak — the ground. Browns that stay brown when dimmed, rather than sliding grey. */
+/**
+ * Oak — the ground and its text. Browns that stay brown when dimmed, rather than sliding
+ * grey; pulled a little towards the gilt and away from red, so the room reads as old gold on
+ * black rather than as a brown study.
+ */
 const oak: MantineColorsTuple = [
-    "#f6f2ef",
-    "#e7e0da",
-    "#cfc0b4",
-    "#b69e8b",
-    "#a18169",
-    "#957056",
-    "#90674b",
-    "#7d573d",
-    "#704d34",
-    "#63412a",
+    "#f4efe8",
+    "#e2d8ca",
+    "#cbbca8",
+    "#b4a794",
+    "#9e8e78",
+    "#8f7e67",
+    "#86745c",
+    "#73634d",
+    "#665641",
+    "#584935",
 ];
 
 /** Oxblood — emphasis, ratings, destructive confirmation. */
@@ -53,6 +61,24 @@ const oxblood: MantineColorsTuple = [
 ];
 
 /**
+ * Verdigris — brass gone green. The one cool colour in the room, and so the one that can say
+ * "ready" without borrowing a traffic light's green: it is what old brass becomes, not a
+ * colour brought in from outside. Rare by design; see `diagReady`.
+ */
+const verdigris: MantineColorsTuple = [
+    "#eef7f4",
+    "#d5ebe4",
+    "#b7dacf",
+    "#9ac9bb",
+    "#7fb3a3",
+    "#6fa393",
+    "#629484",
+    "#517c6e",
+    "#446a5e",
+    "#365549",
+];
+
+/**
  * Mantine's dark palette, warmed (§14).
  *
  * Every surface Mantine draws for itself in dark mode comes from this tuple: text (0), dimmed
@@ -67,22 +93,22 @@ const oxblood: MantineColorsTuple = [
  * is the well.
  */
 const dark: MantineColorsTuple = [
-    "#e7e0da",
-    "#cfc0b4",
-    "#b69e8b",
-    "#8a7563",
-    "#44372b",
-    "#382d24",
-    "#2a211a",
-    "#1d1712",
-    "#17120e",
-    "#0e0b08",
+    "#ece4d7",
+    "#cbbca8",
+    "#b4a794",
+    "#968872",
+    "#3d362e",
+    "#322c25",
+    "#25201b",
+    "#1e1a16",
+    "#16130f",
+    "#0a0807",
 ];
 
 export const theme = createTheme({
     primaryColor: "brass",
     primaryShade: { light: 6, dark: 4 },
-    colors: { brass, oak, oxblood, dark },
+    colors: { brass, oak, oxblood, verdigris, dark },
 
     // A slabbed old-style serif for display against a legibility-first sans for UI. The
     // serif carries the cellar feeling; using it for body text would just hurt to read.
@@ -97,11 +123,10 @@ export const theme = createTheme({
     // the sizes headings actually run at. Young Serif is heavy enough that the hierarchy
     // comes from size and colour instead, which is where it should come from anyway.
     //
-    // **The interface face ships 400 and 700 and nothing between.** CSS resolves a request
-    // for 500 downwards to 400 and one for 600 upwards to 700, so `fw={500}` -- which the
-    // tile title, the playlist name and a dozen other places ask for -- now renders as
-    // regular. That is a real loss of a step, taken deliberately: a synthesised medium is
-    // worse than no medium, and anything that genuinely needs to stand out can ask for 700.
+    // **The interface face is variable, 200 to 800, with a real italic** (Atkinson
+    // Hyperlegible Next). Its predecessor shipped 400 and 700 only, so `fw={500}` -- which the
+    // tile title, the playlist name and a dozen other places ask for -- rendered as regular
+    // for a year. It now renders as asked; any weight in the range is real, not synthesised.
     fontFamily:
         "var(--font-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
 
@@ -136,25 +161,25 @@ export const theme = createTheme({
     // Filled surfaces pick their own label colour by luminance.
     //
     // Brass is a light accent: at `primaryShade.dark = 4` a filled badge or button is
-    // #cfa659, and Mantine's default white label on it is genuinely hard to read at 10-14px.
+    // #e4b955, and Mantine's default white label on it is genuinely hard to read at 10-14px.
     // Set here rather than overridden per component so nothing new has to remember it.
     autoContrast: true,
 
     other: {
         // Candle-warm glow on hover instead of a blue focus ring.
         // Body text on a warm panel -- the details drawer's values -- a step warmer than oak-1.
-        textWarm: "#e0d6c8",
-        hoverGlow: "0 0 0 1px rgba(207, 166, 89, 0.45), 0 4px 24px -6px rgba(207, 166, 89, 0.35)",
+        textWarm: "#e6dccc",
+        hoverGlow: "0 0 0 1px rgba(228, 185, 85, 0.45), 0 4px 24px -6px rgba(228, 185, 85, 0.35)",
         // The showcase tile playing with sound (§14f): a solid brass ring and a wide halo, so
         // the one tile speaking can be found at a glance across the wall.
         // The dark drop beneath is what lifts it off the wall; the brass is what names it.
         voiceGlow:
-            "0 0 0 3px rgba(207, 166, 89, 0.95), 0 0 48px 8px rgba(207, 166, 89, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
+            "0 0 0 3px rgba(228, 185, 85, 0.95), 0 0 48px 8px rgba(228, 185, 85, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
         voiceGlowSoft:
-            "0 0 0 3px rgba(207, 166, 89, 0.8), 0 0 32px 4px rgba(207, 166, 89, 0.3), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
+            "0 0 0 3px rgba(228, 185, 85, 0.8), 0 0 32px 4px rgba(228, 185, 85, 0.3), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
         // Hairline brass edge plus inset shadow: tiles read as bottles in a rack. The lit
         // top edge does the lifting, so it is the half worth spending on.
-        rackEdge: "inset 0 1px 0 rgba(230, 210, 173, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.55)",
+        rackEdge: "inset 0 1px 0 rgba(236, 218, 186, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.55)",
         /**
          * Three planes, far enough apart to be three.
          *
@@ -163,17 +188,17 @@ export const theme = createTheme({
          * rack is furniture: a shelf stands off the wall and a bottle sits back into the
          * shelf, and the eye should get that before it finds a single hairline.
          */
-        groundDark: "#14100d",
-        surfaceDark: "#251d16",
+        groundDark: "#0f0d0b",
+        surfaceDark: "#1e1a16",
         // The well a thumbnail sits in -- darker than the ground, so media reads as set into
         // the page rather than laid on it.
-        wellDark: "#0e0b08",
+        wellDark: "#0a0807",
         // Warm hairlines instead of grey dividers. The fading one is for section rules: a
         // line that travels and gives out reads as a flourish rather than a table border.
-        hairline: "rgba(230, 210, 173, 0.10)",
-        hairlineStrong: "rgba(230, 210, 173, 0.20)",
+        hairline: "rgba(236, 218, 186, 0.10)",
+        hairlineStrong: "rgba(236, 218, 186, 0.20)",
         hairlineFade:
-            "linear-gradient(90deg, rgba(207, 166, 89, 0.42) 0%, rgba(207, 166, 89, 0.10) 38%, rgba(207, 166, 89, 0) 100%)",
+            "linear-gradient(90deg, rgba(228, 185, 85, 0.42) 0%, rgba(228, 185, 85, 0.10) 38%, rgba(228, 185, 85, 0) 100%)",
         /**
          * The rule under a page title — the app's letterhead.
          *
@@ -183,17 +208,17 @@ export const theme = createTheme({
          * it is rare (§14).
          */
         plateRule:
-            "linear-gradient(90deg, rgba(207, 166, 89, 0.92) 0%, rgba(207, 166, 89, 0.34) 30%, rgba(207, 166, 89, 0) 72%)",
+            "linear-gradient(90deg, rgba(228, 185, 85, 0.92) 0%, rgba(228, 185, 85, 0.34) 30%, rgba(228, 185, 85, 0) 72%)",
         /**
          * The warming overlay's four states (§8b, "Seeing it work"). An instrument, not
          * decoration, so it is allowed the plain traffic-light reading the rest of the cellar
          * avoids. Muted enough to sit on a film without shouting over it.
          */
-        diagReady: "#7fb685",
+        diagReady: verdigris[4],
         diagPending: "#d9a441",
         diagOff: "#8c8279",
         diagMiss: "#d8695a",
-        diagPanel: "rgba(14, 11, 8, 0.86)",
+        diagPanel: "rgba(10, 8, 7, 0.86)",
     },
 
     components: {

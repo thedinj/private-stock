@@ -8,12 +8,17 @@ import "./globals.scss";
 
 import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import type { Metadata, Viewport } from "next";
-import { Atkinson_Hyperlegible, Young_Serif } from "next/font/google";
+import {
+    Atkinson_Hyperlegible_Next,
+    Grenze_Gotisch,
+    Homemade_Apple,
+    Young_Serif,
+} from "next/font/google";
 
 import { Providers } from "./providers";
 
 /**
- * The cellar's two hands (§14).
+ * The cellar's hands (§14).
  *
  * Loaded here rather than from a stylesheet link because `next/font` fetches them at build
  * time and serves them from our own origin: a NAS with no outbound internet still gets its
@@ -43,17 +48,51 @@ const display = Young_Serif({
 });
 
 /**
- * Interface: Atkinson Hyperlegible.
+ * Interface: Atkinson Hyperlegible Next.
  *
  * Drawn by the Braille Institute for low vision, with deliberately disambiguated letterforms.
  * The app is dark and is read in a dim room at nine in the evening, and metadata runs at 11px
  * — so a face that argues for itself on legibility is doing the work the contrast rule asks
  * for rather than merely not breaking it.
+ *
+ * **Next, not the original**: the same family redrawn by the same foundry, variable from 200 to
+ * 800 with an italic. The original shipped 400 and 700 only, so every `fw={500}` in the app --
+ * tile titles, playlist names, a dozen labels -- rendered as regular and every 600 as bold.
+ * Loaded as the variable font, so one file carries every weight in between.
  */
-const ui = Atkinson_Hyperlegible({
+const ui = Atkinson_Hyperlegible_Next({
     subsets: ["latin"],
-    weight: ["400", "700"],
+    style: ["normal", "italic"],
     variable: "--font-ui",
+    display: "swap",
+});
+
+/**
+ * The label: Grenze Gotisch, on page plates and nowhere else.
+ *
+ * German wine labels still set the estate's name in blackletter, and the page plate is the
+ * app's label -- one per screen, where you are, said loudly. A narrow variable Gothic rather
+ * than a Fraktur revival, so it stays open enough to read a directory name at plate size; it
+ * would not survive being asked to set a paragraph, and is never asked to. The blackletter
+ * initial on a collection's description borrows it for a single letter.
+ */
+const label = Grenze_Gotisch({
+    subsets: ["latin"],
+    variable: "--font-label",
+    display: "swap",
+});
+
+/**
+ * The hand: Homemade Apple, for what the household wrote and nothing the app says.
+ *
+ * A note is somebody's own words, so it is set in somebody's handwriting, and the
+ * distinction is the point: the app's voice is typeset, a person's is written. Only the
+ * private note uses it -- a field you write in, read back by the one person who wrote it.
+ */
+const hand = Homemade_Apple({
+    subsets: ["latin"],
+    weight: ["400"],
+    variable: "--font-hand",
     display: "swap",
 });
 
@@ -81,7 +120,7 @@ export const viewport: Viewport = {
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
-    themeColor: "#14100d",
+    themeColor: "#0f0d0b",
     /**
      * The on-screen keyboard shrinks the page rather than covering it (Android Chrome; Safari
      * ignores this and is handled where it matters, in `TagNameInput`). Over the page, the
@@ -92,7 +131,11 @@ export const viewport: Viewport = {
 };
 
 const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <html lang="en" className={`${display.variable} ${ui.variable}`} {...mantineHtmlProps}>
+    <html
+        lang="en"
+        className={`${display.variable} ${ui.variable} ${label.variable} ${hand.variable}`}
+        {...mantineHtmlProps}
+    >
         <head>
             <ColorSchemeScript forceColorScheme="dark" />
         </head>

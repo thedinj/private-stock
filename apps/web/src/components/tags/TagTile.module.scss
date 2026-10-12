@@ -29,7 +29,7 @@
     background-color: var(--ps-well);
     border: 1px solid var(--ps-hairline);
     box-shadow:
-        inset 0 1px 0 rgba(230, 210, 173, 0.06),
+        inset 0 1px 0 rgba(236, 218, 186, 0.06),
         inset 0 -1px 0 rgba(0, 0, 0, 0.5);
     transition:
         transform 160ms ease,
@@ -43,7 +43,7 @@
 
     &:hover,
     &:focus-within {
-        border-color: rgba(207, 166, 89, 0.45);
+        border-color: rgba(228, 185, 85, 0.45);
         box-shadow: var(--ps-hover-glow);
         transform: translateY(-2px);
     }

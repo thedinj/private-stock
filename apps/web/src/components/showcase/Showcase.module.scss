@@ -7,7 +7,7 @@
     // scrolls an element into view — focus, a test harness — slid the whole stage up, lenses
     // and chrome with it, leaving the bottom lens as a dark band across the middle of the wall.
     overflow: clip;
-    background-color: #0b0806;
+    background-color: #080706;
     // The conveyor owns every gesture; the browser panning or zooming underneath it would
     // fight the drift.
     touch-action: none;

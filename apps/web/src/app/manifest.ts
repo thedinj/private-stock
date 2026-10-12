@@ -13,7 +13,7 @@ import type { MetadataRoute } from "next";
  *
  * Generated at build time; nothing here varies per request.
  */
-const GROUND = "#14100d"; // the `themeColor` in layout.tsx
+const GROUND = "#0f0d0b"; // the `themeColor` in layout.tsx
 
 const manifest = (): MetadataRoute.Manifest => ({
     name: "private-stock",

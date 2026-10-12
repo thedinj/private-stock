@@ -22,8 +22,8 @@ const GlobalError: React.FC<{ error: Error & { digest?: string }; reset: () => v
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: "#14100d",
-                color: "#e7e0da",
+                backgroundColor: "#0f0d0b",
+                color: "#ece4d7",
                 fontFamily: "system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
                 padding: "1rem",
             }}
@@ -47,9 +47,9 @@ const GlobalError: React.FC<{ error: Error & { digest?: string }; reset: () => v
                         padding: "0.5rem 1rem",
                         minHeight: 44,
                         background: "transparent",
-                        border: "1px solid rgba(207, 166, 89, 0.45)",
+                        border: "1px solid rgba(228, 185, 85, 0.45)",
                         borderRadius: 4,
-                        color: "#cfa659",
+                        color: "#e4b955",
                         cursor: "pointer",
                         font: "inherit",
                     }}

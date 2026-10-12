@@ -10,6 +10,7 @@ import { useSavedFilterCovers } from "@/lib/api/savedFilters";
 import { savedFilterHref } from "@/lib/libraryQuery";
 import { useNearViewport } from "@/lib/useNearViewport";
 
+import classes from "./CollectionRows.module.scss";
 import { viewFacts } from "./ViewCard";
 
 /**
@@ -28,6 +29,24 @@ const PENDING_FRAMES = 8;
 const framesOf = (covers: string[], href: string): FilmstripFrame[] =>
     covers.map((coverUrl) => ({ key: coverUrl, href, coverUrl }));
 
+/**
+ * The description with its first letter set as an initial -- when it starts with one. A
+ * description that opens with a quote, a digit or an emoji is left as written: an initial
+ * on a quotation mark is a typesetting error, not a flourish. `Array.from` splits by code
+ * point, so a letter outside the BMP is not cut in half.
+ */
+const Initialled: React.FC<{ text: string }> = ({ text }) => {
+    const [first, ...rest] = Array.from(text);
+    if (!first || !/\p{L}/u.test(first)) return <>{text}</>;
+
+    return (
+        <>
+            <span className={classes.initial}>{first}</span>
+            {rest.join("")}
+        </>
+    );
+};
+
 /** The facts line, and what the collection says about itself under it. */
 const Facts: React.FC<{ facts: string; description: string | null }> = ({ facts, description }) => (
     <>
@@ -36,7 +55,7 @@ const Facts: React.FC<{ facts: string; description: string | null }> = ({ facts,
         </Text>
         {description && (
             <Text size="sm" c="dimmed" lineClamp={1}>
-                {description}
+                <Initialled text={description} />
             </Text>
         )}
     </>

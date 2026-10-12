@@ -17,10 +17,10 @@
     &:focus-visible {
         // Candle-warm rather than a blue focus ring, and a lift small enough that a wall of
         // tiles moving under the cursor does not feel like the grid is shifting.
-        border-color: rgba(207, 166, 89, 0.45);
+        border-color: rgba(228, 185, 85, 0.45);
         box-shadow:
-            0 0 0 1px rgba(207, 166, 89, 0.35),
-            0 8px 28px -10px rgba(207, 166, 89, 0.4);
+            0 0 0 1px rgba(228, 185, 85, 0.35),
+            0 8px 28px -10px rgba(228, 185, 85, 0.4);
         transform: translateY(-2px);
         outline: none;
     }
@@ -37,7 +37,7 @@
     background-color: var(--ps-well);
     // Inset shadow gives the tile depth, as if set into the shelf.
     box-shadow:
-        inset 0 1px 0 rgba(230, 210, 173, 0.06),
+        inset 0 1px 0 rgba(236, 218, 186, 0.06),
         inset 0 -1px 0 rgba(0, 0, 0, 0.5);
 }
 
