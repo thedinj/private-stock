@@ -23,6 +23,7 @@ import {
 } from "@/lib/rememberedPages";
 import { summarizeSearch } from "@/lib/searchSummary";
 import { ListGlyph, ViewGlyph } from "@/components/media/Glyph";
+import { Odometer } from "@/components/Odometer";
 
 import classes from "./AppNavbar.module.scss";
 
@@ -243,8 +244,9 @@ export const AppNavbar: React.FC<{
                 // the change feed (§20).
                 rightSection={
                     libraries ? (
+                        // Rolls when a scan lands while the sidebar is open (§14, "Motion").
                         <Text size="xs" c="dimmed">
-                            {libraries.total.toLocaleString()}
+                            <Odometer value={libraries.total} />
                         </Text>
                     ) : null
                 }

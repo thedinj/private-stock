@@ -45,6 +45,9 @@ const NOTE_MAX = 2000;
  */
 const COUNT_FROM = NOTE_MAX - 200;
 
+/** How long "kept" stays written beside the label before it fades. */
+const KEPT_MS = 2800;
+
 export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
     const queryClient = useQueryClient();
 
@@ -58,6 +61,21 @@ export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
      */
     const sent = useRef<string | null>(note ?? "");
 
+    /**
+     * A tick written in chalk when a changed note has been kept (§14, "Motion").
+     *
+     * Saving on blur is silent by design, and silence is also what a lost write looks like; the
+     * error line covered one half of that and nothing covered the other. A counter rather than
+     * a flag, so a second save inside the window writes the tick again instead of being lost
+     * in the first one's fade.
+     */
+    const [keptAt, setKeptAt] = useState(0);
+    useEffect(() => {
+        if (keptAt === 0) return;
+        const timer = window.setTimeout(() => setKeptAt(0), KEPT_MS);
+        return () => window.clearTimeout(timer);
+    }, [keptAt]);
+
     const mutation = useMutation({
         mutationFn: (text: string) =>
             api<{ note: string | null }>(`/api/media/${mediaId}/user`, {
@@ -65,6 +83,11 @@ export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
                 body: JSON.stringify({ note: text }),
             }),
         onSuccess: (result) => {
+            // Only when what is stored changed. `commit` already skips a blur that would write
+            // the saved text, but the server trims, so an edit that only added spaces comes
+            // back as the note that was there -- and that is not news.
+            if ((result.note ?? "") !== saved) setKeptAt(Date.now());
+
             // The server trims, and stores empty as null. Taking its answer rather than the
             // draft keeps the box agreeing with what the next page load will show.
             setDraft(result.note ?? "");
@@ -143,6 +166,18 @@ export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
                     </Text>
                 </Tooltip>
                 {mutation.isPending && <Loader size={12} color="brass" />}
+                {keptAt !== 0 && !mutation.isPending && (
+                    <span key={keptAt} className={classes.kept} aria-hidden>
+                        <svg viewBox="0 0 28 22" focusable="false">
+                            <path d="M3 12 L10 18 L25 3" />
+                        </svg>
+                        kept
+                    </span>
+                )}
+                {/* Spoken once per save, whatever is drawn. */}
+                <span className={classes.spoken} aria-live="polite">
+                    {keptAt !== 0 ? "Saved" : ""}
+                </span>
             </Group>
 
             <Textarea

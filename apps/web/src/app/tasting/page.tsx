@@ -4,6 +4,7 @@ import { Suspense, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { TastingStage } from "@/components/tasting/TastingStage";
+import { CandleArrival } from "@/components/shell/CandleArrival";
 import { RequireAuth } from "@/lib/api/AuthProvider";
 import { cameFromLibrary } from "@/lib/fullScreenEntry";
 import { showcaseOriginHref, showcaseSet } from "@/lib/showcase/set";
@@ -43,11 +44,16 @@ const Tasting: React.FC = () => {
 };
 
 const TastingPage: React.FC = () => (
-    <RequireAuth>
-        <Suspense>
-            <Tasting />
-        </Suspense>
-    </RequireAuth>
+    <>
+        <RequireAuth>
+            <Suspense>
+                <Tasting />
+            </Suspense>
+        </RequireAuth>
+        {/* Outside the auth gate, so the snuff's dark is taken over the moment the route
+            mounts rather than once the session has been checked (§14, "Motion"). */}
+        <CandleArrival />
+    </>
 );
 
 export default TastingPage;

@@ -24,6 +24,7 @@ import { useSavedFilters } from "@/lib/api/savedFilters";
 import { savedFilterHref } from "@/lib/libraryQuery";
 import { useLiveUpdates } from "@/lib/events/useLiveUpdates";
 import { useLibraries } from "@/lib/api/libraries";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import { queryKeys } from "@/lib/api/queryKeys";
 
 import classes from "./LibraryRoom.module.scss";
@@ -130,19 +131,38 @@ export const SectionHead: React.FC<{ title: string; href?: string | null; more?:
  * A shelf's tiles. Each opens its item with the shelf as the set, so the viewer carries on to
  * the next tile on the shelf when one finishes, and stops after the last (§14b).
  */
-export const TileGrid: React.FC<{ items: MediaListItem[] }> = ({ items }) => (
-    <Box
-        style={{
-            display: "grid",
-            gridTemplateColumns: GRID_TRACKS,
-            gap: GRID_GAP,
-        }}
-    >
-        {items.map((item) => (
-            <MediaTile key={item.id} item={item} onOpen={() => rememberShelf(items)} />
-        ))}
-    </Box>
-);
+/**
+ * A shelf of tiles that shows its changes (§14, "Motion"): racked in when it first appears,
+ * closing ranks when something leaves. `live` for a shelf whose live updates apply as they
+ * come, so what joins it while you watch arrives with its gilt edge rather than just appearing.
+ */
+export const TileGrid: React.FC<{ items: MediaListItem[]; live?: boolean }> = ({
+    items,
+    live = false,
+}) => {
+    const { ref } = useFlipGrid(
+        items.map((item) => item.id),
+        { live }
+    );
+
+    return (
+        <Box
+            ref={ref}
+            style={{
+                display: "grid",
+                gridTemplateColumns: GRID_TRACKS,
+                gap: GRID_GAP,
+            }}
+        >
+            {items.map((item) => (
+                // The slot is what moves; the tile inside it is never animated on its own.
+                <div key={item.id} data-flip-key={item.id}>
+                    <MediaTile item={item} onOpen={() => rememberShelf(items)} />
+                </div>
+            ))}
+        </Box>
+    );
+};
 
 /**
  * The picture window.
@@ -346,7 +366,7 @@ export const LibraryRoom: React.FC = () => {
                             title={shelf.title}
                             href={shelfHref(shelf.shelf, savedFilters?.filters ?? [])}
                         />
-                        <TileGrid items={shelf.items} />
+                        <TileGrid items={shelf.items} live />
                     </Box>
                 ))}
 

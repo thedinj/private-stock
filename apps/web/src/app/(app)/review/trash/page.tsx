@@ -36,6 +36,7 @@ import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { UnreadableSheet } from "@/components/unreadable/UnreadableSheet";
 import { defineView, enumField, flagField, pageField, useUrlView } from "@/lib/urlView";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 
 /**
  * The recycle bin (§10).
@@ -234,6 +235,8 @@ const TrashQueue: React.FC = () => {
     });
 
     const entries = data?.entries ?? [];
+    // A restored or purged entry leaves and the rows below close ranks (§14, "Motion").
+    const flip = useFlipGrid(entries.map((entry) => entry.id));
     const total = data?.total ?? 0;
     const pages = Math.ceil(total / PAGE_SIZE);
 
@@ -379,15 +382,18 @@ const TrashQueue: React.FC = () => {
                         .
                     </Text>
 
-                    {entries.map((entry) => (
-                        <TrashRow
-                            key={entry.id}
-                            entry={entry}
-                            busy={restore.isPending || purge.isPending}
-                            onRestore={() => restore.mutate(entry.id)}
-                            onPurge={() => setConfirming(entry)}
-                        />
-                    ))}
+                    <Stack gap="xs" ref={flip.ref}>
+                        {entries.map((entry) => (
+                            <div key={entry.id} data-flip-key={entry.id}>
+                                <TrashRow
+                                    entry={entry}
+                                    busy={restore.isPending || purge.isPending}
+                                    onRestore={() => restore.mutate(entry.id)}
+                                    onPurge={() => setConfirming(entry)}
+                                />
+                            </div>
+                        ))}
+                    </Stack>
 
                     {pages > 1 && (
                         <Pagination

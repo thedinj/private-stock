@@ -1,0 +1,55 @@
+// The header seal, and the cork ring that turns round it while the worker is busy.
+
+// Exactly the seal's size, so the header lays out as it did; the ring hangs outside it.
+.seal {
+    position: relative;
+    display: block;
+    flex: none;
+}
+
+.ring {
+    position: absolute;
+    // Half again the seal's size, centred on it: 40px round a 26px seal, inside a 56px header.
+    inset: -27%;
+    width: 154%;
+    height: 154%;
+    color: var(--mantine-color-brass-4);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--ps-dur-arrive) var(--ps-ease-out);
+}
+
+.busy .ring {
+    opacity: 1;
+}
+
+.words {
+    font-family: var(--font-ui), sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.08em;
+    fill: currentColor;
+}
+
+// One turn every 24 seconds, and only while there is work: idle, the ring has faded and
+// stopped. Under reduced motion it shows and does not turn.
+.turn {
+    transform-origin: 100px 100px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .turn {
+        animation: turn 24s linear infinite;
+        animation-play-state: paused;
+    }
+
+    .busy .turn {
+        animation-play-state: running;
+    }
+
+    @keyframes turn {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+}

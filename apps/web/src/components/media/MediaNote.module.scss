@@ -24,3 +24,70 @@
         line-height: 1.55;
     }
 }
+
+/**
+ * "Kept": a tick and the word, written in chalk beside the label when a note saves (§14,
+ * "Motion"). The tick draws itself as a stroke; the whole mark holds, then fades out over the
+ * last part of its life. Its time on screen is the component's (`KEPT_MS`), not the fade's.
+ */
+.kept {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-hand), var(--font-ui), cursive;
+    font-size: var(--mantine-font-size-xs);
+    line-height: 1;
+    color: var(--mantine-color-dark-0);
+    animation: keptFade 2800ms linear both;
+
+    svg {
+        width: 1.25rem;
+        height: 1rem;
+    }
+
+    path {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 40;
+        animation: keptDraw var(--ps-dur-move) var(--ps-ease-out) both;
+    }
+}
+
+@keyframes keptDraw {
+    from {
+        stroke-dashoffset: 40;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes keptFade {
+    0%,
+    75% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+// Not left to the global rule: collapsed to nothing, the fade would end the mark as it began.
+@media (prefers-reduced-motion: reduce) {
+    .kept,
+    .kept path {
+        animation: none;
+    }
+}
+
+.spoken {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}

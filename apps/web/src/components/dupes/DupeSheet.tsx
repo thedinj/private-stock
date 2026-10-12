@@ -22,7 +22,9 @@ import {
     tickedByDefault,
     toResolveItem,
 } from "@/lib/dupeTriage";
+import { prefersReducedMotion } from "@/lib/motion";
 import { isTypingTarget } from "@/lib/typingTarget";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DupeResolveDialog, type Decision } from "@/components/dupes/DupeResolveDialog";
 import { DupeRow } from "@/components/dupes/DupeRow";
 import { LoadFailed } from "@/components/LoadFailed";
@@ -112,6 +114,12 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     const [outcome, setOutcome] = useState<Outcome | null>(null);
     /** Groups just resolved, hidden until the refetch that drops them lands. */
     const [settled, setSettled] = useState<Set<string>>(new Set());
+    /**
+     * Groups resolved and playing their merge, with the keeper each was resolved to (§14,
+     * "Motion"). Held here because resolving clears the per-row choices, and the merge has to
+     * slide the copies into the keeper that was chosen, not into the default it reverts to.
+     */
+    const [merging, setMerging] = useState<Record<string, string>>({});
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const params = new URLSearchParams({
@@ -134,6 +142,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         setTicks({});
         setFocused(0);
         setSettled(new Set());
+        setMerging({});
     };
 
     const review = useMutation({
@@ -175,11 +184,24 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             });
             setKeeps({});
             setTicks({});
-            setSettled(
-                new Set(
-                    response.groups.filter((group) => group.reviewed).map((group) => group.groupId)
-                )
+
+            const done = new Set(
+                response.groups.filter((group) => group.reviewed).map((group) => group.groupId)
             );
+
+            // Under reduced motion they leave at once, as they always did; otherwise each plays
+            // its merge first and is settled when that is over (`settle` below).
+            if (prefersReducedMotion()) {
+                setSettled(done);
+            } else {
+                setMerging(
+                    Object.fromEntries(
+                        decisions
+                            .filter(({ group }) => done.has(group.id))
+                            .map(({ group, keepId }) => [group.id, keepId])
+                    )
+                );
+            }
 
             // The library lost items and the bin gained them; see docs/CACHE_KEYS.md.
             void queryClient.invalidateQueries({ queryKey: queryKeys.dupes.all() });
@@ -188,6 +210,16 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     });
 
     const groups = (data?.groups ?? []).filter((group) => !settled.has(group.id));
+    // A settled group leaves and the rows below close ranks (§14, "Motion").
+    const flip = useFlipGrid(groups.map((group) => group.id));
+
+    /** A merge has finished playing: the row may go now. */
+    const settle = (groupId: string): void => {
+        setSettled((current) => new Set(current).add(groupId));
+        setMerging((current) =>
+            Object.fromEntries(Object.entries(current).filter(([id]) => id !== groupId))
+        );
+    };
     const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
     const keepFor = (group: DupeGroup): string => keeps[group.id] ?? defaultKeep(group);
@@ -361,7 +393,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                     <EmptyState title={emptyTitle}>{emptyText}</EmptyState>
                 )
             ) : (
-                <div>
+                <div ref={flip.ref}>
                     {groups.map((group, index) => (
                         <DupeRow
                             key={group.id}
@@ -369,8 +401,10 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                                 rowRefs.current[index] = element;
                             }}
                             group={group}
-                            keepId={keepFor(group)}
-                            ticked={tickedFor(group)}
+                            keepId={merging[group.id] ?? keepFor(group)}
+                            ticked={group.id in merging || tickedFor(group)}
+                            merging={group.id in merging}
+                            onMerged={() => settle(group.id)}
                             focused={index === focused}
                             onFocus={() => setFocused(index)}
                             onKeep={canDelete ? (memberId) => chooseKeep(group, memberId) : null}

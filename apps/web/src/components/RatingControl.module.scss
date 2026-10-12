@@ -15,3 +15,52 @@
     margin-inline-end: 0.625rem;
     align-self: center;
 }
+
+/**
+ * The glasses (§14, "Motion").
+ *
+ * Sized by Mantine's own `--rating-size`, so the control keeps the height and the hit area
+ * the stars had. Empty is the outline in gilt at under half strength; full is the outline at
+ * full strength with the wine inside it.
+ */
+.glassEmpty,
+.glassFull {
+    display: block;
+    width: var(--rating-size);
+    height: var(--rating-size);
+    overflow: visible;
+}
+
+.outline {
+    fill: none;
+    stroke: color-mix(in srgb, var(--mantine-color-brass-4) 45%, transparent);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.glassFull .outline {
+    stroke: var(--mantine-color-brass-4);
+}
+
+// The pour: the wine rises from below the bowl to its line. `fill-box` so the percentage is
+// the rectangle's own height, not the viewBox's.
+.wine {
+    fill: var(--mantine-color-brass-4);
+    transform-box: fill-box;
+    animation: pour var(--ps-dur-move) var(--ps-ease-out) both;
+}
+
+@keyframes pour {
+    from {
+        transform: translateY(100%);
+    }
+}
+
+// Under reduced motion the global rule makes the pour instant, but it cannot reach the delay,
+// which would leave a glass empty for a beat and then fill it. So: no animation at all.
+@media (prefers-reduced-motion: reduce) {
+    .wine {
+        animation: none;
+    }
+}

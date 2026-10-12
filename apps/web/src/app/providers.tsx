@@ -5,6 +5,7 @@ import { MantineProvider, type CSSVariablesResolver } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { WarmingHud } from "@/components/debug/WarmingHud";
+import { CandleLight } from "@/components/shell/CandleLight";
 import { AuthProvider } from "@/lib/api/AuthProvider";
 import { theme } from "@/theme";
 
@@ -94,6 +95,8 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
                     {children}
                     {/* Here rather than in the app shell, so it is over the tasting too. */}
                     <WarmingHud />
+                    {/* Here too: the sign-in card has a gilt button to catch it. */}
+                    <CandleLight />
                 </AuthProvider>
             </QueryClientProvider>
         </MantineProvider>

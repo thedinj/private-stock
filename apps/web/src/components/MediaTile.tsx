@@ -198,6 +198,9 @@ export const MediaTile: React.FC<MediaTileProps> = ({
             className={classes.tile}
             padding={0}
             radius="sm"
+            // The morph's handles (§14, "Motion"): which item this tile is, and below, which
+            // box is its frame -- the part that grows into the viewer's stage and back.
+            data-media-id={item.id}
             // Records the library view being left, so the item has somewhere to send you
             // back to that is not the front door.
             onClick={onOpen}
@@ -209,7 +212,7 @@ export const MediaTile: React.FC<MediaTileProps> = ({
             onBlur={onLeave}
         >
             <AspectRatio ratio={16 / 9}>
-                <Box className={classes.thumb} ref={containerRef}>
+                <Box className={classes.thumb} ref={containerRef} data-morph-frame>
                     {item.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img

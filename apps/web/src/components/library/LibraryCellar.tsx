@@ -77,6 +77,7 @@ import { useLibraries, useLibraryStats } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { rememberTagNames } from "@/lib/rememberedPages";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DIRECTION_LABELS, SORT_LABELS } from "@/lib/sortWords";
 import { SearchInput } from "@/components/SearchInput";
 
@@ -345,6 +346,14 @@ export const LibraryCellar: React.FC = () => {
     });
 
     const items = pageQuery.data?.items ?? [];
+
+    /**
+     * The rack shows its changes (§14, "Motion"): a new page is racked in, a filter or sort
+     * reshuffles what stays, and an item that leaves in place -- `recheckPage` -- has the rest
+     * close ranks behind it. What "Show N new items" brings in arrives, which is the one change
+     * here that is genuinely new to the library rather than new to this view.
+     */
+    const flip = useFlipGrid(items.map((item) => item.id));
 
     // Keyed on the whole address rather than the page number: changing a filter can leave
     // the page number alone while changing everything on it.
@@ -832,7 +841,14 @@ export const LibraryCellar: React.FC = () => {
                 </Text>
 
                 {live.pendingCount > 0 && (
-                    <Button variant="light" color="brass" onClick={live.applyPending}>
+                    <Button
+                        variant="light"
+                        color="brass"
+                        onClick={() => {
+                            flip.expectArrivals();
+                            live.applyPending();
+                        }}
+                    >
                         Show {live.pendingCount.toLocaleString()} new item
                         {live.pendingCount === 1 ? "" : "s"}
                     </Button>
@@ -931,6 +947,7 @@ export const LibraryCellar: React.FC = () => {
                         />
                     ) : (
                         <Box
+                            ref={flip.ref}
                             style={{
                                 display: "grid",
                                 // The browser does the column arithmetic, so there is nothing
@@ -944,15 +961,18 @@ export const LibraryCellar: React.FC = () => {
                             }}
                         >
                             {items.map((item, index) => (
-                                <MediaTile
-                                    key={item.id}
-                                    item={item}
-                                    moment={pageQuery.data?.moments?.[item.id]}
-                                    gallery={gallery}
-                                    selected={selected.includes(item.id)}
-                                    onToggleSelected={toggleSelected}
-                                    priority={index < PRIORITY_TILES}
-                                />
+                                // The slot is what moves; the tile inside it is never animated
+                                // on its own.
+                                <div key={item.id} data-flip-key={item.id}>
+                                    <MediaTile
+                                        item={item}
+                                        moment={pageQuery.data?.moments?.[item.id]}
+                                        gallery={gallery}
+                                        selected={selected.includes(item.id)}
+                                        onToggleSelected={toggleSelected}
+                                        priority={index < PRIORITY_TILES}
+                                    />
+                                </div>
                             ))}
                         </Box>
                     )}

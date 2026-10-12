@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
     Anchor,
-    Box,
     Button,
     Checkbox,
     Group,
@@ -22,6 +21,7 @@ import {
 import { captureNaturalDirection, type Capture, type CaptureSort } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
+import { FlipWall } from "@/components/FlipWall";
 import { CaptureCard } from "@/components/media/CaptureCard";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
@@ -144,7 +144,8 @@ export const CapturesBrowser: React.FC = () => {
      * to spare, and a still is worth a little more room than a clip's sprite tile.
      */
     const wall = (captures: Capture[], showSource: boolean) => (
-        <Box
+        <FlipWall
+            keys={captures.map((capture) => capture.artifactId)}
             style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fill, minmax(min(200px, 100%), 1fr))",
@@ -152,16 +153,17 @@ export const CapturesBrowser: React.FC = () => {
             }}
         >
             {captures.map((capture) => (
-                <CaptureCard
-                    key={capture.artifactId}
-                    capture={capture}
-                    selected={selected.has(capture.artifactId)}
-                    onToggle={() => toggle(capture)}
-                    onOpen={() => setOpenId(capture.artifactId)}
-                    showSource={showSource}
-                />
+                <div key={capture.artifactId} data-flip-key={capture.artifactId}>
+                    <CaptureCard
+                        capture={capture}
+                        selected={selected.has(capture.artifactId)}
+                        onToggle={() => toggle(capture)}
+                        onOpen={() => setOpenId(capture.artifactId)}
+                        showSource={showSource}
+                    />
+                </div>
             ))}
-        </Box>
+        </FlipWall>
     );
 
     const chosen = [...selected.values()];

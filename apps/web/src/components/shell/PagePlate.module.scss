@@ -114,9 +114,34 @@
     transform-origin: left center;
 }
 
+/**
+ * Arriving (§14, "Motion"): the title inks in, then the rule draws under it.
+ *
+ * The title settles out of a soft blur, as ink takes on paper, once per mount and at the
+ * arrival pace; the rule follows a quarter of a second behind, so the name is there before it
+ * is underlined. During a page turn the old title has already given way in the same spot
+ * (`viewTransitions.scss`), so this is what the new page's name does as it arrives.
+ */
 @media (prefers-reduced-motion: no-preference) {
+    .plate .title {
+        animation: ink var(--ps-dur-arrive) var(--ps-ease-out) both;
+    }
+
     .rule {
-        animation: draw 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation: draw var(--ps-dur-arrive) var(--ps-ease-out) 250ms both;
+    }
+
+    @keyframes ink {
+        from {
+            opacity: 0;
+            filter: blur(8px);
+            letter-spacing: 0.04em;
+        }
+        to {
+            opacity: 1;
+            filter: blur(0);
+            letter-spacing: 0;
+        }
     }
 
     @keyframes draw {
@@ -125,6 +150,29 @@
         }
         to {
             transform: scaleX(1);
+        }
+    }
+
+    /**
+     * Folding away (§14, "Motion"): as the plate scrolls up under the header, its words shrink
+     * towards their left edge and fade, while a small copy of the title rises into the header
+     * (`HeaderPlateTitle`). Driven by the scroll position itself, so it tracks the thumb exactly
+     * and costs nothing when nobody scrolls; where scroll-driven animation is missing the
+     * plate simply scrolls away as it always did, and the header copy still appears.
+     */
+    @supports (animation-timeline: view()) {
+        .copy {
+            transform-origin: left bottom;
+            animation: fold linear both;
+            animation-timeline: view();
+            animation-range: exit 0% exit 100%;
+        }
+
+        @keyframes fold {
+            to {
+                opacity: 0;
+                transform: scale(0.82) translateY(-6px);
+            }
         }
     }
 }

@@ -13,7 +13,7 @@ import { SectionHead, TileGrid } from "@/components/library/LibraryRoom";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { useTagFavorite, useTagProfile } from "@/lib/api/tags";
 import { facetLabel, facetLabelPlural } from "@/lib/facetLabels";
-import { enterFullScreenMode } from "@/lib/fullScreenEntry";
+import { openFullScreenMode } from "@/lib/fullScreenEntry";
 import { SHOWCASE_PATH, TASTING_PATH } from "@/lib/showcase/set";
 import { useRememberedHref } from "@/lib/rememberedPages";
 import { forgetTastingPosition } from "@/lib/tasting/restore";
@@ -218,7 +218,9 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                                 disabled={total === 0}
                                 onClick={() => {
                                     forgetTastingPosition();
-                                    router.push(enterFullScreenMode(TASTING_PATH, setParams));
+                                    openFullScreenMode(TASTING_PATH, setParams, (href) =>
+                                        router.push(href)
+                                    );
                                 }}
                             >
                                 Tasting
@@ -228,7 +230,9 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                                 size="md"
                                 disabled={total === 0}
                                 onClick={() =>
-                                    router.push(enterFullScreenMode(SHOWCASE_PATH, setParams))
+                                    openFullScreenMode(SHOWCASE_PATH, setParams, (href) =>
+                                        router.push(href)
+                                    )
                                 }
                             >
                                 Showcase

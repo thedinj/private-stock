@@ -1,0 +1,46 @@
+// The odometer's digits: each one a strip of 0-9 seen through a one-digit window.
+
+.odometer {
+    display: inline-flex;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    // The strips are clipped to one line of the parent's own height, so the count sits on the
+    // baseline the text beside it does rather than on a box of its own.
+    line-height: inherit;
+}
+
+// A window one digit wide and one line tall. Tabular figures make every digit the same width,
+// so `1ch` of the inherited face is that width and a 9 rolling to a 1 moves nothing beside it.
+.window {
+    display: inline-block;
+    width: 1ch;
+    height: 1lh;
+    overflow: hidden;
+    vertical-align: bottom;
+}
+
+.strip {
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--ps-dur-arrive) var(--ps-ease-out);
+
+    > span {
+        display: block;
+        height: 1lh;
+        text-align: center;
+    }
+}
+
+.static {
+    transition: none;
+}
+
+// The number itself, for assistive technology: the strips read as ten digits each.
+.spoken {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}

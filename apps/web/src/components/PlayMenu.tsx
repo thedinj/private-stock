@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button, Menu, Text } from "@mantine/core";
 
 import { PlayGlyph, ShowcaseGlyph, TastingGlyph } from "@/components/media/Glyph";
-import { enterFullScreenMode } from "@/lib/fullScreenEntry";
+import { openFullScreenMode } from "@/lib/fullScreenEntry";
 import { SHOWCASE_PATH, TASTING_PATH } from "@/lib/showcase/set";
 import { forgetTastingPosition } from "@/lib/tasting/restore";
 
@@ -48,7 +48,9 @@ export const PlayMenu: React.FC<PlayMenuProps> = ({ setParams, onFromTop, empty,
                     </Text>
                 </Menu.Item>
                 <Menu.Item
-                    onClick={() => router.push(enterFullScreenMode(SHOWCASE_PATH, setParams))}
+                    onClick={() =>
+                        openFullScreenMode(SHOWCASE_PATH, setParams, (href) => router.push(href))
+                    }
                     disabled={empty}
                     leftSection={<ShowcaseGlyph />}
                 >
@@ -62,7 +64,7 @@ export const PlayMenu: React.FC<PlayMenuProps> = ({ setParams, onFromTop, empty,
                 <Menu.Item
                     onClick={() => {
                         forgetTastingPosition();
-                        router.push(enterFullScreenMode(TASTING_PATH, setParams));
+                        openFullScreenMode(TASTING_PATH, setParams, (href) => router.push(href));
                     }}
                     disabled={empty}
                     leftSection={<TastingGlyph />}

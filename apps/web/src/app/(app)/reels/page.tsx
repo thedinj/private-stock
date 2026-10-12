@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-    Box,
     Button,
     Group,
     Modal,
@@ -22,6 +21,7 @@ import {
 } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
+import { FlipWall } from "@/components/FlipWall";
 import { ReelCard } from "@/components/reel/ReelCard";
 import {
     defineView,
@@ -154,7 +154,8 @@ const ReelsPage: React.FC = () => {
                 </EmptyState>
             )}
 
-            <Box
+            <FlipWall
+                keys={data?.items.map((reel) => reel.id) ?? []}
                 style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
@@ -162,9 +163,11 @@ const ReelsPage: React.FC = () => {
                 }}
             >
                 {data?.items.map((reel) => (
-                    <ReelCard key={reel.id} reel={reel} />
+                    <div key={reel.id} data-flip-key={reel.id}>
+                        <ReelCard reel={reel} />
+                    </div>
                 ))}
-            </Box>
+            </FlipWall>
 
             {/* Pages, not an endless scroll (§20): a page is an address that can be shared,
                 reloaded and returned to with the back button. */}

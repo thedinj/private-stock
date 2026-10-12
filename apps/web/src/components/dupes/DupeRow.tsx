@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Badge, Button, Checkbox, Text, Tooltip } from "@mantine/core";
 
@@ -14,6 +14,7 @@ import {
     rowCautions,
     stranded,
 } from "@/lib/dupeTriage";
+import { animate, DURATION, EASE } from "@/lib/motion";
 import { rememberReturn } from "@/lib/returnTo";
 
 import classes from "./DupeRow.module.scss";
@@ -60,11 +61,101 @@ interface DupeRowProps {
     onReview: (reviewed: boolean) => void;
     reviewing: boolean;
     onFocus: () => void;
+    /**
+     * Resolved, and playing the merge before it leaves (§14, "Motion"): the copies going slide
+     * into the keeper and the keeper takes them in. `onMerged` when it is over.
+     */
+    merging?: boolean;
+    onMerged?: () => void;
 }
 
 export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
-    ({ group, keepId, ticked, focused, onKeep, onTick, onReview, reviewing, onFocus }, ref) => {
+    (
+        {
+            group,
+            keepId,
+            ticked,
+            focused,
+            onKeep,
+            onTick,
+            onReview,
+            reviewing,
+            onFocus,
+            merging = false,
+            onMerged,
+        },
+        ref
+    ) => {
         const going = removable(group, keepId);
+        const strip = useRef<HTMLDivElement>(null);
+        const merged = useRef(onMerged);
+        merged.current = onMerged;
+
+        /**
+         * The merge: each copy that is going slides along the strip into the keeper and fades
+         * as it reaches it, then the keeper's frame glows once in gilt as their tags, ratings and
+         * places arrive in it (§10c). Only then does the row leave, and the rows below close
+         * ranks. The copies move as whole cards; their pictures are never treated on their own.
+         */
+        useEffect(() => {
+            if (!merging) return;
+
+            const host = strip.current;
+            const keeper = host?.querySelector<HTMLElement>(`[data-member-id="${keepId}"]`);
+            const frame = keeper?.querySelector<HTMLElement>(`.${classes.cover}`);
+            const goingIds = new Set(removable(group, keepId).map((member) => member.id));
+
+            if (!host || !keeper || !frame) {
+                merged.current?.();
+                return;
+            }
+
+            const target = keeper.getBoundingClientRect();
+            const moves = [...host.querySelectorAll<HTMLElement>("[data-member-id]")]
+                .filter((element) => goingIds.has(element.dataset.memberId ?? ""))
+                .map((element) => {
+                    const from = element.getBoundingClientRect();
+                    const to = `translate(${target.left - from.left}px, ${target.top - from.top}px)`;
+
+                    return animate(
+                        element,
+                        [
+                            { transform: "none", opacity: 1 },
+                            { transform: `${to} scale(0.96)`, opacity: 0.85, offset: 0.7 },
+                            { transform: `${to} scale(0.9)`, opacity: 0 },
+                        ],
+                        { duration: DURATION.move, easing: EASE.inOut, fill: "forwards" }
+                    );
+                });
+
+            const glow = animate(
+                frame,
+                [
+                    { boxShadow: "0 0 0 0 rgba(228, 185, 85, 0)" },
+                    {
+                        boxShadow:
+                            "0 0 0 2px rgba(228, 185, 85, 0.95), 0 0 36px 4px rgba(228, 185, 85, 0.35)",
+                        offset: 0.4,
+                    },
+                    { boxShadow: "0 0 0 0 rgba(228, 185, 85, 0)" },
+                ],
+                { duration: DURATION.arrive, delay: DURATION.move * 0.75 }
+            );
+
+            // Nothing started (reduced motion): the row goes at once, as it always did.
+            const running = [...moves, glow].filter((a): a is Animation => a !== null);
+            let cancelled = false;
+
+            void Promise.allSettled(running.map((a) => a.finished)).then(() => {
+                if (!cancelled) merged.current?.();
+            });
+
+            return () => {
+                cancelled = true;
+            };
+            // Once per merge; the group and its keeper are fixed for its length.
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [merging]);
         const staying = stranded(group, keepId);
         const cautions = rowCautions(group, keepId);
         const disagreed = againstAdvice(group, keepId);
@@ -73,6 +164,7 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
         return (
             <div
                 ref={ref}
+                data-flip-key={group.id}
                 className={classes.row}
                 data-focused={focused}
                 onClick={onFocus}
@@ -149,13 +241,13 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                         </div>
                     </div>
 
-                    <div className={classes.strip}>
+                    <div className={classes.strip} ref={strip}>
                         {group.members.map((member, index) => {
                             const fate = fateOf(member, keepId, ticked);
                             const label = FATE_LABEL[fate];
 
                             return (
-                                <div key={member.id}>
+                                <div key={member.id} data-member-id={member.id}>
                                     <Tooltip
                                         label={`${member.rootLabel} · ${member.relPath}`}
                                         openDelay={500}

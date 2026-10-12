@@ -7875,6 +7875,75 @@ swipe, so every screen reached by navigation needs a way back of its own — the
 wordmark home, the viewer's close — and `router.back()` is only ever a shortcut for one, never
 the only way out.
 
+### Motion
+
+Chosen on 2026-10-11 from eighteen live demos on the motion plates
+(<https://claude.ai/artifact/AiYx5Ae5eoL8sux5KkKi9f>); sixteen were taken, at the **unhurried**
+tempo. Two were declined and are not built: favouriting as a pressed wax seal, and trashing as
+a tile that pours itself into the nav.
+
+**One tempo, in one place.** `lib/motion.ts` holds the durations — brisk 200 ms for a control
+answering, leave 450, move 600, arrive 800, and 900 for the few signature moments — and the
+easings, mirrored as `--ps-dur-*` and `--ps-ease-*` in `globals.scss`. Arrivals take their time
+because the room is in no hurry; acknowledgements do not, because a control that answers slowly
+reads as one that did not hear you. `animate()` is the one way the app's code starts a Web
+Animation, and **under reduced motion it starts nothing**: the stylesheet's global rule
+collapses CSS animation but cannot reach WAAPI, so the guard has to live where the animations
+start, not at forty call sites.
+
+**Grids change in place (`useFlipGrid`).** Every keyed grid and list — the cellar, the home
+shelves, Trash, Duplicates, Captures, Clips, Reels — compares each child's position at the last
+commit with its position now. Survivors that moved slide to their new place; a set with nothing
+in common with the last is racked in on a diagonal wave from the top left, 45 ms a step and over
+in about 0.6 s; newcomers to an overlapping set (a filter or sort change) fade up 70 ms apart.
+Leavers are caught by a MutationObserver after React has removed them, put back as inert ghosts
+at their old places with any `<video>` stripped, sunk 6 px and faded, and removed — React never
+knows about them. Only children within about a screen of the viewport animate. **Genuinely new
+items arrive only when the caller says so** — `expectArrivals()` from the cellar's "Show N new
+items", or `live` on the home shelves — because a filter change also brings in tiles that are
+new to the screen but not to the library; arrivals settle from just above, 120 ms apart, and
+carry `data-arrived`, drawn as a gilt outline that holds and fades over 4.5 s. A resolved
+duplicate group plays its merge before it leaves: the copies being trashed slide into the keeper
+chosen at resolve time, and the keeper's frame glows once.
+
+**Navigation is a View Transition, for in-app links only.** A capture-phase listener vets a plain
+left-click on an internal link and prevents Link's default (Next's Link stands down on
+`defaultPrevented`); a window-level listener re-issues it as `router.push` inside
+`document.startViewTransition`, so a React handler that stops the click — the tile's selection
+checkbox — still cancels the navigation. `html[data-vt]` is set only for the length of one
+transition, so nothing carries a `view-transition-name` the rest of the time, and its value
+picks the kind: `turn`, where the shell holds still and the page sinks out and rises in under a
+plate title that inks itself in, or `morph`, where a tile's frame grows into the viewer's stage
+at 900 ms and shrinks back into its own slot when the viewer's Back button is used. The
+transition waits for the new route (1.5 s at most) and a morph for its target (0.7 s more).
+Browser Back is a plain cut, as is everything without View Transitions (Firefox) or under
+reduced motion. The morph moves the frame; no filter is ever applied to the picture.
+
+**The snuff into Tasting and Showcase is not a View Transition.** Full screen is requested inside
+the click, and the resize makes the browser abandon a transition, so the room's light closes to a
+point under an overlay outside React; the mode's `CandleArrival` takes the dark over before
+paint, holds a candle flame for 900 ms, and lifts. The dark is chrome — nothing is drawn over a
+film once it is playing.
+
+**The plate** inks in once per mount — out of an 8 px blur, then the double rule draws. As it
+scrolls under the header it shrinks away on a scroll-driven timeline (where supported), and an
+IntersectionObserver puts its name, in blackletter, in the header beside the wordmark.
+
+**Smaller things.** The rating is five wine glasses that fill in turn from the level shown
+before; Mantine mounts a symbol when it turns full, so hovering pours a preview, once per glass.
+A saved private note says "kept" with a chalk tick for 2.8 s, because a save on blur that says
+nothing looks exactly like one that was lost. Counts that change while watched — the library
+count, Processing, the Duplicates eyebrow — roll like an odometer (`Odometer`), units first, and
+never on first render. The header seal grows a cork ring naming the work and turning once in 24 s
+while a scan runs or a job is claimed (`BusySeal`); pending jobs and stages that cannot finish
+here do not count, or the ring would never stop.
+
+**Candlelight** is one viewport-fixed radial gradient, positioned from `--ps-mx`/`--ps-my` that
+`CandleLight` writes at most once a frame and sampled by `::after` overlays in `overlay` blend on
+`[data-candle]` (the plate title and rule), the current nav item and filled buttons. A finger
+never carries the candle: touch and reduced motion get a fixed light. The **foil glint** is a
+background-image band that crosses a filled, enabled button once per hover or keyboard focus.
+
 ## 14b. What the library and viewer pages actually do
 
 §14 lists the views. This section records the decisions taken about what lives _on_ the two
@@ -8903,9 +8972,10 @@ grid's regularity is most of what makes it readable at a glance.
 
 **Date added**, which is what you are actually scanning for under the default sort.
 
-**Favourite is a heart, not a star.** The rating under the title is brass stars; a favourite
-drawn as a brass star said "rated" to anyone glancing at the grid, and cost a real
-misdiagnosis before it was fixed. One glyph, one meaning.
+**Favourite is a heart, not a star.** The rating under the title was brass stars, and is now
+five wine glasses (§14, "Motion"); a favourite drawn as a brass star said "rated" to anyone
+glancing at the grid, and cost a real misdiagnosis before it was fixed. One glyph, one
+meaning. The rating's celebration burst still throws a ★, which `Burst` limits to ★ and ♥.
 
 ### What "watched" means
 

@@ -27,6 +27,7 @@ import {
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { BulkTagDialog } from "@/components/library/BulkTagDialog";
+import { FlipWall } from "@/components/FlipWall";
 import { ClipCard } from "@/components/media/ClipCard";
 import { ClipTagFilter, type ClipTagFilterValue } from "@/components/media/ClipTagFilter";
 import { EmptyState } from "@/components/shell/EmptyState";
@@ -225,7 +226,8 @@ const ClipsPage: React.FC = () => {
      * close to 1:1 and never asks the browser to invent detail.
      */
     const wall = (clips: Clip[], showSource: boolean) => (
-        <Box
+        <FlipWall
+            keys={clips.map((clip) => clip.id)}
             style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
@@ -233,15 +235,16 @@ const ClipsPage: React.FC = () => {
             }}
         >
             {clips.map((clip) => (
-                <ClipCard
-                    key={clip.id}
-                    clip={clip}
-                    selected={selected.includes(clip.id)}
-                    onToggle={() => toggle(clip.id)}
-                    showSource={showSource}
-                />
+                <div key={clip.id} data-flip-key={clip.id}>
+                    <ClipCard
+                        clip={clip}
+                        selected={selected.includes(clip.id)}
+                        onToggle={() => toggle(clip.id)}
+                        showSource={showSource}
+                    />
+                </div>
             ))}
-        </Box>
+        </FlipWall>
     );
 
     return (

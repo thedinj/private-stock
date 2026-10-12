@@ -1,0 +1,126 @@
+// Moving between places (§14, "Motion"): the `::view-transition-*` half of
+// `lib/viewTransitions.ts`. Everything here applies only while `data-vt` is on the root, which
+// is for the length of one transition; nothing is named the rest of the time, so nothing here
+// can change how a page lays out or stacks.
+
+// ---- What takes part -------------------------------------------------------------------------
+
+// The shell holds still. Named so it is lifted out of the page's photograph, then shown as it
+// is: the header and nav are the same furniture on both sides of a page turn.
+html[data-vt] .mantine-AppShell-header {
+    view-transition-name: ps-header;
+}
+
+html[data-vt] .mantine-AppShell-navbar {
+    view-transition-name: ps-navbar;
+}
+
+// The plate title changes in its own spot rather than sinking with the page: it is the name of
+// where you are, and only the name changes. The new one inks in by itself (PagePlate).
+html[data-vt="turn"] [data-plate-title] {
+    view-transition-name: ps-plate-title;
+}
+
+// The stage, while a morph runs. Its other half is a tile's frame, named inline for the one
+// transition (`viewTransitions.ts`), because only the tile that was clicked can carry it.
+html[data-vt="morph"] [data-morph-stage] {
+    view-transition-name: ps-stage;
+}
+
+// ---- The page turn ---------------------------------------------------------------------------
+
+// The old page sinks a little and goes; the new one settles down into place. The root is the
+// visible screen, so a page scrolled far down turns from where it was looked at, not from its top.
+::view-transition-old(root) {
+    animation: ps-vt-sink var(--ps-dur-leave) var(--ps-ease-in) both;
+}
+
+::view-transition-new(root) {
+    animation: ps-vt-rise var(--ps-dur-arrive) var(--ps-ease-out) both;
+}
+
+@keyframes ps-vt-sink {
+    to {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+@keyframes ps-vt-rise {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+// The shell: no movement, and the new state shown at once -- a crossfade of two identical
+// headers is a flicker, and the nav's active link should simply be the new one.
+::view-transition-group(ps-header),
+::view-transition-group(ps-navbar) {
+    animation: none;
+}
+
+::view-transition-old(ps-header),
+::view-transition-old(ps-navbar) {
+    animation: none;
+    opacity: 0;
+}
+
+::view-transition-new(ps-header),
+::view-transition-new(ps-navbar) {
+    animation: none;
+}
+
+// The title: the old name gives way quickly where it stood, the new one is drawn by its own
+// ink-in. No travel between the two -- the plate is in the same place on every page.
+::view-transition-group(ps-plate-title) {
+    animation: none;
+}
+
+::view-transition-old(ps-plate-title) {
+    animation: ps-vt-fade var(--ps-dur-brisk) var(--ps-ease-in) both;
+}
+
+::view-transition-new(ps-plate-title) {
+    animation: none;
+}
+
+@keyframes ps-vt-fade {
+    to {
+        opacity: 0;
+    }
+}
+
+// ---- The morph -------------------------------------------------------------------------------
+
+// The frame travels from the tile to the stage (or back) at the signature pace, while the rest
+// of the page crossfades underneath without sinking -- one thing moving, not two.
+html[data-vt="morph"]::view-transition-old(root) {
+    animation: ps-vt-fade var(--ps-dur-leave) var(--ps-ease-in) both;
+}
+
+html[data-vt="morph"]::view-transition-new(root) {
+    animation: ps-vt-appear var(--ps-dur-arrive) var(--ps-ease-out) both;
+}
+
+@keyframes ps-vt-appear {
+    from {
+        opacity: 0;
+    }
+}
+
+::view-transition-group(ps-stage) {
+    animation-duration: var(--ps-dur-signature);
+    animation-timing-function: var(--ps-ease-out);
+}
+
+// A tile is 16:9 and a stage is whatever the picture is, so each photograph is cropped to the
+// travelling frame rather than squashed into it. The picture is moved and cropped, never
+// filtered (§14: texture in the chrome, never on the media).
+::view-transition-old(ps-stage),
+::view-transition-new(ps-stage) {
+    height: 100%;
+    object-fit: cover;
+    animation-duration: var(--ps-dur-signature);
+    animation-timing-function: var(--ps-ease-out);
+}

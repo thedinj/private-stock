@@ -105,6 +105,19 @@ body {
     }
 }
 
+// The tempo, named once (§14, "Motion"). Mirrors `DURATION` and `EASE` in lib/motion.ts --
+// change both. Unhurried: arrivals take their time, acknowledgements do not.
+:root {
+    --ps-dur-brisk: 200ms;
+    --ps-dur-leave: 450ms;
+    --ps-dur-move: 600ms;
+    --ps-dur-arrive: 800ms;
+    --ps-dur-signature: 900ms;
+    --ps-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ps-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+    --ps-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
 // Safe areas, named once (§14).
 //
 // `viewport-fit=cover` is set in the root layout, which is what lets the ground colour reach
@@ -203,5 +216,111 @@ body {
     // The light is static, but the grain is a repeating texture: leave it be.
     body {
         background-attachment: scroll;
+    }
+}
+
+/**
+ * Candlelight (§14, "Motion").
+ *
+ * Carry a candle past the rack: the gilt chrome -- the plate's title and rule (`data-candle`),
+ * the current nav item, the filled buttons -- brightens where the pointer is, and nothing else
+ * changes. One light for the whole page: the gradient is attached to the viewport (`fixed`), so
+ * every lit element samples the same circle at `--ps-mx`/`--ps-my`, which `CandleLight` keeps on
+ * the root. `overlay` only ever lifts what is already there, so a title is brightened rather
+ * than boxed. On touch screens and under reduced motion the light is set once and stays.
+ *
+ * The warm white is the candle's own, the one colour here that is not a theme token: it is
+ * light falling on gilt, not a surface.
+ */
+:root {
+    --ps-mx: -100vw;
+    --ps-my: -100vh;
+    --ps-candle: rgba(255, 244, 214, 0.7);
+}
+
+[data-candle],
+.mantine-NavLink-root[data-active],
+.mantine-Button-root:is(:not([data-variant]), [data-variant="filled"]):not(
+        :disabled,
+        [data-loading]
+    ) {
+    position: relative;
+}
+
+[data-candle]::after,
+.mantine-NavLink-root[data-active]::after,
+.mantine-Button-root:is(:not([data-variant]), [data-variant="filled"]):not(
+        :disabled,
+        [data-loading]
+    )::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+            160px circle at var(--ps-mx) var(--ps-my),
+            var(--ps-candle),
+            transparent 70%
+        )
+        fixed;
+    mix-blend-mode: overlay;
+    opacity: 0;
+    transition: opacity var(--ps-dur-move) var(--ps-ease-out);
+}
+
+:root[data-candle-lit] {
+    [data-candle]::after,
+    .mantine-NavLink-root[data-active]::after,
+    .mantine-Button-root:is(:not([data-variant]), [data-variant="filled"]):not(
+            :disabled,
+            [data-loading]
+        )::after {
+        opacity: 1;
+    }
+}
+
+/**
+ * Foil glint (§14, "Motion").
+ *
+ * One band of light crosses a filled button the moment you reach it, like gold leaf tilted to
+ * the lamp -- once per hover or keyboard focus, never on a loop. It lives in the button's own
+ * background-image layer, under Mantine's colour, so the colour is untouched: Mantine sets it
+ * with the `background` shorthand inside its cascade layer, and these longhands are unlayered,
+ * so they win without resetting it. Not on a disabled or loading button, which you cannot press.
+ */
+.mantine-Button-root:is(:not([data-variant]), [data-variant="filled"]):not(
+        :disabled,
+        [data-loading]
+    ) {
+    background-image: linear-gradient(
+        100deg,
+        transparent 40%,
+        rgba(255, 252, 240, 0.5) 50%,
+        transparent 60%
+    );
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    background-position: 150% 0;
+
+    &:hover,
+    &:focus-visible {
+        animation: ps-glint var(--ps-dur-signature) var(--ps-ease-in-out) 1;
+    }
+}
+
+@keyframes ps-glint {
+    from {
+        background-position: 150% 0;
+    }
+    to {
+        background-position: -50% 0;
+    }
+}
+
+// Collapsed by the global rule, a glint would be a flash; under reduced motion it is not drawn.
+@media (prefers-reduced-motion: reduce) {
+    .mantine-Button-root:is(:not([data-variant]), [data-variant="filled"]) {
+        background-image: none;
     }
 }

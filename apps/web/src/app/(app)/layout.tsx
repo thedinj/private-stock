@@ -21,11 +21,17 @@ import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { AboutModal } from "@/components/shell/AboutModal";
 import { AppNavbar, AppNavbarUpkeep } from "@/components/shell/AppNavbar";
 import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
+import { HeaderPlateTitle } from "@/components/shell/HeaderPlateTitle";
 import { HeaderSearch } from "@/components/shell/HeaderSearch";
-import { SealMark } from "@/components/shell/SealMark";
+import { PageTurn } from "@/components/shell/PageTurn";
+import { BusySeal } from "@/components/shell/BusySeal";
 import { UpdateNotice } from "@/components/shell/UpdateNotice";
 import { RequireAuth, useAuth } from "@/lib/api/AuthProvider";
 import { useLibraryStats } from "@/lib/api/libraries";
+
+// The page turn and the morph's pseudo-elements (§14, "Motion"). Global, because
+// `::view-transition-*` hangs off the document root, which no module class can reach.
+import "./viewTransitions.scss";
 
 /**
  * The application shell.
@@ -86,12 +92,14 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                 one: Title's polymorphism does not carry `href` through. */}
                             <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
                                 <Group gap={8} wrap="nowrap">
-                                    <SealMark size={26} />
+                                    <BusySeal size={26} />
                                     <Title order={4} style={{ whiteSpace: "nowrap" }}>
                                         private-stock
                                     </Title>
                                 </Group>
                             </Link>
+                            {/* The plate's title, once the plate has scrolled away. */}
+                            <HeaderPlateTitle />
                         </Group>
 
                         {/* The header search (§14): a box in the middle of the bar on a wide
@@ -238,6 +246,12 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <AboutModal opened={aboutOpened} onClose={about.close} />
             <UpdateNotice />
             <ArrivalScroll />
+            {/* Its own Suspense boundary, for the reason the nav has one: it reads the search
+                params, and a bare `useSearchParams` in a shared layout opts every page out of
+                static rendering. */}
+            <Suspense fallback={null}>
+                <PageTurn />
+            </Suspense>
         </RequireAuth>
     );
 };

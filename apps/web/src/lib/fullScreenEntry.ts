@@ -1,3 +1,5 @@
+import { snuffThen } from "./candleSnuff";
+
 /**
  * Opening a full-screen mode from a library view, and knowing on the way out whether that is
  * where we came from (§14f, §14g).
@@ -11,8 +13,8 @@
 
 const KEY = "ps:fullScreenFrom";
 
-/** Called from the library's click handler. Returns the address to navigate to. */
-export const enterFullScreenMode = (path: string, libraryParams: URLSearchParams): string => {
+/** The address to navigate to, with full screen asked for on the way. */
+const enterFullScreenMode = (path: string, libraryParams: URLSearchParams): string => {
     const params = new URLSearchParams(libraryParams);
 
     params.delete("page");
@@ -28,6 +30,20 @@ export const enterFullScreenMode = (path: string, libraryParams: URLSearchParams
     }
 
     return `${path}?${params.toString()}`;
+};
+
+/**
+ * Called from the library's click handler: full screen is asked for at once, inside the
+ * gesture, then the room is snuffed (§14, "Motion") and `navigate` opens the mode.
+ */
+export const openFullScreenMode = (
+    path: string,
+    libraryParams: URLSearchParams,
+    navigate: (href: string) => void
+): void => {
+    const href = enterFullScreenMode(path, libraryParams);
+
+    snuffThen(() => navigate(href));
 };
 
 /**

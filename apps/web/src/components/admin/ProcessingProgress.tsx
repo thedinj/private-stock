@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PROCESSING_POLL_MS, PROGRESS_STAGE_NAMES, processingIsActive } from "@private-stock/core";
 import type { ProcessingStatus, StageProgressView } from "@private-stock/core";
 
+import { Odometer } from "@/components/Odometer";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
@@ -108,12 +109,18 @@ const StageBar: React.FC<{ row: StageProgressView }> = ({ row }) => {
                             {row.failed.toLocaleString()} failed
                         </Badge>
                     )}
+                    {/* The settled count rolls rather than jumps as the poll brings it in (§14,
+                        "Motion"): a stage ticking along is the thing this card is watched for. */}
                     <Text size="xs" c="dimmed">
-                        {complete
-                            ? `complete · ${row.applicable.toLocaleString()}`
-                            : again
-                              ? `${row.applicable.toLocaleString()} · ${row.queued.toLocaleString()} queued again`
-                              : `${settled.toLocaleString()} / ${row.applicable.toLocaleString()}`}
+                        {complete ? (
+                            `complete · ${row.applicable.toLocaleString()}`
+                        ) : again ? (
+                            `${row.applicable.toLocaleString()} · ${row.queued.toLocaleString()} queued again`
+                        ) : (
+                            <>
+                                <Odometer value={settled} /> / {row.applicable.toLocaleString()}
+                            </>
+                        )}
                     </Text>
                 </Group>
             </Group>
@@ -193,7 +200,7 @@ const ScanLine: React.FC<{ scan: NonNullable<ProcessingStatus["scan"]> }> = ({ s
                 Scanning {scan.rootLabel}
             </Text>
             <Text size="xs" c="dimmed">
-                {scan.filesSeen.toLocaleString()}
+                <Odometer value={scan.filesSeen} />
                 {scan.estimatedTotal ? ` / ~${scan.estimatedTotal.toLocaleString()}` : " files"}
             </Text>
         </Group>
@@ -314,7 +321,7 @@ export const ProcessingProgress: React.FC = () => {
                         }
                     >
                         <Badge color={data.queue.workerAlive ? "brass" : "oxblood"} variant="light">
-                            {outstanding.toLocaleString()} queued
+                            <Odometer value={outstanding} /> queued
                             {data.queue.workerAlive ? "" : " · not running?"}
                         </Badge>
                     </Tooltip>

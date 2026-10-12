@@ -11,6 +11,7 @@ import { DupeRulesForm } from "@/components/admin/DupeRulesForm";
 import { RulesDrawer } from "@/components/admin/RulesDrawer";
 import { DupeSheet } from "@/components/dupes/DupeSheet";
 import { IdenticalPanel } from "@/components/dupes/IdenticalPanel";
+import { Odometer } from "@/components/Odometer";
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { defineView, enumField, flagField, pageField, useUrlView } from "@/lib/urlView";
@@ -82,10 +83,16 @@ const DuplicatesPage: React.FC = () => {
     return (
         <Stack gap="lg">
             <PagePlate
+                // The count rolls down as groups are settled (§14, "Motion").
                 eyebrow={
-                    pendingTotal === null
-                        ? "Copies of the same thing"
-                        : `${pendingTotal.toLocaleString()} ${pendingTotal === 1 ? "group" : "groups"} to review`
+                    pendingTotal === null ? (
+                        "Copies of the same thing"
+                    ) : (
+                        <>
+                            <Odometer value={pendingTotal} />{" "}
+                            {pendingTotal === 1 ? "group" : "groups"} to review
+                        </>
+                    )
                 }
                 title="Duplicates"
                 lede="Ratings, tags, notes and playlist places move to the copy you keep."

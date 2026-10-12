@@ -56,6 +56,7 @@ import { DEFAULT_VIEW, viewToParams } from "@/lib/libraryQuery";
 import { itemHref } from "@/lib/lookMoment";
 import { readReturn, rememberReturnTo, returnAtPage, returnLabel } from "@/lib/returnTo";
 import { leaveViewer } from "@/lib/viewerReturn";
+import { morphOutOfStage } from "@/lib/viewTransitions";
 import { useViewerSequence } from "@/lib/useViewerSequence";
 import { parseAtParam, resumeTarget, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
@@ -780,7 +781,13 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         c="dimmed"
                         underline="never"
                         w="fit-content"
-                        onClick={() => leaveViewer(returnTo, id, sequence.page, router)}
+                        // The stage shrinks back into the tile it came from, when that tile
+                        // is on the page we return to (§14, "Motion").
+                        onClick={() =>
+                            morphOutOfStage(id, () =>
+                                leaveViewer(returnTo, id, sequence.page, router)
+                            )
+                        }
                     >
                         ← Back to {returnLabel(returnTo)}
                     </Anchor>
@@ -925,7 +932,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             />
 
             <Box className={classes.stage} ref={stageRef}>
-                <Box className={classes.frame}>
+                {/* The morph's other end: a tile's frame grows into this box (§14, "Motion"). */}
+                <Box className={classes.frame} data-morph-stage>
                     {mode === "player" ? (
                         <VideoPlayer
                             warmSource="viewer"

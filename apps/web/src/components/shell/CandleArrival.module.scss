@@ -1,0 +1,56 @@
+// Arriving in a tasting or the showcase out of the snuffed room (§14, "Motion").
+
+.dark {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    // The snuff's black (`SNUFF_BLACK`), so the hand-over from the shell's dark is seamless.
+    background: #050403;
+    pointer-events: none;
+    // Held for the flame, then lifted off the stage at the arrival pace.
+    animation: lift var(--ps-dur-arrive) var(--ps-ease-out) 900ms both;
+}
+
+// A candle flame hanging in the dark for a breath: a warm teardrop with a soft glow, which
+// steadies, then goes as the stage comes up. Chrome only -- it is over black, not over a film.
+.flame {
+    width: 9px;
+    height: 15px;
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    background: radial-gradient(
+        circle at 50% 70%,
+        #fff3cf 0%,
+        #ffc767 55%,
+        rgba(255, 160, 60, 0) 100%
+    );
+    box-shadow: 0 0 26px 9px rgba(255, 196, 110, 0.28);
+    animation: flame 1200ms var(--ps-ease-out) both;
+}
+
+@keyframes flame {
+    0% {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+    25% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    60% {
+        opacity: 0.85;
+        transform: scale(0.95, 1.08);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.5);
+    }
+}
+
+@keyframes lift {
+    to {
+        opacity: 0;
+        visibility: hidden;
+    }
+}

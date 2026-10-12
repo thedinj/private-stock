@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Anchor, Box, Title } from "@mantine/core";
 
+import { setFoldedTitle } from "./foldedTitle";
 import classes from "./PagePlate.module.scss";
 
 /**
@@ -24,8 +26,11 @@ import classes from "./PagePlate.module.scss";
  * reads as an accent everywhere else in the app precisely because it is rare here.
  */
 interface PagePlateProps {
-    /** The small brass line above the title. Where this screen sits, not what it does. */
-    eyebrow: string;
+    /**
+     * The small brass line above the title. Where this screen sits, not what it does. A node
+     * rather than a string so a count in it can roll when it changes (`Odometer`).
+     */
+    eyebrow: React.ReactNode;
     title: string;
     /** A sentence under the rule, for a screen whose rules are not obvious. */
     lede?: React.ReactNode;
@@ -45,6 +50,44 @@ interface PagePlateProps {
     aside?: React.ReactNode;
 }
 
+/** The header's height: the plate counts as gone once it is under the header, not off the top. */
+const HEADER_PX = 56;
+
+/**
+ * The plate's title goes to the header while the plate is out of sight (§14, "Motion").
+ *
+ * Watched against a root shrunk by the header's height, so the title moves up there at the
+ * moment the plate slides under the bar -- and only when it left upwards: a plate below the
+ * fold on a short screen is not "scrolled away". Cleared on unmount, so the next page never
+ * inherits this one's name.
+ */
+const useFoldIntoHeader = (title: string) => {
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const plate = ref.current;
+        if (!plate || typeof IntersectionObserver === "undefined") return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                const above = entry.boundingClientRect.top < HEADER_PX;
+
+                setFoldedTitle(!entry.isIntersecting && above ? title : null);
+            },
+            { rootMargin: `-${HEADER_PX}px 0px 0px 0px` }
+        );
+
+        observer.observe(plate);
+
+        return () => {
+            observer.disconnect();
+            setFoldedTitle(null);
+        };
+    }, [title]);
+
+    return ref;
+};
+
 export const PagePlate: React.FC<PagePlateProps> = ({
     eyebrow,
     title,
@@ -52,37 +95,41 @@ export const PagePlate: React.FC<PagePlateProps> = ({
     actions,
     back,
     aside,
-}) => (
-    <Box className={classes.plate}>
-        {back && (
-            <Anchor
-                component={Link}
-                href={back.href}
-                size="xs"
-                c="dimmed"
-                underline="never"
-                hiddenFrom={back.phoneOnly ? "sm" : undefined}
-            >
-                ← {back.label}
-            </Anchor>
-        )}
+}) => {
+    const ref = useFoldIntoHeader(title);
 
-        <Box className={classes.head}>
-            <Box className={classes.copy}>
-                <span className={classes.eyebrow}>{eyebrow}</span>
-                <Box className={classes.titleLine}>
-                    <Title order={1} className={classes.title}>
-                        {title}
-                    </Title>
-                    {aside}
+    return (
+        <Box className={classes.plate} ref={ref}>
+            {back && (
+                <Anchor
+                    component={Link}
+                    href={back.href}
+                    size="xs"
+                    c="dimmed"
+                    underline="never"
+                    hiddenFrom={back.phoneOnly ? "sm" : undefined}
+                >
+                    ← {back.label}
+                </Anchor>
+            )}
+
+            <Box className={classes.head}>
+                <Box className={classes.copy}>
+                    <span className={classes.eyebrow}>{eyebrow}</span>
+                    <Box className={classes.titleLine}>
+                        <Title order={1} className={classes.title} data-plate-title data-candle>
+                            {title}
+                        </Title>
+                        {aside}
+                    </Box>
                 </Box>
+
+                {actions && <Box className={classes.actions}>{actions}</Box>}
             </Box>
 
-            {actions && <Box className={classes.actions}>{actions}</Box>}
+            <Box className={classes.rule} data-candle />
+
+            {lede && <Box className={classes.lede}>{lede}</Box>}
         </Box>
-
-        <Box className={classes.rule} />
-
-        {lede && <Box className={classes.lede}>{lede}</Box>}
-    </Box>
-);
+    );
+};

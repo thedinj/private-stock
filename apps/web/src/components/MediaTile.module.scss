@@ -309,3 +309,27 @@
         opacity: 1;
     }
 }
+
+/**
+ * Just arrived (§14, "Motion"): a thin gilt edge on a tile that came in while you watched.
+ *
+ * `useFlipGrid` sets `data-arrived` on the tile's slot for a few seconds when a scan lands; the
+ * edge holds for a moment so you can see which tiles are the new ones, then fades. An outline
+ * rather than a box-shadow, so it never fights the hover glow or the focus ring for the same
+ * property. On the frame, never on the picture.
+ */
+[data-arrived] > .tile {
+    outline: 1px solid rgba(228, 185, 85, 0);
+    outline-offset: 2px;
+    animation: arrived 4s var(--ps-ease-out) both;
+}
+
+@keyframes arrived {
+    0%,
+    35% {
+        outline-color: rgba(228, 185, 85, 0.85);
+    }
+    100% {
+        outline-color: rgba(228, 185, 85, 0);
+    }
+}
