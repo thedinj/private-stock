@@ -23,7 +23,11 @@ import {
     BrowseToolbar,
     useBrowseWide,
 } from "@/components/browse/BrowseToolbar";
-import { BROWSE_LAYOUTS, RowsTilesSwitch } from "@/components/browse/RowsTilesSwitch";
+import {
+    BROWSE_LAYOUTS,
+    RowsTilesSwitch,
+    type BrowseLayout,
+} from "@/components/browse/RowsTilesSwitch";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { SearchInput } from "@/components/SearchInput";
 
@@ -53,10 +57,15 @@ interface TagBrowsePageProps {
     eyebrow: string;
     lede?: string;
     sections: TagBrowseSection[];
+    /**
+     * One layout and no switch. Performers are always tiles: people are known by face, and a
+     * portrait at tile size says more than a name beside a strip.
+     */
+    layout?: BrowseLayout;
 }
 
 const SORTS: { value: TagBrowseSort; label: string }[] = [
-    { value: "count", label: "Most items" },
+    { value: "count", label: "Most videos" },
     { value: "name", label: "A–Z" },
     { value: "recent", label: "Recently tagged" },
 ];
@@ -88,6 +97,7 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
     eyebrow,
     lede,
     sections,
+    layout: fixedLayout,
 }) => {
     const { hasScope } = useAuth();
     const { seed, reshuffle } = useTagSeed();
@@ -104,6 +114,7 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
     );
     const [done, setDone] = useState<string | null>(null);
     const wide = useBrowseWide();
+    const layout = fixedLayout ?? view.layout;
 
     return (
         <Stack gap="lg">
@@ -127,11 +138,13 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
                     fullWidth={!wide}
                     styles={wide ? undefined : { label: { lineHeight: BROWSE_TOUCH_HEIGHT } }}
                 />
-                <RowsTilesSwitch
-                    value={view.layout}
-                    onChange={(layout) => apply({ layout })}
-                    touch={!wide}
-                />
+                {!fixedLayout && (
+                    <RowsTilesSwitch
+                        value={view.layout}
+                        onChange={(next) => apply({ layout: next })}
+                        touch={!wide}
+                    />
+                )}
                 {/* Oxblood, the heart's colour, as the library's "Favourites only" is. */}
                 <Switch
                     label="Favourites only"
@@ -158,7 +171,7 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
                     losing your place in it. Not offered for performers' tiles: a tile shows the
                     tag's own picture where it has one, and most performers have a portrait, so the
                     button would change the odd card at best. */}
-                {!(kind === "performer" && view.layout === "tiles") && (
+                {!(kind === "performer" && layout === "tiles") && (
                     <Button variant="subtle" color="brass" size="sm" onClick={reshuffle}>
                         Reshuffle pictures
                     </Button>
@@ -182,7 +195,7 @@ export const TagBrowsePage: React.FC<TagBrowsePageProps> = ({
                         search={view.search.trim()}
                         sort={sort}
                         favorite={view.favorite}
-                        layout={view.layout}
+                        layout={layout}
                         seed={seed}
                         // Your own vocabulary is always yours to curate; the library's is the
                         // administrator's (§6).

@@ -2994,7 +2994,13 @@ the first one a table of names with a count column.
   like the sort, shows each tag as one large card instead: the strip's first picture, wider
   than a library grid thumbnail and portrait-shaped for a performer, with the name over it.
   That is for somebody who knows the library by sight rather than by name. The density
-  argument above still holds, so rows are what the page opens to.
+  argument above still holds, so rows are what Sources and Keywords open to.
+- **Performers is tiles only** (changed 2026-10-14). In use, people are found by face: once
+  most performers had a portrait, the card was what got looked at and the rows were a detour
+  through the switch. The page offers no switch; the other two keep it.
+- **"Most videos", not "most items".** The count order ranks by videos, with photos only
+  breaking a tie: a performer with forty photos and two videos is not who somebody browsing
+  for something to watch is looking for. The counts shown stay split by kind.
 - **The browse pages share their controls with Views & playlists (§14c).** One toolbar
   (`BrowseToolbar`) in one order — which shelf if there is a choice, search, order, Rows/Tiles,
   filters — pinned under the header on a wide screen as the library's working row is, and one

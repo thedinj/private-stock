@@ -11,6 +11,7 @@ const PerformersPage: React.FC = () => (
             kind="performer"
             eyebrow="Tags"
             title="Performers"
+            layout="tiles"
             sections={[
                 {
                     scope: "public",

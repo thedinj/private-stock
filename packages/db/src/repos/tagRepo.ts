@@ -1130,7 +1130,8 @@ const viewerParams = (viewer: TagViewer): { viewer: string; rootIds: string } =>
 });
 
 const BROWSE_ORDER: Record<BrowseSort, string> = {
-    count: `("videoCount" + "imageCount") DESC, t."name" COLLATE NOCASE`,
+    // Videos are what somebody browses a facet for; photos only break a tie.
+    count: `"videoCount" DESC, "imageCount" DESC, t."name" COLLATE NOCASE`,
     name: `t."name" COLLATE NOCASE`,
     recent: `max(mt."createdAt") DESC, t."name" COLLATE NOCASE`,
 };

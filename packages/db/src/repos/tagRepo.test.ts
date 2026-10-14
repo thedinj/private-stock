@@ -593,6 +593,21 @@ describe("browsing a facet", () => {
         expect(names("recent")).toEqual(["Amy", "Zed"]);
     });
 
+    it("orders by videos, with photos only breaking a tie", () => {
+        const photos = tagRepo.ensureTag("performer", "Amy", null);
+        const video = tagRepo.ensureTag("performer", "Zed", null);
+        const both = tagRepo.ensureTag("performer", "Bea", null);
+
+        tag(photos, PHOTO);
+        tag(photos, MEDIA_A);
+        tag(video, MEDIA_A);
+        tag(video, MEDIA_B);
+        tag(both, MEDIA_B);
+
+        // Amy has two items but one video; Zed two videos; Bea one video and no photo.
+        expect(browse(null).rows.map((row) => row.name)).toEqual(["Zed", "Amy", "Bea"]);
+    });
+
     it("finds a tag by one of its aliases", () => {
         const mum = tagRepo.ensureTag("performer", "Mum", null);
 
