@@ -374,8 +374,44 @@ export const setNoSingleFace = (tagId: string, noFace: boolean, userId: string):
     }
 };
 
-/** Every face a person confirmed as a library performer: what references are built from first. */
-export const confirmedFaceRefs = (): {
+/**
+ * What changed since the references run last looked (§5f "Only what changed"): the items whose
+ * faces must be gathered again and the performers whose reference may have moved, as the
+ * `FaceStale` triggers recorded them. Taken -- read and cleared in one transaction -- so a change
+ * made while the run works is left for the next one.
+ */
+export const takeStale = (): { tags: string[]; items: string[] } =>
+    db
+        .transaction(() => {
+            const rows = db.prepare(`SELECT "kind", "id" FROM "FaceStale"`).all() as {
+                kind: "tag" | "item";
+                id: string;
+            }[];
+
+            db.prepare(`DELETE FROM "FaceStale"`).run();
+
+            return {
+                tags: rows.filter((row) => row.kind === "tag").map((row) => row.id),
+                items: rows.filter((row) => row.kind === "item").map((row) => row.id),
+            };
+        })
+        .immediate();
+
+/** A filter to these tags, or none for every tag: `null` is the whole library. */
+const onlyTags = (column: string, tagIds: readonly string[] | null): string =>
+    tagIds === null ? "" : `AND ${column} IN (SELECT value FROM json_each(:tagIds))`;
+
+const tagParams = (tagIds: readonly string[] | null): Record<string, unknown> =>
+    tagIds === null ? {} : { tagIds: JSON.stringify(tagIds) };
+
+/**
+ * Every face a person confirmed as a library performer -- of these performers, or of all of them
+ * with `null`: what references are built from first. In a fixed order, so a reference built from
+ * the same faces comes out the same, bit for bit, however many performers were read beside it.
+ */
+export const confirmedFaceRefs = (
+    tagIds: readonly string[] | null
+): {
     tagId: string;
     mediaId: string;
     vectorIndex: number;
@@ -384,19 +420,26 @@ export const confirmedFaceRefs = (): {
         .prepare(
             `SELECT f."tagId", f."mediaId", f."vectorIndex"
                FROM "Face" f JOIN "Tag" t ON t."id" = f."tagId"
-              WHERE t."kind" = 'performer' AND t."ownerId" IS NULL
-                AND NOT EXISTS (SELECT 1 FROM "PerformerNoFace" nf WHERE nf."tagId" = t."id")`
+              WHERE t."kind" = 'performer' AND t."ownerId" IS NULL ${onlyTags(`f."tagId"`, tagIds)}
+                AND NOT EXISTS (SELECT 1 FROM "PerformerNoFace" nf WHERE nf."tagId" = t."id")
+              ORDER BY f."tagId", f."mediaId", f."vectorIndex"`
         )
-        .all() as { tagId: string; mediaId: string; vectorIndex: number }[];
+        .all(tagParams(tagIds)) as {
+        tagId: string;
+        mediaId: string;
+        vectorIndex: number;
+    }[];
 
 /**
- * The faces on items carrying each library performer, not refused for them: what the face their
- * items share is looked for in. Tags a person made, read or matched — never one made by itself
- * from a face (`source = 'ai'`), or a reference would vouch for itself. At most `perTag` items
- * each, newest first: the search is the square of their faces.
+ * The faces on items carrying each library performer -- these, or all with `null` -- not refused
+ * for them: what the face their items share is looked for in. Tags a person made, read or matched
+ * — never one made by itself from a face (`source = 'ai'`), or a reference would vouch for itself.
+ * At most `perTag` items each, newest first: the search is the square of their faces. In a fixed
+ * order, as `confirmedFaceRefs` is.
  */
 export const taggedFaceRefs = (
-    perTag: number
+    perTag: number,
+    tagIds: readonly string[] | null
 ): { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[] =>
     db
         .prepare(
@@ -407,16 +450,33 @@ export const taggedFaceRefs = (
                    FROM "MediaTag" mt
                    JOIN "Tag" t ON t."id" = mt."tagId" AND t."kind" = 'performer' AND t."ownerId" IS NULL
                    JOIN "Media" m ON m."id" = mt."mediaId" AND m."listable" = 1
-                  WHERE mt."userId" IS NULL AND mt."source" <> 'ai'
+                  WHERE mt."userId" IS NULL AND mt."source" <> 'ai' ${onlyTags(`mt."tagId"`, tagIds)}
                     AND NOT EXISTS (SELECT 1 FROM "PerformerNoFace" nf WHERE nf."tagId" = t."id")
                     AND EXISTS (SELECT 1 FROM "Face" f WHERE f."mediaId" = mt."mediaId")
                ) x
                JOIN "Face" f ON f."mediaId" = x."mediaId"
-              WHERE x."n" <= ? AND f."scatteredAt" IS NULL
+              WHERE x."n" <= :perTag AND f."scatteredAt" IS NULL
                 AND NOT EXISTS (SELECT 1 FROM "FaceRefusal" r
-                                 WHERE r."faceId" = f."id" AND r."tagId" = x."tagId")`
+                                 WHERE r."faceId" = f."id" AND r."tagId" = x."tagId")
+              ORDER BY x."tagId", f."mediaId", f."vectorIndex"`
         )
-        .all(perTag) as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[];
+        .all({ perTag, ...tagParams(tagIds) }) as {
+        tagId: string;
+        faceId: string;
+        mediaId: string;
+        vectorIndex: number;
+    }[];
+
+/** The library performers on these items: whose shared face may move when the items' faces do. */
+export const performersOn = (mediaIds: readonly string[]): string[] =>
+    db
+        .prepare(
+            `SELECT DISTINCT mt."tagId"
+               FROM "MediaTag" mt JOIN "Tag" t ON t."id" = mt."tagId" AND t."kind" = 'performer'
+              WHERE mt."mediaId" IN (SELECT value FROM json_each(?)) AND mt."userId" IS NULL`
+        )
+        .pluck()
+        .all(JSON.stringify(mediaIds)) as string[];
 
 /** A performer's reference, as the table keeps what it was built from. */
 export interface AnchorRow {
@@ -426,26 +486,30 @@ export interface AnchorRow {
     sharedItems: number;
 }
 
-/** Replace every reference and every face's best match with a run's. One transaction. */
-export const replaceAnchors = (
-    anchors: readonly AnchorRow[],
-    matches: readonly { faceId: string; tagId: string; score: number; second: number }[]
-): void => {
-    const anchor = db.prepare(
+/** Every reference as the table has it: what a run that starts afresh compares its own to. */
+export const anchorRows = (): AnchorRow[] =>
+    db
+        .prepare(`SELECT "tagId", "items", "confirmedItems", "sharedItems" FROM "FaceAnchor"`)
+        .all() as AnchorRow[];
+
+/**
+ * The references that changed, written, and those that went, removed. A performer deleted while
+ * the run worked is skipped rather than failing the write; the deletion marked them stale.
+ */
+export const writeAnchors = (changed: readonly AnchorRow[], removed: readonly string[]): void => {
+    const upsert = db.prepare(
         `INSERT INTO "FaceAnchor" ("tagId", "items", "confirmedItems", "sharedItems")
-         VALUES (@tagId, @items, @confirmedItems, @sharedItems)`
+         SELECT @tagId, @items, @confirmedItems, @sharedItems
+          WHERE EXISTS (SELECT 1 FROM "Tag" WHERE "id" = @tagId)
+         ON CONFLICT ("tagId") DO UPDATE
+            SET "items" = excluded."items", "confirmedItems" = excluded."confirmedItems",
+                "sharedItems" = excluded."sharedItems", "updatedAt" = CURRENT_TIMESTAMP`
     );
-    const match = db.prepare(
-        `INSERT OR REPLACE INTO "FaceMatch" ("faceId", "tagId", "score", "second")
-         SELECT @faceId, @tagId, @score, @second
-          WHERE EXISTS (SELECT 1 FROM "Face" WHERE "id" = @faceId)`
-    );
+    const remove = db.prepare(`DELETE FROM "FaceAnchor" WHERE "tagId" = ?`);
 
     db.transaction(() => {
-        db.prepare(`DELETE FROM "FaceMatch"`).run();
-        db.prepare(`DELETE FROM "FaceAnchor"`).run();
-        for (const row of anchors) anchor.run(row);
-        for (const row of matches) match.run(row);
+        for (const tagId of removed) remove.run(tagId);
+        for (const row of changed) upsert.run(row);
     })();
 };
 

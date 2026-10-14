@@ -24,27 +24,47 @@ const dataDir = mkdtempSync(path.join(tmpdir(), "ps-faceanchors-"));
 
 const state = vi.hoisted(() => ({
     decisions: [] as unknown[],
-    appearances: [] as {
-        mediaId: string;
-        faceIds: string[];
-        matchTagId: string | null;
-        score: number | null;
-        newPersonId: string | null;
-    }[],
+    /** The FaceAppearance table, by id. */
+    appearances: new Map<
+        string,
+        {
+            id: string;
+            mediaId: string;
+            faceIds: string[];
+            bestFaceId: string;
+            legible: boolean;
+            matchTagId: string | null;
+            score: number | null;
+            second: number | null;
+            newPersonId: string | null;
+        }
+    >(),
+    /** The FaceAnchor table, by tag. */
+    anchors: new Map<
+        string,
+        { tagId: string; items: number; confirmedItems: number; sharedItems: number }
+    >(),
     confirmed: [] as { tagId: string; mediaId: string; vectorIndex: number }[],
     tagged: [] as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[],
-    faces: [] as { id: string; mediaId: string; vectorIndex: number }[],
+    faces: [] as { id: string; mediaId: string; vectorIndex: number; decided?: 0 | 1 }[],
+    stale: { tags: [] as string[], items: [] as string[] },
+    /** What each run asked for and wrote, in order. */
+    sourced: [] as (string[] | null)[],
+    writes: [] as { removed: string[]; added: unknown[]; rescored: unknown[] }[],
+    failWrite: false,
     candidates: [] as Record<string, unknown>[],
     counts: { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 },
     trial: { right: 30, wrong: 0 },
     setting: {} as Record<string, unknown>,
     decided: [] as string[][],
     batches: [] as { assignments: unknown[]; source: string; userId: string }[],
-    written: null as null | {
-        anchors: { tagId: string; items: number; confirmedItems: number; sharedItems: number }[];
-        matches: { faceId: string; tagId: string; score: number; second: number }[];
-    },
 }));
+
+const only = <T extends Record<K, string>, K extends string>(
+    rows: readonly T[],
+    key: K,
+    ids: readonly string[] | null
+): T[] => (ids === null ? [...rows] : rows.filter((row) => ids.includes(row[key])));
 
 vi.mock("@private-stock/db", () => ({
     db: { transaction: <T>(fn: () => T) => fn },
@@ -73,28 +93,67 @@ vi.mock("@private-stock/db", () => ({
     },
     searchRepo: { requestReindex: () => undefined },
     appearanceRepo: {
-        sourceFaces: () =>
-            state.faces.map((face) => ({
-                ...face,
-                eyes: 30,
-                score: 0.9,
-                kind: "video",
-                scattered: 0,
-                decided: 0,
-            })),
-        replaceAll: (rows: typeof state.appearances) => {
-            state.appearances = [...rows];
+        sourceFaces: (mediaIds: string[] | null) => {
+            state.sourced.push(mediaIds);
+
+            return only(state.faces, "mediaId", mediaIds)
+                .sort((a, b) =>
+                    a.mediaId === b.mediaId
+                        ? a.vectorIndex - b.vectorIndex
+                        : a.mediaId < b.mediaId
+                          ? -1
+                          : 1
+                )
+                .map((face) => ({
+                    ...face,
+                    eyes: 30,
+                    score: 0.9,
+                    kind: "video",
+                    scattered: 0,
+                    decided: face.decided ?? 0,
+                }));
+        },
+        writtenAppearances: () => [...state.appearances.values()].map((row) => ({ ...row })),
+        writeAppearances: (changes: {
+            removed: string[];
+            added: (typeof state.appearances extends Map<string, infer R> ? R : never)[];
+            rescored: { id: string }[];
+        }) => {
+            if (state.failWrite) throw new Error("disk full");
+
+            state.writes.push(changes);
+            for (const id of changes.removed) state.appearances.delete(id);
+            for (const row of changes.added) state.appearances.set(row.id, { ...row });
+            for (const row of changes.rescored) {
+                Object.assign(state.appearances.get(row.id)!, row);
+            }
         },
     },
     changeLogRepo: { recordMany: () => undefined },
     faceRepo: {
-        confirmedFaceRefs: () => state.confirmed,
-        taggedFaceRefs: () => state.tagged,
-        replaceAnchors: (
-            anchors: NonNullable<typeof state.written>["anchors"],
-            matches: NonNullable<typeof state.written>["matches"]
+        takeStale: () => {
+            const stale = state.stale;
+            state.stale = { tags: [], items: [] };
+            return stale;
+        },
+        confirmedFaceRefs: (tagIds: string[] | null) => only(state.confirmed, "tagId", tagIds),
+        taggedFaceRefs: (_perTag: number, tagIds: string[] | null) =>
+            only(state.tagged, "tagId", tagIds),
+        performersOn: (mediaIds: string[]) => [
+            ...new Set(only(state.tagged, "mediaId", mediaIds).map((row) => row.tagId)),
+        ],
+        anchorRows: () => [...state.anchors.values()],
+        writeAnchors: (
+            changed: {
+                tagId: string;
+                items: number;
+                confirmedItems: number;
+                sharedItems: number;
+            }[],
+            removed: string[]
         ) => {
-            state.written = { anchors, matches };
+            for (const tagId of removed) state.anchors.delete(tagId);
+            for (const row of changed) state.anchors.set(row.tagId, { ...row });
         },
     },
 }));
@@ -107,7 +166,7 @@ vi.mock("@private-stock/core/server", async (original) => ({
 vi.mock("../queue.js", () => ({ enqueue: vi.fn() }));
 vi.mock("../eventLoop.js", () => ({ breathe: async (since: number) => since }));
 
-const { runFaceAnchors } = await import("./faceAnchors.js");
+const { forgetFaceReferences, runFaceAnchors } = await import("./faceAnchors.js");
 
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 
@@ -122,7 +181,11 @@ const faceOf = (who: number, wobble: number): Float32Array => {
 };
 
 /** An item with these people's faces, written to disk and registered. */
-const item = (mediaId: string, people: number[]): void => {
+const item = (
+    mediaId: string,
+    people: number[],
+    faceFor: (who: number, i: number) => Float32Array = (who, i) => faceOf(who, i + mediaId.length)
+): void => {
     const file = path.join(dataDir, faceFileRelPath(mediaId));
 
     mkdirSync(path.dirname(file), { recursive: true });
@@ -135,7 +198,7 @@ const item = (mediaId: string, people: number[]): void => {
             vectors: people.map((who, i) => ({
                 atMs: 0,
                 square: 0,
-                vector: quantize(faceOf(who, i + mediaId.length)),
+                vector: quantize(faceFor(who, i)),
             })),
             representatives: [],
         })
@@ -152,18 +215,35 @@ const tag = (tagId: string, mediaId: string, count: number): void => {
 };
 
 beforeEach(() => {
+    forgetFaceReferences();
     state.confirmed = [];
     state.tagged = [];
     state.faces = [];
-    state.written = null;
+    state.anchors = new Map();
+    state.appearances = new Map();
+    state.stale = { tags: [], items: [] };
+    state.sourced = [];
+    state.writes = [];
+    state.failWrite = false;
     state.candidates = [];
     state.trial = { right: 30, wrong: 0 };
     state.counts = { proposed: 0, right: 0, wrong: 0, applied: 0, removed: 0 };
     state.setting = {};
     state.decided = [];
-    state.appearances = [];
     state.decisions = [];
     state.batches = [];
+});
+
+/** The people of an item, as the table holds them. */
+const peopleOf = (mediaId: string) =>
+    [...state.appearances.values()].filter((person) => person.mediaId === mediaId);
+
+/** The tables as a run from nothing would leave them, ids aside: what any run must agree with. */
+const tables = () => ({
+    anchors: [...state.anchors.values()].sort((a, b) => (a.tagId < b.tagId ? -1 : 1)),
+    people: [...state.appearances.values()]
+        .map(({ id: _id, newPersonId, ...row }) => ({ ...row, newPerson: newPersonId !== null }))
+        .sort((a, b) => (a.bestFaceId < b.bestFaceId ? -1 : 1)),
 });
 
 describe("face references", () => {
@@ -172,21 +252,18 @@ describe("face references", () => {
         item("a1", [1, 5]);
         item("a2", [1, 6]);
         item("a3", [1, 7]);
-        item("stranger", [9]);
-        item("lookalike", [1]);
+        item("stranger", [9, 9]);
+        item("lookalike", [1, 1]);
         for (const id of ["a1", "a2", "a3"]) tag("jane", id, 2);
 
         await runFaceAnchors();
 
-        expect(state.written?.anchors).toEqual([
+        expect([...state.anchors.values()]).toEqual([
             { tagId: "jane", items: 3, confirmedItems: 0, sharedItems: 3 },
         ]);
-        const matched = new Map(state.written!.matches.map((m) => [m.faceId, m]));
-
-        expect(matched.get("lookalike-0")?.tagId).toBe("jane");
-        expect(matched.has("stranger-0")).toBe(false);
-        // The partners are not her.
-        expect(matched.get("a1-1")?.score ?? 0).toBeLessThan(0.3);
+        expect(peopleOf("lookalike")[0].matchTagId).toBe("jane");
+        expect(peopleOf("lookalike")[0].score).toBeGreaterThan(0.9);
+        expect(peopleOf("stranger")[0].score ?? 0).toBeLessThan(0.3);
 
         const file = decodeFaceAnchors(
             new Uint8Array(readFileSync(path.join(dataDir, FACE_ANCHORS_REL_PATH)))
@@ -205,7 +282,7 @@ describe("face references", () => {
 
         await runFaceAnchors();
 
-        const people = state.appearances.filter((person) => person.mediaId === "both");
+        const people = peopleOf("both");
 
         expect(people.map((person) => person.faceIds)).toEqual([
             ["both-0", "both-1"],
@@ -228,7 +305,7 @@ describe("face references", () => {
 
         const of = (prefix: string) =>
             new Set(
-                state.appearances
+                [...state.appearances.values()]
                     .filter((person) => person.mediaId.startsWith(prefix))
                     .map((person) => person.newPersonId)
             );
@@ -242,10 +319,9 @@ describe("face references", () => {
         // Kim is always tagged with her partner (2); people confirmed Kim's own face (3).
         item("k1", [2, 3]);
         item("k2", [2, 3]);
-        item("k3", [2]);
-        item("k4", [2]);
-        for (const id of ["k1", "k2", "k3", "k4"])
-            tag("kim", id, id === "k1" || id === "k2" ? 2 : 1);
+        item("k3", [2, 2]);
+        item("k4", [2, 2]);
+        for (const id of ["k1", "k2", "k3", "k4"]) tag("kim", id, 2);
         state.confirmed = [
             { tagId: "kim", mediaId: "k1", vectorIndex: 1 },
             { tagId: "kim", mediaId: "k2", vectorIndex: 1 },
@@ -254,8 +330,263 @@ describe("face references", () => {
         await runFaceAnchors();
 
         // Two confirmed items are not enough, and the partner's face is not borrowed to make up.
-        expect(state.written?.anchors).toEqual([]);
-        expect(state.written?.matches).toEqual([]);
+        expect([...state.anchors.values()]).toEqual([]);
+        expect([...state.appearances.values()].every((p) => p.matchTagId === null)).toBe(true);
+    });
+
+    describe("only what changed (§5f)", () => {
+        /** How many faces an item was given. */
+        const faceCount = (mediaId: string): number =>
+            state.faces.filter((face) => face.mediaId === mediaId).length;
+
+        /** A library with two performers and a few strangers, run once from nothing. */
+        const library = async (): Promise<void> => {
+            item("a1", [1, 1, 5, 5]);
+            item("a2", [1, 1, 6]);
+            item("a3", [1, 7, 7]);
+            item("b1", [2, 2]);
+            item("b2", [2, 2, 1]);
+            item("b3", [2, 2]);
+            item("x1", [3, 3]);
+            item("x2", [3, 3]);
+            item("x3", [3, 3, 4, 4]);
+            item("x4", [4, 4]);
+            for (const id of ["a1", "a2", "a3"]) tag("jane", id, faceCount(id));
+            for (const id of ["b1", "b2", "b3"]) tag("kim", id, faceCount(id));
+
+            await runFaceAnchors();
+        };
+
+        /** After a run that did only what changed, one from nothing must find nothing to do. */
+        const agreesWithAFullRun = async (): Promise<void> => {
+            const after = tables();
+
+            forgetFaceReferences();
+            state.writes = [];
+            await runFaceAnchors();
+
+            expect(tables()).toEqual(after);
+            expect(state.writes).toEqual([{ removed: [], added: [], rescored: [] }]);
+        };
+
+        it("writes nothing, and reads nothing, when nothing changed", async () => {
+            await library();
+            const before = tables();
+
+            state.writes = [];
+            state.sourced = [];
+            await runFaceAnchors();
+
+            expect(state.sourced).toEqual([[]]);
+            expect(state.writes).toEqual([]);
+            expect(tables()).toEqual(before);
+        });
+
+        it("names a new person and rescores everybody against them alone", async () => {
+            await library();
+            expect(peopleOf("x1")[0].newPersonId).not.toBeNull();
+
+            // Somebody names the stranger (3): a face of theirs confirmed on three items.
+            state.confirmed = ["x1", "x2", "x3"].map((mediaId) => ({
+                tagId: "lee",
+                mediaId,
+                vectorIndex: 0,
+            }));
+            for (const mediaId of ["x1", "x2", "x3"]) {
+                state.faces.find((face) => face.id === `${mediaId}-0`)!.decided = 1;
+            }
+            state.stale = { tags: ["lee"], items: ["x1", "x2", "x3"] };
+            state.sourced = [];
+            await runFaceAnchors();
+
+            expect(state.sourced).toEqual([["x1", "x2", "x3"]]);
+            expect(state.anchors.get("lee")).toMatchObject({ items: 3, confirmedItems: 3 });
+            expect(peopleOf("x1")[0]).toMatchObject({ matchTagId: "lee", newPersonId: null });
+            expect(peopleOf("x4")[0].matchTagId).not.toBe("lee");
+
+            await agreesWithAFullRun();
+        });
+
+        it("follows a reference that went, and came back with an item more", async () => {
+            await library();
+
+            // Kim's tag taken off one item: on two items, her reference goes.
+            state.tagged = state.tagged.filter((row) => row.mediaId !== "b3");
+            state.stale = { tags: ["kim"], items: [] };
+            await runFaceAnchors();
+
+            expect(state.anchors.has("kim")).toBe(false);
+            expect(peopleOf("b1")[0].matchTagId).toBe("jane");
+            await agreesWithAFullRun();
+
+            item("b4", [2, 2]);
+            for (const id of ["b3", "b4"]) tag("kim", id, 2);
+            state.stale = { tags: ["kim"], items: ["b4"] };
+            await runFaceAnchors();
+
+            expect(state.anchors.get("kim")).toMatchObject({ items: 4 });
+            expect(peopleOf("b1")[0].matchTagId).toBe("kim");
+            await agreesWithAFullRun();
+        });
+
+        it("rescores the people a moved reference was runner-up for", async () => {
+            await library();
+
+            // Jane gains confirmed faces of somebody else (4) as well: her centre moves, and
+            // she is runner-up for most people.
+            state.confirmed = ["x3", "x4"].map((mediaId) => ({
+                tagId: "jane",
+                mediaId,
+                vectorIndex: mediaId === "x3" ? 2 : 0,
+            }));
+            state.stale = { tags: ["jane"], items: [] };
+            await runFaceAnchors();
+
+            await agreesWithAFullRun();
+        });
+
+        it("gathers an item again when its faces change, keeping who was the same", async () => {
+            await library();
+            const kept = peopleOf("a1").map((person) => person.id);
+
+            // The stage found a third person on a2.
+            state.faces = state.faces.filter((face) => face.mediaId !== "a2");
+            item("a2", [1, 1, 6, 8, 8]);
+            state.stale = { tags: [], items: ["a2"] };
+            await runFaceAnchors();
+
+            expect(peopleOf("a1").map((person) => person.id)).toEqual(kept);
+            expect(peopleOf("a2").map((person) => person.faceIds)).toEqual([
+                ["a2-0", "a2-1"],
+                ["a2-3", "a2-4"],
+            ]);
+            await agreesWithAFullRun();
+        });
+
+        it("forgets an item that is gone", async () => {
+            await library();
+
+            state.faces = state.faces.filter((face) => face.mediaId !== "x4");
+            state.stale = { tags: [], items: ["x4"] };
+            await runFaceAnchors();
+
+            expect(peopleOf("x4")).toEqual([]);
+            await agreesWithAFullRun();
+        });
+
+        it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+            "agrees with a run from nothing after many changes, on faces that are alike (%i)",
+            async (seed) => {
+                // A seeded generator, so a failure can be run again.
+                let s = seed * 0x9e3779b9;
+                const random = (): number => {
+                    s = (s + 0x6d2b79f5) | 0;
+                    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+                    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                };
+                const gaussian = (): number =>
+                    Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
+                const identities = Array.from({ length: 10 }, () =>
+                    normaliseVector(Float32Array.from({ length: EMBED_DIMS }, gaussian))
+                );
+                // Each face its person plus noise: alike enough to gather, unlike enough to tie never.
+                const faceFor = (who: number): Float32Array =>
+                    normaliseVector(identities[who].map((value) => value + gaussian() * 0.04));
+                const performers = ["p0", "p1", "p2", "p3", "p4"];
+                let next = 0;
+                const addItem = (): string => {
+                    const mediaId = `r${seed}-${next++}`;
+                    const people = [Math.floor(random() * 10), Math.floor(random() * 10)];
+                    const faces = people.flatMap((who) =>
+                        Array.from({ length: 2 + Math.floor(random() * 2) }, () => who)
+                    );
+
+                    item(mediaId, faces, faceFor);
+                    // An item carries the performers among its people.
+                    for (const who of new Set(people)) {
+                        if (who < performers.length) {
+                            faces.forEach((_, vectorIndex) =>
+                                state.tagged.push({
+                                    tagId: performers[who],
+                                    faceId: `${mediaId}-${vectorIndex}`,
+                                    mediaId,
+                                    vectorIndex,
+                                })
+                            );
+                        }
+                    }
+
+                    return mediaId;
+                };
+
+                for (let i = 0; i < 30; i++) addItem();
+                await runFaceAnchors();
+
+                for (let round = 0; round < 12; round++) {
+                    const stale = { tags: [] as string[], items: [] as string[] };
+                    const ids = [...new Set(state.faces.map((face) => face.mediaId))];
+                    const pick = ids[Math.floor(random() * ids.length)];
+                    const action = Math.floor(random() * 4);
+
+                    if (action === 0) {
+                        // A face confirmed as somebody, rightly or not.
+                        const face = state.faces.find((f) => f.mediaId === pick)!;
+                        const tagId = performers[Math.floor(random() * performers.length)];
+
+                        state.confirmed.push({
+                            tagId,
+                            mediaId: pick,
+                            vectorIndex: face.vectorIndex,
+                        });
+                        face.decided = 1;
+                        stale.tags.push(tagId);
+                        stale.items.push(pick);
+                    } else if (action === 1) {
+                        // An item's performers taken off.
+                        stale.tags.push(
+                            ...state.tagged.filter((r) => r.mediaId === pick).map((r) => r.tagId)
+                        );
+                        state.tagged = state.tagged.filter((r) => r.mediaId !== pick);
+                    } else if (action === 2) {
+                        stale.items.push(addItem(), addItem());
+                    } else {
+                        // An item gone, and its faces and tags with it — whose triggers name
+                        // its performers.
+                        stale.tags.push(
+                            ...state.tagged.filter((r) => r.mediaId === pick).map((r) => r.tagId)
+                        );
+                        state.faces = state.faces.filter((f) => f.mediaId !== pick);
+                        state.tagged = state.tagged.filter((r) => r.mediaId !== pick);
+                        state.confirmed = state.confirmed.filter((r) => {
+                            if (r.mediaId === pick) stale.tags.push(r.tagId);
+                            return r.mediaId !== pick;
+                        });
+                        stale.items.push(pick);
+                    }
+
+                    state.stale = { tags: [...new Set(stale.tags)], items: stale.items };
+                    await runFaceAnchors();
+                }
+
+                expect(state.anchors.size).toBeGreaterThan(0);
+                await agreesWithAFullRun();
+            }
+        );
+
+        it("starts again from the tables after a run that failed", async () => {
+            await library();
+
+            state.failWrite = true;
+            state.stale = { tags: [], items: ["x4"] };
+            await expect(runFaceAnchors()).rejects.toThrow("disk full");
+
+            state.failWrite = false;
+            state.sourced = [];
+            await runFaceAnchors();
+
+            expect(state.sourced).toEqual([null]);
+        });
     });
 
     describe("tagging by itself", () => {

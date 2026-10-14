@@ -94,7 +94,9 @@ export type {
     ApplyClipBatchInput,
 } from "./tagBatchRepo.js";
 export type { DecisionRow, DecisionSurface, NewDecision } from "./faceDecisionRepo.js";
+export type { AnchorRow } from "./faceRepo.js";
 export type {
+    AppearanceScore,
     AppearanceSourceFace,
     ItemPersonRow,
     NewAppearance,

@@ -749,13 +749,16 @@ export const gatherNewPeople = (
     minItems = NEW_PERSON_MIN_ITEMS
 ): (number | null)[] => {
     const sums: Float32Array[] = [];
+    // Each gathering's direction, kept beside its sum and renewed only when somebody joins: the
+    // same numbers as normalising the sum at every comparison, which this runs often enough to feel.
+    const centres: Float32Array[] = [];
     const items: Set<string>[] = [];
     const joined = people.map((person) => {
         let best = -1;
         let bestSimilarity = near;
 
-        sums.forEach((sum, index) => {
-            const similarity = vectorSimilarity(normaliseVector(sum), person.centre);
+        centres.forEach((centre, index) => {
+            const similarity = vectorSimilarity(centre, person.centre);
 
             if (similarity >= bestSimilarity) {
                 best = index;
@@ -765,12 +768,14 @@ export const gatherNewPeople = (
 
         if (best < 0) {
             sums.push(Float32Array.from(person.centre));
+            centres.push(normaliseVector(sums[sums.length - 1]));
             items.push(new Set([person.mediaId]));
 
             return sums.length - 1;
         }
 
         sums[best] = sums[best].map((value, i) => value + person.centre[i]);
+        centres[best] = normaliseVector(sums[best]);
         items[best].add(person.mediaId);
 
         return best;

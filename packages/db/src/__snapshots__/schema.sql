@@ -212,13 +212,6 @@ CREATE TABLE "FaceDecision" (
             "undoneByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL
         );
 
-CREATE TABLE "FaceMatch" (
-            "faceId" TEXT NOT NULL PRIMARY KEY REFERENCES "Face" ("id") ON DELETE CASCADE,
-            "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
-            "score" REAL NOT NULL,
-            "second" REAL NOT NULL
-        ) WITHOUT ROWID;
-
 CREATE TABLE "FaceRefusal" (
             "faceId" TEXT NOT NULL REFERENCES "Face" ("id") ON DELETE CASCADE,
             "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
@@ -227,6 +220,12 @@ CREATE TABLE "FaceRefusal" (
             "how" TEXT CHECK("how" IN ('shown', 'item', 'inferred')),
             "decisionId" TEXT CHECK(length("decisionId") <= 64),
             PRIMARY KEY ("faceId", "tagId")
+        ) WITHOUT ROWID;
+
+CREATE TABLE "FaceStale" (
+            "kind" TEXT NOT NULL CHECK("kind" IN ('tag', 'item')),
+            "id" TEXT NOT NULL CHECK(length("id") <= 64),
+            PRIMARY KEY ("kind", "id")
         ) WITHOUT ROWID;
 
 CREATE TABLE "HomeLayout" (
@@ -1183,8 +1182,6 @@ CREATE INDEX "idx_FaceDecision_created" ON "FaceDecision" ("createdAt" DESC);
 CREATE INDEX "idx_FaceDecision_tag"
             ON "FaceDecision" ("tagId", "createdAt" DESC) WHERE "tagId" IS NOT NULL;
 
-CREATE INDEX "idx_FaceMatch_tag" ON "FaceMatch" ("tagId", "score");
-
 CREATE INDEX "idx_FaceRefusal_decision"
             ON "FaceRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
@@ -1194,7 +1191,8 @@ CREATE INDEX "idx_Face_appearance" ON "Face" ("appearanceId") WHERE "appearanceI
 
 CREATE INDEX "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
-CREATE INDEX "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
+CREATE INDEX "idx_Face_tag"
+            ON "Face" ("tagId", "mediaId", "vectorIndex") WHERE "tagId" IS NOT NULL;
 
 CREATE INDEX "idx_ItemRefusal_decision"
             ON "ItemRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
@@ -1450,6 +1448,42 @@ CREATE INDEX "idx_User_invitation"
 CREATE INDEX "idx_Variant_lastUsed"
             ON "Variant" ("lastUsedAt") WHERE "ready" = 1;
 
+CREATE TRIGGER "FaceRefusal_stale_ad" AFTER DELETE ON "FaceRefusal"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."tagId");
+        END;
+
+CREATE TRIGGER "FaceRefusal_stale_ai" AFTER INSERT ON "FaceRefusal"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."tagId");
+        END;
+
+CREATE TRIGGER "Face_stale_ad" AFTER DELETE ON "Face"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', OLD."mediaId");
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId" WHERE OLD."tagId" IS NOT NULL;
+        END;
+
+CREATE TRIGGER "Face_stale_ai" AFTER INSERT ON "Face"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', NEW."mediaId");
+        END;
+
+CREATE TRIGGER "Face_stale_au"
+            AFTER UPDATE OF "tagId", "scatteredAt", "skippedAt" ON "Face"
+            WHEN OLD."tagId" IS NOT NEW."tagId" OR OLD."scatteredAt" IS NOT NEW."scatteredAt"
+                 OR OLD."skippedAt" IS NOT NEW."skippedAt"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', NEW."mediaId");
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId"
+                 WHERE OLD."tagId" IS NOT NULL AND OLD."tagId" IS NOT NEW."tagId";
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', NEW."tagId"
+                 WHERE NEW."tagId" IS NOT NULL AND OLD."tagId" IS NOT NEW."tagId";
+        END;
+
 CREATE TRIGGER "MediaFileLink_list_ad"
         AFTER DELETE ON "MediaFileLink" BEGIN
             UPDATE "Media" SET
@@ -1643,6 +1677,32 @@ CREATE TRIGGER "MediaTag_refusal_ai"
                AND "faceId" IN (SELECT "id" FROM "Face" WHERE "mediaId" = NEW."mediaId");
         END;
 
+CREATE TRIGGER "MediaTag_stale_ad" AFTER DELETE ON "MediaTag"
+            WHEN OLD."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId"
+                 WHERE EXISTS (SELECT 1 FROM "Tag" t WHERE t."id" = OLD."tagId"
+                                  AND t."kind" = 'performer');
+        END;
+
+CREATE TRIGGER "MediaTag_stale_ai" AFTER INSERT ON "MediaTag"
+            WHEN NEW."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', NEW."tagId"
+                 WHERE EXISTS (SELECT 1 FROM "Tag" t WHERE t."id" = NEW."tagId"
+                                  AND t."kind" = 'performer');
+        END;
+
+CREATE TRIGGER "MediaTag_stale_au" AFTER UPDATE ON "MediaTag"
+            WHEN OLD."userId" IS NULL OR NEW."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', t."id" FROM "Tag" t
+                 WHERE t."id" IN (OLD."tagId", NEW."tagId") AND t."kind" = 'performer';
+        END;
+
 CREATE TRIGGER "MediaText_string_ad"
         AFTER DELETE ON "MediaText"
         BEGIN
@@ -1700,6 +1760,15 @@ CREATE TRIGGER "MediaText_string_au"
                 "stabilitySum" = "stabilitySum" + excluded."stabilitySum";
         END;
 
+CREATE TRIGGER "Media_stale_au" AFTER UPDATE OF "listable" ON "Media"
+            WHEN OLD."listable" IS NOT NEW."listable"
+                 AND EXISTS (SELECT 1 FROM "Face" f WHERE f."mediaId" = NEW."id")
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', mt."tagId" FROM "MediaTag" mt JOIN "Tag" t ON t."id" = mt."tagId"
+                 WHERE mt."mediaId" = NEW."id" AND mt."userId" IS NULL AND t."kind" = 'performer';
+        END;
+
 CREATE TRIGGER "Media_tally_au"
         AFTER UPDATE OF "listable" ON "Media"
         WHEN old."listable" IS NOT new."listable"
@@ -1721,4 +1790,27 @@ CREATE TRIGGER "Media_tally_bd"
             UPDATE "MediaStageTally" SET "count" = "count" - 1
              WHERE ("stage", "state", "version") IN (
                    SELECT "stage", "state", "version" FROM "MediaStage" WHERE "mediaId" = old."id");
+        END;
+
+CREATE TRIGGER "PerformerNoFace_stale_ad" AFTER DELETE ON "PerformerNoFace"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."tagId");
+        END;
+
+CREATE TRIGGER "PerformerNoFace_stale_ai" AFTER INSERT ON "PerformerNoFace"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."tagId");
+        END;
+
+CREATE TRIGGER "Tag_stale_ad" AFTER DELETE ON "Tag"
+            WHEN OLD."kind" = 'performer'
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."id");
+        END;
+
+CREATE TRIGGER "Tag_stale_au" AFTER UPDATE OF "kind", "ownerId" ON "Tag"
+            WHEN (OLD."kind" IS NOT NEW."kind" OR OLD."ownerId" IS NOT NEW."ownerId")
+                 AND 'performer' IN (OLD."kind", NEW."kind")
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."id");
         END;

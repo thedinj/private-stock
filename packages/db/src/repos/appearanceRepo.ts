@@ -6,8 +6,8 @@ import { activeDecision } from "./faceDecisionRepo.js";
 
 /**
  * Appearances (§5f "A person in a video"): one person in one item — what Suggestions shows and
- * asks about. Written whole by the `faceAnchors` job; read here, and decided about through their
- * faces, so nothing is lost when a run makes them anew.
+ * asks about. Kept by the `faceAnchors` job, which writes only what changed; read here, and
+ * decided about through their faces, so nothing is lost when a run makes them anew.
  */
 
 /** A face as the appearances are made from it, in item order. */
@@ -25,20 +25,21 @@ export interface AppearanceSourceFace {
 }
 
 /**
- * Every face, item by item, with what an appearance needs of it. Faces taken out of grouping as
- * "not one person", which somebody said are nobody in particular, are marked: they are scored
- * against the references like any face, but are part of no person.
+ * Every face of these items, or of every item with `null`, item by item, with what an appearance
+ * needs of it. Faces taken out of grouping as "not one person", which somebody said are nobody in
+ * particular, are marked: they are part of no person.
  */
-export const sourceFaces = (): AppearanceSourceFace[] =>
+export const sourceFaces = (mediaIds: readonly string[] | null): AppearanceSourceFace[] =>
     db
         .prepare(
             `SELECT f."id", f."mediaId", f."vectorIndex", f."eyes", f."score", m."kind",
                     f."scatteredAt" IS NOT NULL AS "scattered",
                     (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL) AS "decided"
                FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
+              ${mediaIds === null ? "" : `WHERE f."mediaId" IN (SELECT value FROM json_each(?))`}
               ORDER BY f."mediaId", f."vectorIndex"`
         )
-        .all() as AppearanceSourceFace[];
+        .all(...(mediaIds === null ? [] : [JSON.stringify(mediaIds)])) as AppearanceSourceFace[];
 
 /** One appearance as a run made it. */
 export interface NewAppearance {
@@ -54,24 +55,78 @@ export interface NewAppearance {
     newPersonId: string | null;
 }
 
-/** Replace every appearance with a run's. One transaction, so a reader never sees half of one. */
-export const replaceAll = (rows: readonly NewAppearance[]): void => {
+/** What a run may change of an appearance it keeps: its match, and its new person. */
+export type AppearanceScore = Pick<
+    NewAppearance,
+    "id" | "matchTagId" | "score" | "second" | "newPersonId"
+>;
+
+/**
+ * Every appearance as the table has it, with its faces: what a run that starts afresh compares its
+ * own to, so that a person gathered the same as before keeps their row.
+ */
+export const writtenAppearances = (): NewAppearance[] => {
+    const faces = new Map<string, string[]>();
+
+    for (const row of db
+        .prepare(
+            `SELECT "appearanceId", "id" FROM "Face" WHERE "appearanceId" IS NOT NULL
+              ORDER BY "appearanceId", "vectorIndex"`
+        )
+        .all() as { appearanceId: string; id: string }[]) {
+        const list = faces.get(row.appearanceId) ?? [];
+        list.push(row.id);
+        faces.set(row.appearanceId, list);
+    }
+
+    return (
+        db
+            .prepare(
+                `SELECT "id", "mediaId", "bestFaceId", "legible", "matchTagId", "score", "second",
+                        "newPersonId"
+                   FROM "FaceAppearance"`
+            )
+            .all() as (Omit<NewAppearance, "faceIds" | "legible"> & { legible: 1 | null })[]
+    ).map((row) => ({ ...row, legible: row.legible === 1, faceIds: faces.get(row.id) ?? [] }));
+};
+
+/**
+ * A run's changes to the appearances, in one transaction so a reader never sees half of one:
+ * those gone removed and their faces freed, those new written with their faces, and those kept
+ * given their new match and new person. An item or performer deleted while the run worked is
+ * passed over rather than failing the write; the deletion marked what it touched stale.
+ */
+export const writeAppearances = (changes: {
+    removed: readonly string[];
+    added: readonly NewAppearance[];
+    rescored: readonly AppearanceScore[];
+}): void => {
+    const free = db.prepare(`UPDATE "Face" SET "appearanceId" = NULL WHERE "appearanceId" = ?`);
+    const remove = db.prepare(`DELETE FROM "FaceAppearance" WHERE "id" = ?`);
     const insert = db.prepare(
         `INSERT INTO "FaceAppearance"
              ("id", "mediaId", "faceCount", "bestFaceId", "legible", "matchTagId", "score", "second",
               "newPersonId")
-         VALUES (@id, @mediaId, @faceCount, @bestFaceId, @legible, @matchTagId, @score, @second,
-                 @newPersonId)`
+         SELECT @id, @mediaId, @faceCount, @bestFaceId, @legible,
+                (SELECT "id" FROM "Tag" WHERE "id" = @matchTagId), @score, @second, @newPersonId
+          WHERE EXISTS (SELECT 1 FROM "Media" WHERE "id" = @mediaId)`
     );
     const member = db.prepare(`UPDATE "Face" SET "appearanceId" = ? WHERE "id" = ?`);
+    const rescore = db.prepare(
+        `UPDATE "FaceAppearance"
+            SET "matchTagId" = @matchTagId, "score" = @score, "second" = @second,
+                "newPersonId" = @newPersonId
+          WHERE "id" = @id AND (@matchTagId IS NULL
+                                OR EXISTS (SELECT 1 FROM "Tag" WHERE "id" = @matchTagId))`
+    );
 
     db.transaction(() => {
-        db.prepare(
-            `UPDATE "Face" SET "appearanceId" = NULL WHERE "appearanceId" IS NOT NULL`
-        ).run();
-        db.prepare(`DELETE FROM "FaceAppearance"`).run();
+        for (const id of changes.removed) {
+            free.run(id);
+            remove.run(id);
+        }
 
-        for (const row of rows) {
+        for (const row of changes.added) {
             insert.run({
                 id: row.id,
                 mediaId: row.mediaId,
@@ -86,6 +141,8 @@ export const replaceAll = (rows: readonly NewAppearance[]): void => {
 
             for (const faceId of row.faceIds) member.run(row.id, faceId);
         }
+
+        for (const row of changes.rescored) rescore.run(row);
     })();
 };
 

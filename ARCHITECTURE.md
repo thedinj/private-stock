@@ -2401,9 +2401,9 @@ made the same person into several rows and several people into one.
   (`APPEARANCE_MIN_VIDEO_FACES`); a photograph's single face is its person. Faces taken out of
   grouping as "not one person" are nobody's person.
 - **Scored as a person**: the centre of its faces against every reference, best match and runner
-  up kept, written whole by the `faceAnchors` run in the same pass that scores faces — each faces
-  file read once. Nothing is filed against an appearance: decisions land on its faces, so a run
-  may make them anew, with new ids, and lose nothing. The migration queues the first run.
+  up kept, by the `faceAnchors` run. Nothing is filed against an appearance: decisions land on its
+  faces, so a run may make them anew, with new ids, and lose nothing — though a person gathered
+  from the same faces as before keeps their row (§5f "Only what changed").
 
 ### Suggestions
 
@@ -2445,8 +2445,9 @@ on two items. New people asks only of strangers seen often enough to be somebody
 - **Gathered in the references run** (`gatherNewPeople`): each stranger joins the gathering whose
   centre is `NEW_PERSON_NEAR` 0.55 like them, or starts one; nothing merges by a bridging face. A
   gathering on fewer than `NEW_PERSON_MIN_ITEMS` 3 items is a face in passing and is not asked
-  about. `FaceAppearance.newPersonId` holds it, made anew each run — decisions land on faces, so
-  nothing depends on a gathering surviving. Measured: about 110 gatherings of three or more,
+  about. `FaceAppearance.newPersonId` holds it, gathered anew whenever anything changed — decisions
+  land on faces, so nothing depends on a gathering surviving; a gathering keeps the id most of its
+  people already had, so an unchanged one is not rewritten. Measured: about 110 gatherings of three or more,
   covering some 460 videos, median four items.
 - **Asked a few at a time**: up to eight of a gathering's items, one card each, all ticked; press
   one that is somebody else to leave it out. **Name** them — picked, or coined with the typo check
@@ -2621,13 +2622,14 @@ with twelve faces of them has one item's say (`performerCentre`). Its faces come
   a tags' face that is not like it — the partner they are always tagged with — is left out. Tags
   made by a face itself (`source = 'ai'`) never count: a reference would vouch for itself.
 
-A reference needs three items. The `faceAnchors` job builds them all, writes the vectors to
-`faces/anchors.bin` and what each is built from to `FaceAnchor`, then scores every face in the
-library against every reference and keeps each face's best match and the next best in `FaceMatch`.
-It runs after a grouping run that grouped something, two minutes after confirmations or refusals
-change, and once at start-up.
+A reference needs three items. The `faceAnchors` job builds them, writes the vectors to
+`faces/anchors.bin` and what each is built from to `FaceAnchor`, then scores every person in an
+item against every reference (§5f "A person in a video"). It runs once a burst of the faces stage
+has settled, a minute or two after decisions, and once at start-up. It used to keep every single
+face's best match too, in `FaceMatch`; nothing read that after Matches and "Looks like them" went,
+and the table was dropped on 2026-10-13 (below).
 
-**What reads it:**
+**What read it** (most of this went with the groups, §5f "New people"):
 
 - **The review's order and default ticks.** A row's faces are scored against the candidate's
   reference; below `FACE_DOUBT` they come first, marked with a dot, **and start unsure** — left
@@ -2649,6 +2651,49 @@ change, and once at start-up.
 - **A performer with nothing confirmed** shows the face their tagged items share, labelled as
   such, in place of "No face confirmed yet".
 - **Tagging by itself**, next.
+
+### Only what changed
+
+**A run used to redo the library** (2026-10-13, from the NAS logs). Naming one person queued a
+run that read every faces file and four whole-library statements — 15 s for the confirmed faces
+alone, a table probe each on the NAS's disks — scored all 74,000 faces against all 300 references,
+deleted and rewrote 56,000 `FaceMatch` rows and every person in every item: some 45 s of reads and
+writes on the disks the web app serves from, and every page slower while it ran. Now:
+
+- **The first run in a process does the whole library and keeps its work**: every item's face
+  vectors as stored (a byte a dimension, ~40 MB), every reference, every person with their centre
+  and their two best matches, and what the tables hold. That is the start-up run, which a deploy
+  or a restart pays once.
+- **After that a run takes what changed**, from `FaceStale`, kept by triggers so that every path
+  is covered — a press, an undo, a merge, an untag, a library switched off, a cascade from a
+  deleted item: `'item'`, an item whose faces were found again, deleted, confirmed, set aside or
+  taken out of grouping; `'tag'`, a library performer whose confirmed faces, tagged items,
+  refusals, "no single face" or tag changed. The run takes the rows as it starts; a change made
+  while it works is the next run's. Each trigger errs wide — too much costs arithmetic, too little
+  a stale score.
+- **Those items are gathered again** (their files read again), **those performers' references
+  rebuilt** — with the performers on the regathered items, whose shared face may have moved — and
+  a reference rebuilt to the same centre has not moved.
+- **Everybody is rescored only against references that moved, exactly.** A person's best match
+  and runner-up are kept; every reference that did not move scores what it did, at most the old
+  runner-up, so the new two best are among the old two and the moved. Where one of the old two is
+  among the moved, the third was never kept, and that person is ranked against everybody. Exact
+  ties go to the lower tag id, so the order references are offered in does not matter.
+- **New people are gathered again whole** when anything changed — a gathering depends on the
+  order people join it — from what is kept, which is arithmetic, not reading.
+- **Only rows that differ are written**: a person gathered from the same faces keeps their row,
+  so a run after a naming writes a few dozen rows, not the library.
+- **A failed run forgets what it kept**, and the next starts from the tables again.
+- **`FaceMatch` is gone**: nothing read it since Matches, "Looks like them" and Likely went, and
+  filling it was most of the arithmetic. `idx_Face_tag` gained `vectorIndex`, so a performer's
+  confirmed faces are read from the index alone.
+
+Measured on a synthetic library of the production's size (11,000 items, 66,000 faces, 460
+performers, 22,000 people), on the development machine: the whole library 38 s; a run with
+nothing changed 78 ms (the Would tag query); after naming a new person on 21 items 1.7 s, 57 rows
+rewritten; after confirming 20 people as the largest performer 1.3 s, 117 rows — no faces file
+read but those of the items that changed. What runs keep is about 80 MB there, nearer 65 MB on
+the production library's 12,000 people.
 
 ### Tagging by itself
 

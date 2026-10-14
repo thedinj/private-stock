@@ -64,45 +64,26 @@ const person = (mediaId: string, tagId: string, score: number, extra = {}): stri
             .all(mediaId) as { id: string }[]
     ).map((row) => row.id);
 
-    appearanceRepo.replaceAll([
-        ...existing(),
-        {
-            id: `p-${mediaId}`,
-            mediaId,
-            faceIds,
-            bestFaceId: faceIds[0],
-            legible: true,
-            matchTagId: tagId,
-            score,
-            second: 0.2,
-            ...extra,
-        },
-    ]);
+    appearanceRepo.writeAppearances({
+        removed: [],
+        rescored: [],
+        added: [
+            {
+                id: `p-${mediaId}`,
+                mediaId,
+                faceIds,
+                bestFaceId: faceIds[0],
+                legible: true,
+                matchTagId: tagId,
+                score,
+                second: 0.2,
+                ...extra,
+            },
+        ],
+    });
 
     return faceIds;
 };
-
-/** The appearances already written, so another can be added beside them. */
-const existing = (): appearanceRepo.NewAppearance[] =>
-    (
-        db.prepare(`SELECT * FROM "FaceAppearance"`).all() as {
-            id: string;
-            mediaId: string;
-            bestFaceId: string;
-            legible: number | null;
-            matchTagId: string | null;
-            score: number | null;
-            second: number | null;
-        }[]
-    ).map((row) => ({
-        ...row,
-        legible: row.legible === 1,
-        faceIds: (
-            db.prepare(`SELECT "id" FROM "Face" WHERE "appearanceId" = ?`).all(row.id) as {
-                id: string;
-            }[]
-        ).map((f) => f.id),
-    }));
 
 const suggested = (tagId = "jane"): string[] =>
     appearanceRepo

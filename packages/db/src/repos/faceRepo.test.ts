@@ -20,6 +20,7 @@ vi.mock("../db", async () => {
 
 const faceRepo = await import("./faceRepo.js");
 const tagRepo = await import("./tagRepo.js");
+const appearanceRepo = await import("./appearanceRepo.js");
 const { db: sharedDb } = await import("../db.js");
 
 const face = (vectorIndex: number, atMs: number | null, x: number, extra = {}) => ({
@@ -266,27 +267,26 @@ describe("a performer's faces", () => {
         }
     });
 
-    it("keeps references and best matches whole, and reads them back", () => {
-        setUp([
-            { id: "a", faces: 1, performers: ["jane"] },
-            { id: "b", faces: 1 },
-        ]);
-        const [fa, fb] = ["a", "b"].map((id) => faces(id)[0].id);
+    it("writes the references that changed, removes those that went, and reads them back", () => {
+        setUp([{ id: "a", faces: 1, performers: ["jane", "kim"] }]);
 
-        faceRepo.replaceAnchors(
-            [{ tagId: "jane", items: 3, confirmedItems: 0, sharedItems: 3 }],
+        faceRepo.writeAnchors(
             [
-                { faceId: fa, tagId: "jane", score: 0.7, second: 0.1 },
-                { faceId: fb, tagId: "jane", score: 0.6, second: 0.2 },
-                { faceId: "gone", tagId: "jane", score: 0.9, second: 0 },
-            ]
+                { tagId: "jane", items: 3, confirmedItems: 0, sharedItems: 3 },
+                { tagId: "kim", items: 4, confirmedItems: 4, sharedItems: 0 },
+                // Deleted while the run worked: passed over, not a failed write.
+                { tagId: "gone", items: 3, confirmedItems: 3, sharedItems: 0 },
+            ],
+            []
+        );
+        faceRepo.writeAnchors(
+            [{ tagId: "jane", items: 5, confirmedItems: 2, sharedItems: 3 }],
+            ["kim"]
         );
 
-        expect(faceRepo.anchorOf("jane")).toMatchObject({ items: 3, sharedItems: 3 });
-
-        faceRepo.replaceAnchors([], []);
-
-        expect(faceRepo.anchorOf("jane")).toBeUndefined();
+        expect(faceRepo.anchorOf("jane")).toMatchObject({ items: 5, confirmedItems: 2 });
+        expect(faceRepo.anchorOf("kim")).toBeUndefined();
+        expect(faceRepo.anchorRows().map((row) => row.tagId)).toEqual(["jane"]);
     });
 
     it("leaves a performer with no single face out of every reference, and back when undone", () => {
@@ -299,13 +299,13 @@ describe("a performer's faces", () => {
         faceRepo.setNoSingleFace("kim", true, "someone");
 
         expect(faceRepo.noSingleFace("kim")).toBeDefined();
-        expect(faceRepo.confirmedFaceRefs().some((row) => row.tagId === "kim")).toBe(false);
-        expect(faceRepo.taggedFaceRefs(10).some((row) => row.tagId === "kim")).toBe(false);
+        expect(faceRepo.confirmedFaceRefs(null).some((row) => row.tagId === "kim")).toBe(false);
+        expect(faceRepo.taggedFaceRefs(10, null).some((row) => row.tagId === "kim")).toBe(false);
 
         faceRepo.setNoSingleFace("kim", false, "someone");
 
         expect(faceRepo.noSingleFace("kim")).toBeUndefined();
-        expect(faceRepo.confirmedFaceRefs().some((row) => row.tagId === "kim")).toBe(true);
+        expect(faceRepo.confirmedFaceRefs(null).some((row) => row.tagId === "kim")).toBe(true);
     });
 
     it("finds the faces on each performer's tagged items, not refused, not made by a face", () => {
@@ -318,7 +318,7 @@ describe("a performer's faces", () => {
         ).run();
         refuse(faces("b")[1].id, "jane");
 
-        const rows = faceRepo.taggedFaceRefs(10);
+        const rows = faceRepo.taggedFaceRefs(10, null);
 
         expect(rows.map((row) => [row.tagId, row.mediaId, row.vectorIndex]).sort()).toEqual([
             ["jane", "a", 0],
@@ -545,5 +545,134 @@ describe("corrections stick", () => {
         expect(faceRepo.noSingleFace("kim")).toBeDefined();
         expect(faces("a").map((f) => f.tagId)).toEqual(["kim", null]);
         expect(refusals("a")).toEqual([{ vectorIndex: 1, tagId: "kim" }]);
+    });
+});
+
+describe('what changed, for the references run (§5f "Only what changed")', () => {
+    const taken = () => {
+        const stale = faceRepo.takeStale();
+
+        return { tags: stale.tags.sort(), items: stale.items.sort() };
+    };
+
+    beforeEach(() => {
+        faceRepo.replaceForMedia("a", [face(0, 1000, 0.1), face(1, 2000, 0.5)]);
+        db.prepare(
+            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId") VALUES ('a-jane', 'a', 'jane')`
+        ).run();
+        db.prepare(
+            `INSERT INTO "Tag" ("id", "kind", "name", "nameNorm", "updatedAt")
+             VALUES ('blue', 'colour', 'Blue', 'blue', CURRENT_TIMESTAMP)`
+        ).run();
+        faceRepo.takeStale();
+    });
+
+    it("names an item whose faces were found again, and takes it only once", () => {
+        faceRepo.replaceForMedia("b", [face(0, 1000, 0.1)]);
+
+        expect(taken()).toEqual({ tags: [], items: ["b"] });
+        expect(taken()).toEqual({ tags: [], items: [] });
+    });
+
+    it("names the item and the performer when a face is confirmed, refused or set aside", () => {
+        const [first, second] = faces("a");
+
+        confirm(first.id, "jane");
+        expect(taken()).toEqual({ tags: ["jane"], items: ["a"] });
+
+        refuse(second.id, "kim");
+        expect(taken()).toEqual({ tags: ["kim"], items: [] });
+
+        db.prepare(`UPDATE "Face" SET "skippedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`).run(
+            second.id
+        );
+        expect(taken()).toEqual({ tags: [], items: ["a"] });
+    });
+
+    it("names a library performer tagged or untagged, and nothing for other tags or own tags", () => {
+        db.prepare(
+            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId") VALUES ('b-kim', 'b', 'kim')`
+        ).run();
+        db.prepare(
+            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId") VALUES ('b-blue', 'b', 'blue')`
+        ).run();
+        db.prepare(
+            `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "userId") VALUES ('b-mine', 'b', 'jane', 'someone')`
+        ).run();
+        expect(taken()).toEqual({ tags: ["kim"], items: [] });
+
+        // Untagging takes back the faces confirmed as them, so the item is named too.
+        confirm(faces("a")[0].id, "jane");
+        faceRepo.takeStale();
+        db.prepare(`DELETE FROM "MediaTag" WHERE "id" = 'a-jane'`).run();
+        expect(taken()).toEqual({ tags: ["jane"], items: ["a"] });
+    });
+
+    it("names the performers on an item switched out of the library, and on one deleted", () => {
+        db.prepare(`UPDATE "Media" SET "listable" = 1 WHERE "id" = 'a'`).run();
+        expect(taken()).toEqual({ tags: ["jane"], items: [] });
+
+        db.prepare(`DELETE FROM "Media" WHERE "id" = 'a'`).run();
+        expect(taken()).toEqual({ tags: ["jane"], items: ["a"] });
+    });
+
+    it("names a performer said to have no single face, and one deleted", () => {
+        faceRepo.setNoSingleFace("kim", true, "someone");
+        expect(taken()).toEqual({ tags: ["kim"], items: [] });
+
+        db.prepare(`DELETE FROM "Tag" WHERE "id" = 'jane'`).run();
+        expect(taken().tags).toEqual(["jane"]);
+    });
+
+    it("is not moved by the run's own writes", () => {
+        const [first, second] = faces("a");
+
+        appearanceRepo.writeAppearances({
+            removed: [],
+            rescored: [],
+            added: [
+                {
+                    id: "p1",
+                    mediaId: "a",
+                    faceIds: [first.id, second.id],
+                    bestFaceId: first.id,
+                    legible: true,
+                    matchTagId: "jane",
+                    score: 0.7,
+                    second: 0.2,
+                    newPersonId: null,
+                },
+            ],
+        });
+        faceRepo.writeAnchors([{ tagId: "jane", items: 3, confirmedItems: 1, sharedItems: 2 }], []);
+
+        expect(taken()).toEqual({ tags: [], items: [] });
+        expect(appearanceRepo.writtenAppearances()).toEqual([
+            expect.objectContaining({ id: "p1", faceIds: [first.id, second.id], legible: true }),
+        ]);
+
+        appearanceRepo.writeAppearances({
+            removed: [],
+            added: [],
+            rescored: [{ id: "p1", matchTagId: "kim", score: 0.6, second: 0.5, newPersonId: "n1" }],
+        });
+        expect(appearanceRepo.writtenAppearances()[0]).toMatchObject({
+            matchTagId: "kim",
+            newPersonId: "n1",
+        });
+
+        appearanceRepo.writeAppearances({ removed: ["p1"], added: [], rescored: [] });
+        expect(appearanceRepo.writtenAppearances()).toEqual([]);
+        expect(faces("a").length).toBe(2);
+        expect(taken()).toEqual({ tags: [], items: [] });
+    });
+
+    it("reads the faces of the items asked for only", () => {
+        faceRepo.replaceForMedia("b", [face(0, 1000, 0.1)]);
+
+        expect(new Set(appearanceRepo.sourceFaces(["b"]).map((f) => f.mediaId))).toEqual(
+            new Set(["b"])
+        );
+        expect(appearanceRepo.sourceFaces(null).length).toBe(3);
     });
 });

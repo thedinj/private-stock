@@ -4,6 +4,7 @@ import {
     AUTO_TAG_MARGIN,
     AUTO_TAG_RULE,
     AUTO_TAG_TRIAL,
+    EMBED_DIMS,
     SETTING_KEYS,
     autoTagBraked,
     autoTagTrusted,
@@ -12,7 +13,6 @@ import {
     FACE_ANCHORS_REL_PATH,
     SAME_FACE_ACROSS_ITEMS,
     appearancesInItem,
-    bestMatch,
     gatherNewPeople,
     NEW_PERSON_EYES,
     NEW_PERSON_SCORE,
@@ -22,6 +22,7 @@ import {
     sharedFace,
     vectorSimilarity,
     type FaceAnchor,
+    type Quantized,
 } from "@private-stock/core";
 import { randomUUID } from "node:crypto";
 
@@ -36,6 +37,8 @@ import {
     settingRepo,
     tagBatchRepo,
     tagRepo,
+    type AnchorRow,
+    type AppearanceScore,
     type AppearanceSourceFace,
     type NewAppearance,
 } from "@private-stock/db";
@@ -44,27 +47,32 @@ import { writeInPlace } from "../embed/pictures.js";
 import { enqueueTagPictures } from "./tagPictures.js";
 import { breathe } from "../eventLoop.js";
 import { enqueue } from "../queue.js";
-import { dataFile, readFaceVectors } from "./faceVectorFiles.js";
+import { dataFile, readStoredFaces, unitFace } from "./faceVectorFiles.js";
 
 /**
  * The `faceAnchors` job: one face, one score (§5f).
  *
  * Every library performer's reference, built from the faces a person confirmed as them and the
- * face their tagged items share — scenes with others included — weighing each item once; then
- * every face in the library scored against every reference, its best match and the next best
- * kept. One question, "is this face them", asked one way: the review's order and default ticks,
- * "looks like them", "Likely" and, later, tagging by itself all read these.
+ * face their tagged items share — scenes with others included — weighing each item once; every
+ * item's people gathered from its faces and scored against every reference, their best match and
+ * the next best kept; the people who match nobody gathered into new people; and what the rule
+ * would tag. Suggestions, New people and Would tag all read what it writes.
  *
- * Library-wide and coalescing. Runs once a burst of faces jobs has settled, and a couple of
- * minutes after confirmations change. A few tens of seconds at a few thousand items, most of it
- * the shared-face search, which is the square of a performer's faces — hence `ITEMS_PER_TAG`.
+ * **Only what changed** (§5f "Only what changed"). The first run in a process does the whole
+ * library and keeps its work: every item's stored face vectors, every reference, every person and
+ * their two best matches, and what the tables hold. After that a run takes what the `FaceStale`
+ * triggers recorded, rebuilds only those items' people and those performers' references, and
+ * rescores everybody only against a reference that actually moved — exactly, because a person
+ * whose best match and runner-up are both unmoved can only be overtaken by a reference that did.
+ * Then it writes only rows that differ. Naming one person used to read every faces file and
+ * rewrite every row in the library; now it is a few hundred milliseconds of arithmetic.
+ *
+ * Coalescing. Runs once a burst of faces jobs has settled, a minute or two after decisions, and
+ * once at start-up, which is the run that does everything.
  */
 
 /** Items per performer the shared face is looked for in, newest first. */
 const ITEMS_PER_TAG = 60;
-
-/** Below this a best match is not kept: nothing reads a match that weak. */
-const KEEP_MATCH = 0.3;
 
 /** Queue a run, once. */
 export const enqueueFaceAnchors = (delayMs = 0): void => {
@@ -73,20 +81,6 @@ export const enqueueFaceAnchors = (delayMs = 0): void => {
         priority: 200,
         availableAt: new Date(Date.now() + delayMs),
     });
-};
-
-/** A run's small cache of faces files: performers share items, and a file is a few KB. */
-const fileCache = () => {
-    const files = new Map<string, Float32Array[] | null>();
-
-    return async (mediaId: string): Promise<Float32Array[] | null> => {
-        if (!files.has(mediaId)) {
-            if (files.size >= 256) files.delete(files.keys().next().value!);
-            files.set(mediaId, await readFaceVectors(mediaId));
-        }
-
-        return files.get(mediaId)!;
-    };
 };
 
 const byTag = <T extends { tagId: string }>(rows: readonly T[]): Map<string, T[]> => {
@@ -177,185 +171,446 @@ const applyAutoTags = (proposals: readonly { mediaId: string; tagId: string }[])
     return tagged;
 };
 
-export const runFaceAnchors = async (): Promise<void> => {
-    const vectorsOf = fileCache();
-    const confirmed = byTag(faceRepo.confirmedFaceRefs());
-    const tagged = byTag(faceRepo.taggedFaceRefs(ITEMS_PER_TAG));
-    const anchors: FaceAnchor[] = [];
-    let since = Date.now();
-    let dims = 512;
+/** One reference's inputs as the rows give them. */
+type ConfirmedRef = ReturnType<typeof faceRepo.confirmedFaceRefs>[number];
+type TaggedRef = ReturnType<typeof faceRepo.taggedFaceRefs>[number];
 
-    for (const tagId of new Set([...confirmed.keys(), ...tagged.keys()])) {
-        // Item → the vectors of theirs on it, from both sources, each face once.
-        const items = new Map<string, Map<number, Float32Array>>();
-        const confirmedItems = new Set<string>();
-        const sharedItems = new Set<string>();
-        const add = (mediaId: string, index: number, vector: Float32Array): void => {
-            const faces = items.get(mediaId) ?? new Map<number, Float32Array>();
-            faces.set(index, vector);
-            items.set(mediaId, faces);
+/**
+ * A performer's reference from the faces people confirmed as them and the face their tagged
+ * items share, each item weighed once; null below `ANCHOR_MIN_ITEMS` items. `vectorOf` is a face's
+ * unit vector, or undefined where its file could not be read.
+ */
+const buildAnchor = (
+    tagId: string,
+    confirmed: readonly ConfirmedRef[],
+    tagged: readonly TaggedRef[],
+    vectorOf: (mediaId: string, index: number) => Float32Array | undefined
+): FaceAnchor | null => {
+    // Item → the vectors of theirs on it, from both sources, each face once.
+    const items = new Map<string, Map<number, Float32Array>>();
+    const confirmedItems = new Set<string>();
+    const sharedItems = new Set<string>();
+    const add = (mediaId: string, index: number, vector: Float32Array): void => {
+        const faces = items.get(mediaId) ?? new Map<number, Float32Array>();
+        faces.set(index, vector);
+        items.set(mediaId, faces);
+    };
+
+    for (const row of confirmed) {
+        const vector = vectorOf(row.mediaId, row.vectorIndex);
+
+        if (vector) {
+            add(row.mediaId, row.vectorIndex, vector);
+            confirmedItems.add(row.mediaId);
+        }
+    }
+
+    const candidates = tagged.flatMap((row) => {
+        const vector = vectorOf(row.mediaId, row.vectorIndex);
+
+        return vector ? [{ mediaId: row.mediaId, index: row.vectorIndex, vector }] : [];
+    });
+    const shared = sharedFace(candidates);
+
+    if (shared) {
+        const members = shared.members.map((i) => candidates[i]);
+        const fromTags = performerCentre([members.map((m) => m.vector)]);
+        const fromPeople = performerCentre([...items.values()].map((faces) => [...faces.values()]));
+
+        // Where a person has said who they are, a tags' face that is somebody else — the
+        // partner they are always tagged with — is not theirs.
+        if (
+            fromTags &&
+            (!fromPeople || vectorSimilarity(fromTags, fromPeople) >= SAME_FACE_ACROSS_ITEMS)
+        ) {
+            for (const member of members) {
+                add(member.mediaId, member.index, member.vector);
+                sharedItems.add(member.mediaId);
+            }
+        }
+    }
+
+    if (items.size < ANCHOR_MIN_ITEMS) return null;
+
+    const centre = performerCentre([...items.values()].map((faces) => [...faces.values()]));
+
+    return centre
+        ? {
+              tagId,
+              items: items.size,
+              confirmedItems: confirmedItems.size,
+              sharedItems: sharedItems.size,
+              centre,
+          }
+        : null;
+};
+
+/** A person's best match among the references and the runner-up; -Infinity where there is none. */
+interface Ranked {
+    tagId: string | null;
+    score: number;
+    secondTagId: string | null;
+    second: number;
+}
+
+const UNRANKED: Ranked = { tagId: null, score: -Infinity, secondTagId: null, second: -Infinity };
+
+/**
+ * Whether a score ranks above another. An exact tie goes to the lower tag id, so a ranking does
+ * not depend on the order references were offered in — which a run that rebuilt a few of them
+ * and a run that rebuilt all of them do not share.
+ */
+const above = (score: number, tagId: string, other: number, otherTagId: string | null): boolean =>
+    score > other || (score === other && otherTagId !== null && tagId < otherTagId);
+
+/** One reference's score offered to a ranking. */
+const offer = (ranked: Ranked, tagId: string, score: number): Ranked =>
+    above(score, tagId, ranked.score, ranked.tagId)
+        ? { tagId, score, secondTagId: ranked.tagId, second: ranked.score }
+        : above(score, tagId, ranked.second, ranked.secondTagId)
+          ? { ...ranked, secondTagId: tagId, second: score }
+          : ranked;
+
+const rankAll = (centre: Float32Array, anchors: Iterable<FaceAnchor>): Ranked => {
+    let ranked = UNRANKED;
+
+    for (const anchor of anchors) {
+        ranked = offer(ranked, anchor.tagId, vectorSimilarity(anchor.centre, centre));
+    }
+
+    return ranked;
+};
+
+/**
+ * A ranking brought up to date after the references in `moved` changed, appeared or went.
+ *
+ * Exact, not an estimate: every reference that did not move scores what it did, which was at
+ * most the old runner-up, so the new best two are among the old two and the moved. Unless one of
+ * the old two is itself among the moved — then the third, which might now be second, was never
+ * kept, and the person is ranked against everybody.
+ */
+const rerank = (
+    centre: Float32Array,
+    ranked: Ranked,
+    moved: ReadonlySet<string>,
+    anchors: ReadonlyMap<string, FaceAnchor>
+): Ranked => {
+    if (
+        (ranked.tagId !== null && moved.has(ranked.tagId)) ||
+        (ranked.secondTagId !== null && moved.has(ranked.secondTagId))
+    ) {
+        return rankAll(centre, anchors.values());
+    }
+
+    let next = ranked;
+
+    for (const tagId of moved) {
+        const anchor = anchors.get(tagId);
+
+        if (anchor) next = offer(next, tagId, vectorSimilarity(anchor.centre, centre));
+    }
+
+    return next;
+};
+
+/** One person in one item, as runs keep them. */
+interface Person {
+    id: string;
+    mediaId: string;
+    faceIds: string[];
+    bestFaceId: string;
+    legible: boolean;
+    centre: Float32Array;
+    /** Clear enough and nobody decided about: a new person, if they match nobody. */
+    stranger: boolean;
+    ranked: Ranked;
+}
+
+/** What runs keep between them (§5f "Only what changed"); null until the first has run. */
+interface Kept {
+    /** Every item's face vectors as stored, by `vectorIndex`; null where unreadable. */
+    faces: Map<string, Quantized[] | null>;
+    /** Every item's people, in the order they were gathered. */
+    people: Map<string, Person[]>;
+    anchors: Map<string, FaceAnchor>;
+    /** What the tables hold, so a run writes only what differs. */
+    written: { anchors: Map<string, AnchorRow>; people: Map<string, NewAppearance> };
+}
+
+let kept: Kept | null = null;
+
+/** Forget what runs keep, so the next does the whole library: after a failure, and for tests. */
+export const forgetFaceReferences = (): void => {
+    kept = null;
+};
+
+/** Which faces a person is, in any order: how a person gathered again keeps their row. */
+const membersKey = (faceIds: readonly string[]): string => [...faceIds].sort().join(",");
+
+/** An item's people, gathered from its faces; a person gathered as before keeps their id. */
+const gatherItem = (
+    faces: readonly AppearanceSourceFace[],
+    stored: readonly Quantized[] | null,
+    before: readonly { id: string; faceIds: string[] }[]
+): Person[] => {
+    const people = faces.flatMap((face) => {
+        const vector = face.scattered === 0 ? stored?.[face.vectorIndex] : undefined;
+
+        return vector ? [{ face, vector: unitFace(vector) }] : [];
+    });
+
+    if (people.length === 0) return [];
+
+    const ids = new Map(before.map((person) => [membersKey(person.faceIds), person.id]));
+
+    return appearancesInItem(
+        people.map(({ face, vector }) => ({ vector, eyes: face.eyes, score: face.score })),
+        people[0].face.kind
+    ).map((person) => {
+        const best = people[person.best].face;
+        const faceIds = person.members.map((index) => people[index].face.id);
+
+        return {
+            id: ids.get(membersKey(faceIds)) ?? randomUUID(),
+            mediaId: best.mediaId,
+            faceIds,
+            bestFaceId: best.id,
+            legible: person.legible,
+            centre: person.centre,
+            stranger:
+                best.eyes >= NEW_PERSON_EYES &&
+                best.score >= NEW_PERSON_SCORE &&
+                person.members.every((index) => people[index].face.decided === 0),
+            ranked: UNRANKED,
         };
+    });
+};
 
-        for (const row of confirmed.get(tagId) ?? []) {
-            const vector = (await vectorsOf(row.mediaId))?.[row.vectorIndex];
+/**
+ * Each gathering of strangers given an id, kept from run to run: the one most of its people
+ * already had, unless a larger gathering took it first. Nothing depends on an id surviving —
+ * decisions land on faces — but a stable one is a row left alone.
+ */
+const newPersonIds = (
+    strangers: readonly Person[],
+    gatherings: readonly (number | null)[],
+    written: ReadonlyMap<string, NewAppearance>
+): Map<string, string> => {
+    const members = new Map<number, Person[]>();
 
-            if (vector) {
-                add(row.mediaId, row.vectorIndex, vector);
-                confirmedItems.add(row.mediaId);
-                dims = vector.length;
-            }
+    gatherings.forEach((gathering, i) => {
+        if (gathering === null) return;
+
+        const list = members.get(gathering) ?? [];
+        list.push(strangers[i]);
+        members.set(gathering, list);
+    });
+
+    const taken = new Set<string>();
+    const out = new Map<string, string>();
+
+    for (const people of [...members.values()].sort((a, b) => b.length - a.length)) {
+        const votes = new Map<string, number>();
+
+        for (const person of people) {
+            const before = written.get(person.id)?.newPersonId;
+
+            if (before && !taken.has(before)) votes.set(before, (votes.get(before) ?? 0) + 1);
         }
 
-        const candidates: { mediaId: string; index: number; vector: Float32Array }[] = [];
+        const kept = [...votes].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+        const id = kept ? kept[0] : randomUUID();
 
-        for (const row of tagged.get(tagId) ?? []) {
-            const vector = (await vectorsOf(row.mediaId))?.[row.vectorIndex];
+        taken.add(id);
+        for (const person of people) out.set(person.id, id);
+    }
 
-            if (vector) candidates.push({ mediaId: row.mediaId, index: row.vectorIndex, vector });
+    return out;
+};
+
+const round = (value: number): number => Math.round(value * 1000) / 1000;
+
+/** A person as their row: matched wherever there is any reference at all. */
+const asRow = (person: Person, newPersonId: string | null): NewAppearance => {
+    const { tagId, score, second } = person.ranked;
+
+    return {
+        id: person.id,
+        mediaId: person.mediaId,
+        faceIds: person.faceIds,
+        bestFaceId: person.bestFaceId,
+        legible: person.legible,
+        matchTagId: tagId,
+        score: tagId === null ? null : round(score),
+        second: tagId === null ? null : round(second === -Infinity ? 0 : second),
+        newPersonId,
+    };
+};
+
+const sameCentre = (a: Float32Array, b: Float32Array): boolean =>
+    a.length === b.length && a.every((value, i) => value === b[i]);
+
+const byItem = <T extends { mediaId: string }>(rows: readonly T[]): Map<string, T[]> => {
+    const out = new Map<string, T[]>();
+
+    for (const row of rows) {
+        const list = out.get(row.mediaId) ?? [];
+        list.push(row);
+        out.set(row.mediaId, list);
+    }
+
+    return out;
+};
+
+/** The rows that differ between what the tables hold and what this run made. */
+const appearanceChanges = (
+    written: ReadonlyMap<string, NewAppearance>,
+    rows: ReadonlyMap<string, NewAppearance>
+): { removed: string[]; added: NewAppearance[]; rescored: AppearanceScore[] } => {
+    const removed = new Set<string>();
+    const added: NewAppearance[] = [];
+    const rescored: AppearanceScore[] = [];
+
+    // A row kept by id is the same faces, so the same best face; checked anyway, and remade
+    // whole if not, since only a match and a new person are ever updated in place.
+    for (const [id, before] of written) {
+        const row = rows.get(id);
+
+        if (!row || row.bestFaceId !== before.bestFaceId || row.legible !== before.legible) {
+            removed.add(id);
+        }
+    }
+
+    for (const row of rows.values()) {
+        const before = written.get(row.id);
+
+        if (!before || removed.has(row.id)) {
+            added.push(row);
+        } else if (
+            row.matchTagId !== before.matchTagId ||
+            row.score !== before.score ||
+            row.second !== before.second ||
+            row.newPersonId !== before.newPersonId
+        ) {
+            const { id, matchTagId, score, second, newPersonId } = row;
+            rescored.push({ id, matchTagId, score, second, newPersonId });
+        }
+    }
+
+    return { removed: [...removed], added, rescored };
+};
+
+const pass = async (): Promise<void> => {
+    const started = Date.now();
+    const full = kept === null;
+    const stale = faceRepo.takeStale();
+    const state: Kept = kept ?? {
+        faces: new Map(),
+        people: new Map(),
+        anchors: new Map(),
+        written: {
+            anchors: new Map(faceRepo.anchorRows().map((row) => [row.tagId, row])),
+            people: new Map(appearanceRepo.writtenAppearances().map((row) => [row.id, row])),
+        },
+    };
+    // The people already written, by item: what a first run's people keep their ids from.
+    const writtenByItem = full ? byItem([...state.written.people.values()]) : null;
+    let since = Date.now();
+
+    kept = state;
+
+    // Items whose faces changed — every item, at first: vectors read again, people gathered again.
+    const sources = byItem(appearanceRepo.sourceFaces(full ? null : stale.items));
+    const regathered = new Set<string>();
+    // Anything else kept that changed: an item gone, a reference's counts.
+    let altered = false;
+
+    for (const mediaId of full ? [...sources.keys()] : stale.items) {
+        const faces = sources.get(mediaId);
+
+        if (!faces) {
+            state.faces.delete(mediaId);
+            altered = state.people.delete(mediaId) || altered;
+            continue;
         }
 
-        const shared = sharedFace(candidates);
+        const stored = await readStoredFaces(mediaId);
+        const before = state.people.get(mediaId) ?? writtenByItem?.get(mediaId) ?? [];
 
-        if (shared) {
-            const members = shared.members.map((i) => candidates[i]);
-            const fromTags = performerCentre([members.map((m) => m.vector)]);
-            const fromPeople = performerCentre(
-                [...items.values()].map((faces) => [...faces.values()])
-            );
+        state.faces.set(mediaId, stored);
+        state.people.set(mediaId, gatherItem(faces, stored, before));
+        regathered.add(mediaId);
+        since = await breathe(since);
+    }
 
-            // Where a person has said who they are, a tags' face that is somebody else — the
-            // partner they are always tagged with — is not theirs.
-            if (
-                fromTags &&
-                (!fromPeople || vectorSimilarity(fromTags, fromPeople) >= SAME_FACE_ACROSS_ITEMS)
+    // References that may have moved: every one at first; after that, those the triggers named
+    // and those of the performers on items whose faces just changed.
+    const tagIds = full
+        ? null
+        : [...new Set([...stale.tags, ...faceRepo.performersOn(stale.items)])];
+    const confirmed = byTag(tagIds?.length === 0 ? [] : faceRepo.confirmedFaceRefs(tagIds));
+    const tagged = byTag(
+        tagIds?.length === 0 ? [] : faceRepo.taggedFaceRefs(ITEMS_PER_TAG, tagIds)
+    );
+    const vectorOf = (mediaId: string, index: number): Float32Array | undefined => {
+        const vector = state.faces.get(mediaId)?.[index];
+
+        return vector ? unitFace(vector) : undefined;
+    };
+    const rebuilt = tagIds ?? [...new Set([...confirmed.keys(), ...tagged.keys()])];
+    const moved = new Set<string>();
+
+    for (const tagId of rebuilt) {
+        const anchor = buildAnchor(
+            tagId,
+            confirmed.get(tagId) ?? [],
+            tagged.get(tagId) ?? [],
+            vectorOf
+        );
+        const before = state.anchors.get(tagId);
+
+        if (anchor === null) {
+            if (state.anchors.delete(tagId)) moved.add(tagId);
+        } else {
+            if (!before || !sameCentre(before.centre, anchor.centre)) moved.add(tagId);
+            else if (
+                before.items !== anchor.items ||
+                before.confirmedItems !== anchor.confirmedItems ||
+                before.sharedItems !== anchor.sharedItems
             ) {
-                for (const member of members) {
-                    add(member.mediaId, member.index, member.vector);
-                    sharedItems.add(member.mediaId);
-                }
+                altered = true;
             }
-        }
 
-        if (items.size >= ANCHOR_MIN_ITEMS) {
-            const centre = performerCentre([...items.values()].map((faces) => [...faces.values()]));
-
-            if (centre) {
-                anchors.push({
-                    tagId,
-                    items: items.size,
-                    confirmedItems: confirmedItems.size,
-                    sharedItems: sharedItems.size,
-                    centre,
-                });
-            }
+            state.anchors.set(tagId, anchor);
         }
 
         since = await breathe(since);
     }
 
-    // Every face against every reference; and every item's people, scored the same way
-    // (§5f "A person in a video") — one pass, so each faces file is read once.
-    const matches: { faceId: string; tagId: string; score: number; second: number }[] = [];
-    const appearances: NewAppearance[] = [];
-    // Who might be a new person (§5f "New people"): beside `appearances`, by index.
-    const strangers: { index: number; centre: Float32Array; mediaId: string }[] = [];
-    const round = (value: number): number => Math.round(value * 1000) / 1000;
-
-    const scoreItem = (
-        faces: readonly AppearanceSourceFace[],
-        vectors: Float32Array[] | null
-    ): void => {
-        const readable = faces.flatMap((face) => {
-            const vector = vectors?.[face.vectorIndex];
-
-            return vector ? [{ face, vector }] : [];
-        });
-
-        for (const { face, vector } of readable) {
-            const match = anchors.length > 0 ? bestMatch(vector, anchors) : null;
-
-            if (match && match.score >= KEEP_MATCH) {
-                matches.push({
-                    faceId: face.id,
-                    tagId: match.tagId,
-                    score: round(match.score),
-                    second: round(match.second),
-                });
+    // Everybody gathered again is ranked against every reference; everybody else only against
+    // the references that moved.
+    for (const [mediaId, people] of state.people) {
+        if (regathered.has(mediaId)) {
+            for (const person of people) {
+                person.ranked = rankAll(person.centre, state.anchors.values());
             }
-        }
-
-        const people = readable.filter(({ face }) => face.scattered === 0);
-
-        if (people.length === 0) return;
-
-        for (const person of appearancesInItem(
-            people.map(({ face, vector }) => ({ vector, eyes: face.eyes, score: face.score })),
-            people[0].face.kind
-        )) {
-            const match = anchors.length > 0 ? bestMatch(person.centre, anchors) : null;
-            const best = people[person.best].face;
-
-            if (
-                (!match || match.score < NEW_PERSON_UNMATCHED) &&
-                best.eyes >= NEW_PERSON_EYES &&
-                best.score >= NEW_PERSON_SCORE &&
-                person.members.every((index) => people[index].face.decided === 0)
-            ) {
-                strangers.push({
-                    index: appearances.length,
-                    centre: person.centre,
-                    mediaId: best.mediaId,
-                });
+        } else if (moved.size > 0) {
+            for (const person of people) {
+                person.ranked = rerank(person.centre, person.ranked, moved, state.anchors);
             }
-
-            appearances.push({
-                id: randomUUID(),
-                mediaId: people[0].face.mediaId,
-                faceIds: person.members.map((index) => people[index].face.id),
-                bestFaceId: people[person.best].face.id,
-                legible: person.legible,
-                matchTagId: match?.tagId ?? null,
-                score: match ? round(match.score) : null,
-                second: match ? round(match.second) : null,
-                newPersonId: null,
-            });
-        }
-    };
-
-    let item: AppearanceSourceFace[] = [];
-
-    for (const face of [...appearanceRepo.sourceFaces(), null]) {
-        if (item.length > 0 && (face === null || face.mediaId !== item[0].mediaId)) {
-            scoreItem(item, await readFaceVectors(item[0].mediaId));
-            item = [];
-            since = await breathe(since);
+        } else {
+            continue;
         }
 
-        if (face) item.push(face);
+        since = await breathe(since);
     }
 
-    await writeInPlace(dataFile(FACE_ANCHORS_REL_PATH), encodeFaceAnchors(dims, anchors));
-    faceRepo.replaceAnchors(
-        anchors.map(({ tagId, items, confirmedItems, sharedItems }) => ({
-            tagId,
-            items,
-            confirmedItems,
-            sharedItems,
-        })),
-        matches
-    );
-    // New people: those who match nobody, gathered; a gathering on too few items stays nobody's.
-    const gatheringIds = new Map<number, string>();
+    const changed = full || altered || regathered.size > 0 || moved.size > 0;
 
-    gatherNewPeople(strangers).forEach((gathering, i) => {
-        if (gathering === null) return;
-        if (!gatheringIds.has(gathering)) gatheringIds.set(gathering, randomUUID());
-        appearances[strangers[i].index].newPersonId = gatheringIds.get(gathering)!;
-    });
+    const written = changed ? await writeChanges(state, full, moved) : "nothing to write";
 
-    appearanceRepo.replaceAll(appearances);
-
-    // What the rule would tag now, for the "Would tag" list (§5f "Tagging by itself").
+    // What the rule would tag now, for the "Would tag" list (§5f "Tagging by itself"). Every run,
+    // since what it leaves out — items tagged, refused, checked — changes without any face doing.
     const proposals = faceAutoTagRepo.candidates(AUTO_TAG_LINE, AUTO_TAG_MARGIN).filter((row) =>
         autoTags({
             kind: row.kind,
@@ -374,12 +629,125 @@ export const runFaceAnchors = async (): Promise<void> => {
         enqueueTagPictures();
     }
 
+    const anchors = [...state.anchors.values()];
+
     console.log(
-        `Face references: ${anchors.length} performer(s), ` +
+        `Face references, ${full ? "the whole library" : "what changed"}, ` +
+            `${Date.now() - started} ms: ${regathered.size} item(s) gathered, ` +
+            `${rebuilt.length} reference(s) rebuilt, ${moved.size} moved; ` +
+            `${anchors.length} performer(s), ` +
             `${anchors.filter((a) => a.confirmedItems === 0).length} from their tags alone; ` +
-            `${matches.length} face(s) matched; ${appearances.length} person(s) in items, ` +
-            `${gatheringIds.size} new person(s); ` +
+            `${written}; ` +
             `${proposals.length} item(s) the rule would tag` +
             (applied > 0 ? `, ${applied} tagged` : "")
     );
+};
+
+/**
+ * New people gathered again, and every row that differs from the tables written. Only when
+ * something was gathered or a reference moved: otherwise nothing kept has changed, and neither
+ * can anything made from it.
+ */
+const writeChanges = async (
+    state: Kept,
+    full: boolean,
+    moved: ReadonlySet<string>
+): Promise<string> => {
+    // New people: those who match nobody, gathered in item order across the whole library. A
+    // gathering depends on the order people join it, so it is made whole — from what is kept,
+    // which is arithmetic, not reading.
+    const strangers: Person[] = [];
+
+    for (const mediaId of [...state.people.keys()].sort()) {
+        for (const person of state.people.get(mediaId)!) {
+            if (
+                person.stranger &&
+                (person.ranked.tagId === null || person.ranked.score < NEW_PERSON_UNMATCHED)
+            ) {
+                strangers.push(person);
+            }
+        }
+    }
+
+    const newPersonOf = newPersonIds(
+        strangers,
+        gatherNewPeople(strangers.map(({ centre, mediaId }) => ({ centre, mediaId }))),
+        state.written.people
+    );
+
+    // What differs from the tables, and only that, written.
+    const rows = new Map<string, NewAppearance>();
+
+    for (const people of state.people.values()) {
+        for (const person of people) {
+            rows.set(person.id, asRow(person, newPersonOf.get(person.id) ?? null));
+        }
+    }
+
+    const changes = appearanceChanges(state.written.people, rows);
+    const anchors = [...state.anchors.values()];
+    const anchorRows = anchors.map(({ tagId, items, confirmedItems, sharedItems }) => ({
+        tagId,
+        items,
+        confirmedItems,
+        sharedItems,
+    }));
+    const changedAnchors = anchorRows.filter((row) => {
+        const before = state.written.anchors.get(row.tagId);
+
+        return (
+            !before ||
+            before.items !== row.items ||
+            before.confirmedItems !== row.confirmedItems ||
+            before.sharedItems !== row.sharedItems
+        );
+    });
+    const goneAnchors = [...state.written.anchors.keys()].filter(
+        (tagId) => !state.anchors.has(tagId)
+    );
+
+    if (full || moved.size > 0 || changedAnchors.length > 0 || goneAnchors.length > 0) {
+        await writeInPlace(
+            dataFile(FACE_ANCHORS_REL_PATH),
+            encodeFaceAnchors(anchors[0]?.centre.length ?? EMBED_DIMS, anchors)
+        );
+    }
+
+    db.transaction(() => {
+        faceRepo.writeAnchors(changedAnchors, goneAnchors);
+        appearanceRepo.writeAppearances(changes);
+    })();
+    state.written = {
+        anchors: new Map(anchorRows.map((row) => [row.tagId, row])),
+        people: rows,
+    };
+
+    return (
+        `${rows.size} person(s) in items, ${changes.added.length} written, ` +
+        `${changes.removed.length} removed, ${changes.rescored.length} rescored; ` +
+        `${new Set(newPersonOf.values()).size} new person(s)`
+    );
+};
+
+/** One run at a time: each builds on what the last kept. */
+let inFlight: Promise<void> = Promise.resolve();
+
+export const runFaceAnchors = async (): Promise<void> => {
+    const previous = inFlight;
+    let done = (): void => undefined;
+
+    inFlight = new Promise<void>((resolve) => {
+        done = resolve;
+    });
+
+    try {
+        await previous;
+        await pass();
+    } catch (error) {
+        // What was kept may be half brought up to date: the next run starts from the tables.
+        kept = null;
+        throw error;
+    } finally {
+        done();
+    }
 };

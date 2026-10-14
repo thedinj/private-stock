@@ -1233,17 +1233,20 @@ export function initializeDatabase(db: Database): void {
             UNIQUE ("mediaId", "vectorIndex")
         );
 
-        CREATE INDEX IF NOT EXISTS "idx_Face_tag" ON "Face" ("tagId", "mediaId") WHERE "tagId" IS NOT NULL;
+        -- Covering for a performer's confirmed faces, which the references run reads (§5f).
+        CREATE INDEX IF NOT EXISTS "idx_Face_tag"
+            ON "Face" ("tagId", "mediaId", "vectorIndex") WHERE "tagId" IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS "idx_Face_decision" ON "Face" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS "idx_Face_appearance" ON "Face" ("appearanceId") WHERE "appearanceId" IS NOT NULL;
 
         -- One person in one item (§5f "A person in a video"): what Suggestions shows and asks
-        -- about. Written whole by the faceAnchors job each run, as "FaceMatch" is: the item's
-        -- faces gathered at APPEARANCE_NEAR ("Face"."appearanceId", a plain column), the clearest
-        -- of them, whether it is legible, and their centre scored against every reference. Nothing
-        -- is filed against one -- decisions land on its faces -- so a run may make them anew.
+        -- about. Kept by the faceAnchors job, which gathers again only the items whose faces
+        -- changed and rescores only against the references that moved: the item's faces gathered
+        -- at APPEARANCE_NEAR ("Face"."appearanceId", a plain column), the clearest of them,
+        -- whether it is legible, and their centre scored against every reference. Nothing is
+        -- filed against one -- decisions land on its faces -- so a run may make them anew.
         -- "newPersonId": the gathering of people who match nobody known it is part of (§5f "New
         -- people"), null where none worth asking about.
         CREATE TABLE IF NOT EXISTS "FaceAppearance" (
@@ -1303,9 +1306,9 @@ export function initializeDatabase(db: Database): void {
             "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) WITHOUT ROWID;
 
-        -- One face, one score (§5f): every library performer's face reference — what it is built
-        -- from; the vectors are in faces/anchors.bin — and every face's best match among them and
-        -- the next best. Both written whole by the faceAnchors job.
+        -- One face, one score (§5f): every library performer's face reference -- what it is built
+        -- from; the vectors are in faces/anchors.bin. Kept by the faceAnchors job, which rewrites
+        -- only the references that moved.
         CREATE TABLE IF NOT EXISTS "FaceAnchor" (
             "tagId" TEXT NOT NULL PRIMARY KEY REFERENCES "Tag" ("id") ON DELETE CASCADE,
             "items" INTEGER NOT NULL,
@@ -1314,14 +1317,110 @@ export function initializeDatabase(db: Database): void {
             "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS "FaceMatch" (
-            "faceId" TEXT NOT NULL PRIMARY KEY REFERENCES "Face" ("id") ON DELETE CASCADE,
-            "tagId" TEXT NOT NULL REFERENCES "Tag" ("id") ON DELETE CASCADE,
-            "score" REAL NOT NULL,
-            "second" REAL NOT NULL
+        -- What the references run must look at again (§5f "Only what changed"), kept by the
+        -- triggers below whichever path made the change: 'item', an item whose faces were found
+        -- again, deleted, confirmed, set aside or taken out of grouping; 'tag', a library
+        -- performer whose reference may have moved. The run takes the rows as it starts. Each
+        -- trigger errs wide: too much costs arithmetic, too little a stale score.
+        CREATE TABLE IF NOT EXISTS "FaceStale" (
+            "kind" TEXT NOT NULL CHECK("kind" IN ('tag', 'item')),
+            "id" TEXT NOT NULL CHECK(length("id") <= 64),
+            PRIMARY KEY ("kind", "id")
         ) WITHOUT ROWID;
 
-        CREATE INDEX IF NOT EXISTS "idx_FaceMatch_tag" ON "FaceMatch" ("tagId", "score");
+        CREATE TRIGGER IF NOT EXISTS "Face_stale_ai" AFTER INSERT ON "Face"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', NEW."mediaId");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "Face_stale_ad" AFTER DELETE ON "Face"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', OLD."mediaId");
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId" WHERE OLD."tagId" IS NOT NULL;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "Face_stale_au"
+            AFTER UPDATE OF "tagId", "scatteredAt", "skippedAt" ON "Face"
+            WHEN OLD."tagId" IS NOT NEW."tagId" OR OLD."scatteredAt" IS NOT NEW."scatteredAt"
+                 OR OLD."skippedAt" IS NOT NEW."skippedAt"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('item', NEW."mediaId");
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId"
+                 WHERE OLD."tagId" IS NOT NULL AND OLD."tagId" IS NOT NEW."tagId";
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', NEW."tagId"
+                 WHERE NEW."tagId" IS NOT NULL AND OLD."tagId" IS NOT NEW."tagId";
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "MediaTag_stale_ai" AFTER INSERT ON "MediaTag"
+            WHEN NEW."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', NEW."tagId"
+                 WHERE EXISTS (SELECT 1 FROM "Tag" t WHERE t."id" = NEW."tagId"
+                                  AND t."kind" = 'performer');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "MediaTag_stale_ad" AFTER DELETE ON "MediaTag"
+            WHEN OLD."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', OLD."tagId"
+                 WHERE EXISTS (SELECT 1 FROM "Tag" t WHERE t."id" = OLD."tagId"
+                                  AND t."kind" = 'performer');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "MediaTag_stale_au" AFTER UPDATE ON "MediaTag"
+            WHEN OLD."userId" IS NULL OR NEW."userId" IS NULL
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', t."id" FROM "Tag" t
+                 WHERE t."id" IN (OLD."tagId", NEW."tagId") AND t."kind" = 'performer';
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "FaceRefusal_stale_ai" AFTER INSERT ON "FaceRefusal"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."tagId");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "FaceRefusal_stale_ad" AFTER DELETE ON "FaceRefusal"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."tagId");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "PerformerNoFace_stale_ai" AFTER INSERT ON "PerformerNoFace"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."tagId");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "PerformerNoFace_stale_ad" AFTER DELETE ON "PerformerNoFace"
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."tagId");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "Tag_stale_au" AFTER UPDATE OF "kind", "ownerId" ON "Tag"
+            WHEN (OLD."kind" IS NOT NEW."kind" OR OLD."ownerId" IS NOT NEW."ownerId")
+                 AND 'performer' IN (OLD."kind", NEW."kind")
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', NEW."id");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "Tag_stale_ad" AFTER DELETE ON "Tag"
+            WHEN OLD."kind" = 'performer'
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id") VALUES ('tag', OLD."id");
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS "Media_stale_au" AFTER UPDATE OF "listable" ON "Media"
+            WHEN OLD."listable" IS NOT NEW."listable"
+                 AND EXISTS (SELECT 1 FROM "Face" f WHERE f."mediaId" = NEW."id")
+        BEGIN
+            INSERT OR IGNORE INTO "FaceStale" ("kind", "id")
+                SELECT 'tag', mt."tagId" FROM "MediaTag" mt JOIN "Tag" t ON t."id" = mt."tagId"
+                 WHERE mt."mediaId" = NEW."id" AND mt."userId" IS NULL AND t."kind" = 'performer';
+        END;
 
         -- Tagging by itself (§5f): what the rule would tag, and what became of it — 'proposed'
         -- (rewritten every run), 'right' or 'wrong' (checked in the "Would tag" list), 'applied',
