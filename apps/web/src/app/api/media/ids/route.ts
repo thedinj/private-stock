@@ -5,7 +5,7 @@ import { mediaQuerySchema } from "@private-stock/core";
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { prepareLook } from "@/lib/services/lookService";
-import { listMediaIdsPage } from "@/lib/services/mediaService";
+import { listMediaIdsPageOffThread } from "@/lib/services/mediaService";
 import { overlayForRequest } from "@/lib/services/savedFilterService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -34,7 +34,12 @@ export async function GET(request: Request) {
 
         // Resolved exactly as the page would be, or the order is a different set's (§6).
         return NextResponse.json(
-            listMediaIdsPage(query, auth, overlayForRequest(filter ?? null, query, auth), true)
+            await listMediaIdsPageOffThread(
+                query,
+                auth,
+                overlayForRequest(filter ?? null, query, auth),
+                true
+            )
         );
     } catch (error) {
         return toErrorResponse(error, request);

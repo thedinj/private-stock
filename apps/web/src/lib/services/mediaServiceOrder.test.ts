@@ -13,37 +13,50 @@ import type { AuthContext } from "../auth/withAuth";
 const calls: { fn: string; query: MediaQuery }[] = [];
 let walks = 0;
 
-vi.mock("@private-stock/db", () => ({
-    db: { transaction: <T>(fn: () => T) => Object.assign(fn, { deferred: fn }) },
-    mediaRepo: {
-        listMedia: (query: MediaQuery) => {
-            calls.push({ fn: "listMedia", query });
+vi.mock("@private-stock/db", async () => {
+    const { readPlanMock } = await import("./readPlanMock");
+    const repos = {
+        mediaRepo: {
+            listMedia: (query: MediaQuery) => {
+                calls.push({ fn: "listMedia", query });
 
-            return { rows: [], page: query.page, pageSize: query.limit, hasMore: false };
-        },
-        listMediaIdsPage: (query: MediaQuery) => {
-            calls.push({ fn: "listMediaIdsPage", query });
+                return { rows: [], page: query.page, pageSize: query.limit, hasMore: false };
+            },
+            listMediaIdsPage: (query: MediaQuery) => {
+                calls.push({ fn: "listMediaIdsPage", query });
 
-            return { ids: [], page: query.page, pageSize: query.limit, hasMore: false };
-        },
-        countMedia: (query: MediaQuery) => {
-            calls.push({ fn: "countMedia", query });
+                return { ids: [], page: query.page, pageSize: query.limit, hasMore: false };
+            },
+            countMedia: (query: MediaQuery) => {
+                calls.push({ fn: "countMedia", query });
 
-            return 0;
-        },
-        newestRowid: () => 1,
-        orderedRowids: (query: MediaQuery) => {
-            walks += 1;
-            calls.push({ fn: "orderedRowids", query });
+                return 0;
+            },
+            newestRowid: () => 1,
+            orderedRowids: (query: MediaQuery) => {
+                walks += 1;
+                calls.push({ fn: "orderedRowids", query });
 
-            return [5, 4, 3, 2, 1];
+                return [5, 4, 3, 2, 1];
+            },
+            stillMatching: (
+                _query: MediaQuery,
+                _user: string,
+                _roots: string[],
+                rowids: number[]
+            ) => rowids.map((rowid) => ({ rowid, id: `m${rowid}` })),
+            listByIds: (ids: string[]) =>
+                ids.map((id) => ({ id, kind: "video", relPath: "a.mp4" })),
         },
-        stillMatching: (_query: MediaQuery, _user: string, _roots: string[], rowids: number[]) =>
-            rowids.map((rowid) => ({ rowid, id: `m${rowid}` })),
-        listByIds: (ids: string[]) => ids.map((id) => ({ id, kind: "video", relPath: "a.mp4" })),
-    },
-    tagRepo: { listForMediaIds: () => [] },
-}));
+        tagRepo: { listForMediaIds: () => [] },
+    };
+
+    return {
+        db: { transaction: <T>(fn: () => T) => Object.assign(fn, { deferred: fn }) },
+        ...repos,
+        ...(await readPlanMock(repos)),
+    };
+});
 
 const { countMedia, listMedia, listMediaIdsPage } = await import("./mediaService");
 const { forgetKeptOrders } = await import("./keptOrders");

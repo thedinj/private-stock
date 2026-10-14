@@ -44,10 +44,13 @@ import {
     db,
     jobRepo,
     mediaRepo,
+    read,
+    runOffThread,
     searchRepo,
     tagRepo,
     userTagRepo,
     type FacetScope,
+    type ReadPlan,
 } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
@@ -1008,7 +1011,7 @@ const PROFILE_SHELF = 12;
  * emptied. Deferred, never the web default `IMMEDIATE` -- a read must not take the write lock.
  * Nested in a caller's transaction it is a savepoint and changes nothing.
  */
-const inOneSnapshot = <T>(read: () => T): T => db.transaction(read).deferred();
+const inOneSnapshot = <T>(run: () => T): T => db.transaction(run).deferred();
 
 /** The tag, if this viewer may see it; "not found" otherwise, for every path that opens one. */
 const visibleTag = (tagId: string, auth: AuthContext): tagRepo.TagRow => {
@@ -1126,7 +1129,7 @@ export const getTagCompanions = (
  * the vocabulary costs, and the counts are asked of exactly the values about to be drawn.
  * Both are exact; neither samples anything.
  */
-export const getFacets = (
+function* facetsReads(
     query: Parameters<typeof mediaRepo.facetCountsForTags>[0],
     auth: AuthContext,
     perFacetLimit = 20,
@@ -1148,7 +1151,7 @@ export const getFacets = (
     search?: string,
     /** Whose ratings the query asks about; see `savedFilterService.overlayForRequest`. */
     overlayUserId?: string
-): { facets: Facet[]; referencedTags: Record<string, ReferencedTag> } => {
+): ReadPlan<{ facets: Facet[]; referencedTags: Record<string, ReferencedTag> }> {
     /**
      * Every tag the filter names, in any role -- with, without, or inside a group.
      *
@@ -1202,7 +1205,7 @@ export const getFacets = (
         }),
     ]);
 
-    const facetsFor = (scope: FacetScope): Facet[] => {
+    function* facetsFor(scope: FacetScope): ReadPlan<Facet[]> {
         const owner = writesTo(scope, auth);
 
         /**
@@ -1211,7 +1214,7 @@ export const getFacets = (
          * Two reads to fetch two depths would pay for the vocabulary scan twice to save a few
          * hundred rows inside one process.
          */
-        const values = tagRepo.listFacetValues({
+        const values = yield* read("listFacetValues", {
             owner,
             search,
             limit: expanded.length > 0 ? FACET_EXPANDED_LIMIT : perFacetLimit,
@@ -1234,26 +1237,29 @@ export const getFacets = (
          * group or an exclusion of its own. At most a handful of extra statements, each
          * proportional to its facet's tagging rather than to the library (§20).
          */
-        const counted = [
-            ...mediaRepo.facetCountsForTags(
-                query,
-                auth.userId,
-                auth.accessibleRootIds,
-                wanted.filter((tagId) => !ownCountKinds.has(kindOfWanted(tagId) ?? "")),
-                scope,
-                overlayUserId
-            ),
-            ...[...ownCountKinds].flatMap((kind) =>
-                mediaRepo.facetCountsForTags(
+        const counted = yield* read(
+            "facetCountsForTags",
+            query,
+            auth.userId,
+            auth.accessibleRootIds,
+            wanted.filter((tagId) => !ownCountKinds.has(kindOfWanted(tagId) ?? "")),
+            scope,
+            overlayUserId
+        );
+
+        for (const kind of ownCountKinds) {
+            counted.push(
+                ...(yield* read(
+                    "facetCountsForTags",
                     queryForFacet(kind),
                     auth.userId,
                     auth.accessibleRootIds,
                     wanted.filter((tagId) => kindOfWanted(tagId) === kind),
                     scope,
                     overlayUserId
-                )
-            ),
-        ];
+                ))
+            );
+        }
         const countOf = new Map(counted.map((row) => [row.tagId, row.count]));
 
         /**
@@ -1278,11 +1284,11 @@ export const getFacets = (
             selectedTagIds,
             order: listFacetKinds(auth),
         });
-    };
+    }
 
     // Public first. The shared vocabulary is what most filtering is done with, and the order
     // of the two groups is the only ranking a panel of sections has.
-    const facets = [...facetsFor("public"), ...facetsFor("private")];
+    const facets = [...(yield* facetsFor("public")), ...(yield* facetsFor("private"))];
 
     /**
      * The Favourites ♥ chip, once per kind, on the first section of it drawn (§14e).
@@ -1296,7 +1302,8 @@ export const getFacets = (
         if (placed.has(facet.kind)) continue;
 
         placed.add(facet.kind);
-        facet.favorites = mediaRepo.facetCountForFavorites(
+        facet.favorites = yield* read(
+            "facetCountForFavorites",
             queryForFacet(facet.kind),
             auth.userId,
             auth.accessibleRootIds,
@@ -1306,7 +1313,18 @@ export const getFacets = (
     }
 
     return { facets, referencedTags };
-};
+}
+
+/**
+ * `facetsReads` with its statements on a reader thread (§20 "Reads off the thread").
+ *
+ * The filter panel's counts are the slowest reads a page makes -- seconds, on the NAS, before
+ * the tag walk was covered -- and the panel is the only caller, so there is no synchronous twin.
+ */
+export const getFacets = (
+    ...args: Parameters<typeof facetsReads>
+): Promise<{ facets: Facet[]; referencedTags: Record<string, ReferencedTag> }> =>
+    runOffThread(facetsReads(...args));
 
 /**
  * Names for the tag ids a filter carries, as far as this viewer may see them (§14e).

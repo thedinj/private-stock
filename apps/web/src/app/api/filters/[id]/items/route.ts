@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
-import { listMedia } from "@/lib/services/mediaService";
+import { listMediaOffThread } from "@/lib/services/mediaService";
 import { resolveSavedQuery } from "@/lib/services/savedFilterService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -31,7 +31,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         const { page } = pageSchema.parse(Object.fromEntries(new URL(request.url).searchParams));
         const { query, overlayUserId } = resolveSavedQuery(id, page, auth);
 
-        return NextResponse.json(listMedia(query, auth, overlayUserId));
+        return NextResponse.json(await listMediaOffThread(query, auth, overlayUserId));
     } catch (error) {
         return toErrorResponse(error, request);
     }

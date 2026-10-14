@@ -34,25 +34,41 @@ const dataDir = mkdtempSync(path.join(tmpdir(), "ps-look-"));
 const refused = new Set<string>();
 const rowidOf = (id: string): number => Number(id.replace(/\D/g, "")) || id.length;
 
-vi.mock("@private-stock/db", () => ({
-    db: { transaction: <T>(fn: () => T) => Object.assign(fn, { deferred: fn }) },
-    mediaRepo: {
-        newestRowid: () => 1,
-        matchingIds: (_query: MediaQuery, _user: string, _roots: string[], ids: string[]) =>
-            ids
-                .filter((id) => !refused.has(id))
-                .map((id) => ({ rowid: rowidOf(id), id, kind: id === "m4" ? "image" : "video" })),
-        stillMatching: (_query: MediaQuery, _user: string, _roots: string[], rowids: number[]) =>
-            rowids.map((rowid) => ({ rowid, id: `m${rowid}` })),
-        listByIds: (ids: string[]) =>
-            ids
-                .filter((id) => !refused.has(id))
-                .map((id) => ({ id, kind: "video", relPath: "a.mp4" })),
-    },
-    tagRepo: { listForMediaIds: () => [] },
-    // No sprite sheets: each moment comes back without a picture, and the tile keeps its cover.
-    artifactRepo: { listForMedia: () => [] },
-}));
+vi.mock("@private-stock/db", async () => {
+    const { readPlanMock } = await import("./readPlanMock");
+    const repos = {
+        mediaRepo: {
+            newestRowid: () => 1,
+            matchingIds: (_query: MediaQuery, _user: string, _roots: string[], ids: string[]) =>
+                ids
+                    .filter((id) => !refused.has(id))
+                    .map((id) => ({
+                        rowid: rowidOf(id),
+                        id,
+                        kind: id === "m4" ? "image" : "video",
+                    })),
+            stillMatching: (
+                _query: MediaQuery,
+                _user: string,
+                _roots: string[],
+                rowids: number[]
+            ) => rowids.map((rowid) => ({ rowid, id: `m${rowid}` })),
+            listByIds: (ids: string[]) =>
+                ids
+                    .filter((id) => !refused.has(id))
+                    .map((id) => ({ id, kind: "video", relPath: "a.mp4" })),
+        },
+        tagRepo: { listForMediaIds: () => [] },
+        // No sprite sheets: each moment comes back without a picture, and the tile keeps its cover.
+        artifactRepo: { listForMedia: () => [] },
+    };
+
+    return {
+        db: { transaction: <T>(fn: () => T) => Object.assign(fn, { deferred: fn }) },
+        ...repos,
+        ...(await readPlanMock(repos)),
+    };
+});
 
 vi.mock("@private-stock/core/server", async (original) => ({
     ...(await original<typeof import("@private-stock/core/server")>()),

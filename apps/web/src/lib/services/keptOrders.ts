@@ -1,5 +1,5 @@
 import { findsUntagged, type MediaQuery } from "@private-stock/core";
-import { mediaRepo } from "@private-stock/db";
+import { mediaRepo, read, type ReadPlan } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { createTtlCache } from "../ttlCache";
@@ -84,66 +84,82 @@ const orders = createTtlCache<KeptOrder | null>(ORDER_TTL_MS, ORDER_ENTRIES, {
 export const keepsOrder = (query: MediaQuery, walking: boolean): boolean =>
     query.sort === "random" || query.sort === "look" || (walking && findsUntagged(query.groups));
 
-const take =
-    (query: MediaQuery, auth: AuthContext, overlayUserId?: string) => (): KeptOrder | null => {
-        const newest = mediaRepo.newestRowid();
+/** Taking an order: the walk on the reader, a look's ranking here (§5e). */
+function* take(
+    query: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string
+): ReadPlan<KeptOrder | null> {
+    const newest = mediaRepo.newestRowid();
 
-        if (query.sort === "look") {
-            const { rowids, moments } = takeLookOrder(query, auth, overlayUserId);
-
-            return {
-                rowids: Float64Array.from(rowids),
-                departed: new Uint8Array(rowids.length),
-                departedCount: 0,
-                newest,
-                moments,
-            };
-        }
-
-        const rowids = mediaRepo.orderedRowids(
-            query,
-            auth.userId,
-            auth.accessibleRootIds,
-            ORDER_SLOTS,
-            overlayUserId
-        );
-
-        if (rowids.length > ORDER_SLOTS) {
-            return null;
-        }
+    if (query.sort === "look") {
+        const { rowids, moments } = takeLookOrder(query, auth, overlayUserId);
 
         return {
             rowids: Float64Array.from(rowids),
             departed: new Uint8Array(rowids.length),
             departedCount: 0,
             newest,
+            moments,
         };
+    }
+
+    const rowids = yield* read(
+        "orderedRowids",
+        query,
+        auth.userId,
+        auth.accessibleRootIds,
+        ORDER_SLOTS,
+        overlayUserId
+    );
+
+    if (rowids.length > ORDER_SLOTS) {
+        return null;
+    }
+
+    return {
+        rowids: Float64Array.from(rowids),
+        departed: new Uint8Array(rowids.length),
+        departedCount: 0,
+        newest,
     };
+}
+
+/**
+ * Bumped by `forgetKeptOrders`, so an order taken across an `await` that a forget overtook is
+ * used for the request that took it and not kept. Without it a library disabled mid-walk would
+ * be cleared from the cache and then put straight back by the walk that was already running.
+ */
+let generation = 0;
 
 /**
  * The kept order for a query, taken now if there is none or something has arrived since.
  *
- * Null when the set is too large to keep; the caller pages it the ordinary way. Call inside the
- * caller's snapshot, so the newest-rowid check and the walk see the same database.
+ * Null when the set is too large to keep; the caller pages it the ordinary way. Run inside the
+ * caller's snapshot or plan, so the newest-rowid check and the walk see the same database.
  */
-export const keptOrder = (
+export function* keptOrder(
     query: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,
     now = Date.now()
-): KeptOrder | null => {
+): ReadPlan<KeptOrder | null> {
     const key = orderCacheKey(query, auth, overlayUserId);
-    const compute = take(query, auth, overlayUserId);
-    const kept = orders.get(key, compute, now);
+    const kept = orders.peek(key, now);
 
-    if (kept === null || kept.newest === mediaRepo.newestRowid()) {
+    if (kept === null || (kept !== undefined && kept.newest === mediaRepo.newestRowid())) {
         return kept;
     }
 
-    orders.delete(key);
+    const taking = generation;
+    const taken = yield* take(query, auth, overlayUserId);
 
-    return orders.get(key, compute, now);
-};
+    if (taking === generation) {
+        orders.set(key, taken, now);
+    }
+
+    return taken;
+}
 
 /**
  * One page of a kept order: its slots' items that are still in the set, in order.
@@ -152,16 +168,17 @@ export const keptOrder = (
  * or empty, before the last. What each check finds is recorded against the slot, which is what
  * keeps the count honest about items that have left (and returned).
  */
-export const pageOfOrder = (
+export function* pageOfOrder(
     order: KeptOrder,
     query: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string
-): { ids: string[]; hasMore: boolean; moments?: Record<string, number> } => {
+): ReadPlan<{ ids: string[]; hasMore: boolean; moments?: Record<string, number> }> {
     const start = query.page * query.limit;
     const end = Math.min(start + query.limit, order.rowids.length);
     const slice = Array.from(order.rowids.subarray(start, Math.max(start, end)));
-    const found = mediaRepo.stillMatching(
+    const found = yield* read(
+        "stillMatching",
         query,
         auth.userId,
         auth.accessibleRootIds,
@@ -193,7 +210,7 @@ export const pageOfOrder = (
             ),
         }),
     };
-};
+}
 
 /** How many items a kept order holds now, and how many pages its slots make. */
 export const countOfOrder = (
@@ -205,4 +222,7 @@ export const countOfOrder = (
 });
 
 /** Forgets every kept order: something changed which items any list can show. */
-export const forgetKeptOrders = (): void => orders.clear();
+export const forgetKeptOrders = (): void => {
+    generation += 1;
+    orders.clear();
+};

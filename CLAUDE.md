@@ -72,6 +72,11 @@ docker/          Dockerfile, compose files, entrypoint, QNAP notes
 Two processes share one SQLite file. Next reads while the worker writes, which is why WAL
 and `busy_timeout` are set on every connection.
 
+The web process's slowest reads run on reader threads so one slow statement cannot freeze every
+request. A service writes them once as a **read plan** (`read(...)` from `@private-stock/db`),
+run inline by `runNow` or on a reader by `runOffThread` — see ARCHITECTURE.md §20 "Reads off the
+thread" before adding a read to `packages/db/src/reads.ts`.
+
 **The worker is separate from Next on purpose**: ffmpeg jobs run for minutes and saturate
 CPU, and must not share a process with request handling on a NAS. The two communicate
 through the `Job` table, never HTTP.

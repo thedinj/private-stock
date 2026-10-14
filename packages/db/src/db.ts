@@ -362,6 +362,13 @@ export const applyPragmas = (database: Database.Database, timeoutMs?: number): v
  */
 const WEB_CACHE_MB = 48;
 const WORKER_CACHE_MB = 16;
+/**
+ * **16 MB in each of the web process's reader threads** (`readPool.ts`). Their reads are the
+ * grid's and the filter panel's, which the web cache served before; the readers take that work,
+ * and each is one more heap in the same container cap, so they get the worker's figure rather than
+ * the web's. What they read is shared below them anyway, in the kernel's page cache.
+ */
+const READER_CACHE_MB = 16;
 
 /** `web` defaults to which process this is; `db:diagnose --cost` asks for the web's figure. */
 export const cacheKibibytes = (web: boolean = Boolean(process.env.NEXT_RUNTIME)): number => {
@@ -369,6 +376,10 @@ export const cacheKibibytes = (web: boolean = Boolean(process.env.NEXT_RUNTIME))
 
     if (Number.isFinite(megabytes) && megabytes > 0) {
         return megabytes * 1024;
+    }
+
+    if (process.env.PRIVATE_STOCK_DB_ROLE === "reader") {
+        return READER_CACHE_MB * 1024;
     }
 
     return (web ? WEB_CACHE_MB : WORKER_CACHE_MB) * 1024;

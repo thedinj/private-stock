@@ -36,41 +36,54 @@ export const createTtlCache = <T>(
         }
     };
 
+    const peek = (key: string, now: number): T | undefined => {
+        const cached = entries.get(key);
+
+        return cached && cached.expiresAt > now ? cached.value : undefined;
+    };
+
+    const set = (key: string, value: T, now: number): void => {
+        const weight = weigh(value);
+
+        remove(key);
+
+        if (weight > maxWeight) {
+            return;
+        }
+
+        entries.set(key, { value, expiresAt: now + ttlMs, weight });
+        totalWeight += weight;
+
+        for (const [stale, entry] of entries) {
+            if (entries.size <= maxEntries && totalWeight <= maxWeight && entry.expiresAt > now) {
+                break;
+            }
+
+            remove(stale);
+        }
+    };
+
     return {
         /** The cached value for `key`, or `compute()`'s answer, kept for `ttlMs`. */
         get: (key: string, compute: () => T, now = Date.now()): T => {
-            const cached = entries.get(key);
+            const cached = peek(key, now);
 
-            if (cached && cached.expiresAt > now) {
-                return cached.value;
+            if (cached !== undefined) {
+                return cached;
             }
 
             const value = compute();
-            const weight = weigh(value);
 
-            remove(key);
-
-            if (weight > maxWeight) {
-                return value;
-            }
-
-            entries.set(key, { value, expiresAt: now + ttlMs, weight });
-            totalWeight += weight;
-
-            for (const [stale, entry] of entries) {
-                if (
-                    entries.size <= maxEntries &&
-                    totalWeight <= maxWeight &&
-                    entry.expiresAt > now
-                ) {
-                    break;
-                }
-
-                remove(stale);
-            }
+            set(key, value, now);
 
             return value;
         },
+        /**
+         * `get` in two halves, for a value computed across an `await` (§20 "Reads off the
+         * thread"): look, compute however the caller likes, then keep.
+         */
+        peek: (key: string, now = Date.now()): T | undefined => peek(key, now),
+        set: (key: string, value: T, now = Date.now()): void => set(key, value, now),
         /** Forgets one entry, so the next `get` computes it again. */
         delete: remove,
         /** Forgets everything, for a change that makes every entry wrong at once. */

@@ -10827,3 +10827,70 @@ Broad searches are the one measurement outside budget: a term matching 18% of th
 takes 215 ms against a 200 ms target, because the FTS match set has to be built before
 anything can be filtered. It shrinks as you type -- 102 ms at 7% of the library, 19 ms at
 0.7% -- so the miss is confined to queries that are really browsing.
+
+### Reads off the thread
+
+**The problem every other fix in this section only shortened.** `better-sqlite3` is synchronous
+and Node serves on one thread, so a statement that takes six seconds is six seconds in which the
+web process answers nothing: covers, video ranges and the next API call all sit Pending behind
+it. On 2026-10-13 the filter panel's counts took 6.5 s and a 200-row showcase page 10.7 s while
+the face job competed for the disks, and `[loop]` logged stalls of the same lengths. Making each
+statement cheaper helps; on four HDDs at ~100 ms a seek there will always be one that is not
+cheap enough.
+
+**So the slow statements run on reader threads.** `packages/db/src/readPool.ts` keeps two worker
+threads (`PRIVATE_STOCK_READ_THREADS`, 0 for none), each with its own connection, and the main
+thread waits on them the way it waits on a file read. WAL is what makes this free of new locking:
+readers never block each other or the worker's writer, so a reader thread is one more reader of
+a kind there already are.
+
+**What moves is statements, not services.** The services keep state the threads must not split:
+kept shuffle orders (`keptOrders.ts`), prepared looks, the caches `clearLibraryCaches` empties
+after a write, and the signing key behind every tile's URL. Moving a whole service into a thread
+would have given each thread its own copy of all of it, and a write on the main thread would
+have had to reach every copy. Instead a service's reads are written once as a **read plan** — a
+generator that yields each statement it needs by name (`read("listMedia", ...)`, `reads.ts`) and
+is handed the rows — and one of two drivers runs it:
+
+- `runNow` calls each statement here, synchronously. For the callers that must stay synchronous:
+  inside a snapshot of their own (a home shelf, a tag's page), inside a cache's compute (a saved
+  view's covers), and every test.
+- `runOffThread` leases one reader for the plan's whole run, opens a deferred read transaction
+  on it, and sends each statement there. One reader per plan keeps what `inOneSnapshot` gave on
+  the main thread: one snapshot and one warm cache across the plan's statements.
+
+Everything between two reads — authorization, the kept-order cache, URL signing — runs on the
+main thread under either driver. A plan is the same code under both; only the transport differs.
+
+**Which reads.** The ones `[slow]` named: the grid's page, ids and count (`/api/media`, `/ids`,
+`/count`, and a saved filter's items), the kept-order walks behind them, the tiles' tags, and
+the filter panel's counts (`/api/media/facets`). `reads.ts` lists them. A look's ranking is still
+taken on the main thread (`takeLookOrder`); the home page and a playlist still read inline. Each
+moves by becoming a plan, when it shows up in `[slow]`.
+
+**A kept order taken across an `await` can be overtaken.** A library disabled while a shuffle's
+walk is on a reader empties the kept orders; the walk then returns an order of the library as it
+was. `forgetKeptOrders` bumps a generation, and an order whose walk began before the bump is
+served to the request that took it and not kept.
+
+**Measured** on the synthetic 80k library, six heavy plans (a shuffle's whole order, the facet
+vocabulary, its counts) at once: inline, the main thread stalled for the whole 3.3 s; on two
+readers its longest stall was 17 ms, and the work finished in half the time. Reader threads get
+the worker's 16 MB SQLite cache rather than the web's 48 MB (`PRIVATE_STOCK_DB_ROLE=reader`):
+each is one more heap inside the container's memory cap, and what they read is shared below them
+in the kernel's page cache.
+
+**What it does not do** is make a statement faster. The disk is still the floor; a plan still
+takes as long as its reads. What changes is that one slow plan costs the request that asked for
+it, and not every request that arrives while it runs. Under vitest plans run inline, so
+`docker/smoke.sh` is the check that a thread loads from compiled output (`readPoolCheck.js`).
+
+**The thread entry is found on disk, not beside the module.** The first version started it from
+`new URL("./readThread.js", import.meta.url)`, which passed every test and the smoke check and
+then answered 500 on every grid page under `next start`: Next bundles `packages/db` into the
+server despite `serverExternalPackages` (it does not externalise a workspace package), and
+webpack took that expression for an asset — copying the file alone into `.next/server/chunks/
+static/media/`, where its imports resolve to nothing. The pool now walks up from the working
+directory to `packages/db/dist/readThread.js`, as `findModelsDir` does for the models, and the
+thread loads the package's own compiled output rather than the bundle. Only an end-to-end run
+against `next start` shows this class of failure.

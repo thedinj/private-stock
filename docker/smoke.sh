@@ -116,6 +116,11 @@ else
     FAILED=1
 fi
 
+# The web process's reader threads start and answer (§20 "Reads off the thread"). Each is loaded
+# by plain Node from packages/db/dist/readThread.js -- under vitest the pool runs inline and never
+# starts one -- and a thread that cannot load fails every grid page, not just one feature.
+check "a reader thread starts and answers" node packages/db/dist/cli/readPoolCheck.js
+
 # The built-in models load under plain node and answer (§5e). onnxruntime-node is a native
 # module found through pnpm's symlinks, and the models are found by walking up to
 # models/manifest.json -- both are exactly the kind of resolution that works under tsx and

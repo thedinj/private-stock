@@ -34,10 +34,14 @@ import {
     mediaRepo,
     mediaRootRepo,
     mediaTextRepo,
+    read,
     reelRepo,
+    runNow,
+    runOffThread,
     stageRepo,
     tagRepo,
     type mediaRepo as MediaRepoTypes,
+    type ReadPlan,
     variantRepo,
 } from "@private-stock/db";
 
@@ -122,36 +126,35 @@ export const toListItem = (row: ListRow, allTags: TileTag[] = []): MediaListItem
     };
 };
 
-/**
- * The tags for a page of rows, grouped by item.
- *
- * One query for the page rather than one per tile, which is the difference between an
- * indexed lookup and sixty round trips on the hottest screen in the app (§20).
- */
-export const tagsForRows = (rows: ListRow[], userId: string): Map<string, TileTag[]> => {
-    const byMedia = new Map<string, TileTag[]>();
+type TileTag = { name: string; kind: string };
 
-    for (const row of tagRepo.listForMediaIds(
+/**
+ * A page of rows with their tags attached, which is what every grid caller wants.
+ *
+ * The tags are one query for the page rather than one per tile, which is the difference between
+ * an indexed lookup and sixty round trips on the hottest screen in the app (§20).
+ */
+function* listPage(rows: ListRow[], userId: string): ReadPlan<MediaListItem[]> {
+    const byMedia = new Map<string, TileTag[]>();
+    const tagRows = yield* read(
+        "tagsForMediaIds",
         rows.map((row) => row.id),
         userId
-    )) {
+    );
+
+    for (const row of tagRows) {
         const existing = byMedia.get(row.mediaId);
 
         if (existing) existing.push({ name: row.name, kind: row.kind });
         else byMedia.set(row.mediaId, [{ name: row.name, kind: row.kind }]);
     }
 
-    return byMedia;
-};
+    return rows.map((row) => toListItem(row, byMedia.get(row.id) ?? []));
+}
 
-type TileTag = { name: string; kind: string };
-
-/** Maps a page of rows with their tags attached, which is what every grid caller wants. */
-export const toListPage = (rows: ListRow[], userId: string): MediaListItem[] => {
-    const tags = tagsForRows(rows, userId);
-
-    return rows.map((row) => toListItem(row, tags.get(row.id) ?? []));
-};
+/** `listPage`, here and now, for the callers that hydrate inside a snapshot of their own. */
+export const toListPage = (rows: ListRow[], userId: string): MediaListItem[] =>
+    runNow(listPage(rows, userId));
 
 /**
  * One page of the library.
@@ -208,45 +211,66 @@ const inOneSnapshot = <T>(read: () => T): T => db.transaction(read).deferred();
  * grid, its count, the viewer -- which is what makes keeping an untagged list's order worth its
  * walk (`keepsOrder`); a shuffle's order is kept for every caller.
  */
-export const listMedia = (
+function* listMediaReads(
     asked: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,
     walking = false
-): MediaListResponse => {
+): ReadPlan<MediaListResponse> {
     const query = withSortOverride(asked);
-    const result = inOneSnapshot(() => {
-        const order = keepsOrder(query, walking) ? keptOrder(query, auth, overlayUserId) : null;
+    const order = keepsOrder(query, walking) ? yield* keptOrder(query, auth, overlayUserId) : null;
+    let result: MediaRepoTypes.ListResult & { moments?: Record<string, number> };
 
-        if (order === null) {
-            return mediaRepo.listMedia(query, auth.userId, auth.accessibleRootIds, overlayUserId);
-        }
-
+    if (order === null) {
+        result = yield* read(
+            "listMedia",
+            query,
+            auth.userId,
+            auth.accessibleRootIds,
+            overlayUserId
+        );
+    } else {
         // Hydrated by id, which re-applies listable, access and hidden on its own; the filter
         // itself was checked for the slice by `pageOfOrder`.
-        const { ids, hasMore, moments } = pageOfOrder(order, query, auth, overlayUserId);
+        const { ids, hasMore, moments } = yield* pageOfOrder(order, query, auth, overlayUserId);
 
-        return {
-            rows: mediaRepo.listByIds(ids, auth.userId, auth.accessibleRootIds),
+        result = {
+            rows: yield* read("listByIds", ids, auth.userId, auth.accessibleRootIds),
             page: query.page,
             pageSize: query.limit,
             hasMore,
             moments,
         };
-    });
+    }
 
     return {
-        items: toListPage(result.rows, auth.userId),
+        items: yield* listPage(result.rows, auth.userId),
         page: result.page,
         pageSize: result.pageSize,
         hasMore: result.hasMore,
-        ...("moments" in result && result.moments && { moments: withMomentThumbs(result.moments) }),
+        ...(result.moments && { moments: withMomentThumbs(result.moments) }),
         // Never counted here (§20). The count is a scan of the whole matching set and the
         // page is an indexed walk; folding one into the other would make every page turn
         // pay for a number that only changes when the filter does.
         total: null,
     };
-};
+}
+
+export const listMedia = (
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): MediaListResponse =>
+    inOneSnapshot(() => runNow(listMediaReads(asked, auth, overlayUserId, walking)));
+
+/** `listMedia` with its statements on a reader thread, for a route (§20 "Reads off the thread"). */
+export const listMediaOffThread = (
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): Promise<MediaListResponse> => runOffThread(listMediaReads(asked, auth, overlayUserId, walking));
 
 /**
  * One page of the library as ids alone, for the viewer walking the set (§14b, §20).
@@ -256,33 +280,48 @@ export const listMedia = (
  * same kept order for a shuffle or an untagged list, so the grid and the viewer walking out of
  * it agree slot for slot.
  */
+function* listMediaIdsPageReads(
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): ReadPlan<MediaIdsResponse> {
+    const query = withSortOverride(asked);
+    const order = keepsOrder(query, walking) ? yield* keptOrder(query, auth, overlayUserId) : null;
+
+    if (order === null) {
+        return yield* read(
+            "listMediaIdsPage",
+            query,
+            auth.userId,
+            auth.accessibleRootIds,
+            overlayUserId
+        );
+    }
+
+    return {
+        ...(yield* pageOfOrder(order, query, auth, overlayUserId)),
+        page: query.page,
+        pageSize: query.limit,
+    };
+}
+
 export const listMediaIdsPage = (
     asked: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,
     walking = false
-): MediaIdsResponse => {
-    const query = withSortOverride(asked);
+): MediaIdsResponse =>
+    inOneSnapshot(() => runNow(listMediaIdsPageReads(asked, auth, overlayUserId, walking)));
 
-    return inOneSnapshot(() => {
-        const order = keepsOrder(query, walking) ? keptOrder(query, auth, overlayUserId) : null;
-
-        if (order === null) {
-            return mediaRepo.listMediaIdsPage(
-                query,
-                auth.userId,
-                auth.accessibleRootIds,
-                overlayUserId
-            );
-        }
-
-        return {
-            ...pageOfOrder(order, query, auth, overlayUserId),
-            page: query.page,
-            pageSize: query.limit,
-        };
-    });
-};
+/** `listMediaIdsPage` with its statements on a reader thread, for a route. */
+export const listMediaIdsPageOffThread = (
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): Promise<MediaIdsResponse> =>
+    runOffThread(listMediaIdsPageReads(asked, auth, overlayUserId, walking));
 
 /**
  * How many items match, and how many pages that is.
@@ -295,31 +334,46 @@ export const listMediaIdsPage = (
  * `overlayUserId` must be whatever the page was listed with, or the count describes a
  * different set from the one on screen.
  */
+function* countMediaReads(
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): ReadPlan<{ total: number; pageCount: number }> {
+    const query = withSortOverride(asked);
+    const order = keepsOrder(query, walking) ? yield* keptOrder(query, auth, overlayUserId) : null;
+
+    if (order !== null) {
+        return countOfOrder(order, query.limit);
+    }
+
+    const total = yield* read(
+        "countMedia",
+        query,
+        auth.userId,
+        auth.accessibleRootIds,
+        overlayUserId
+    );
+
+    return { total, pageCount: Math.max(1, Math.ceil(total / query.limit)) };
+}
+
 export const countMedia = (
     asked: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,
     walking = false
-): { total: number; pageCount: number } => {
-    const query = withSortOverride(asked);
+): { total: number; pageCount: number } =>
+    inOneSnapshot(() => runNow(countMediaReads(asked, auth, overlayUserId, walking)));
 
-    return inOneSnapshot(() => {
-        const order = keepsOrder(query, walking) ? keptOrder(query, auth, overlayUserId) : null;
-
-        if (order !== null) {
-            return countOfOrder(order, query.limit);
-        }
-
-        const total = mediaRepo.countMedia(
-            query,
-            auth.userId,
-            auth.accessibleRootIds,
-            overlayUserId
-        );
-
-        return { total, pageCount: Math.max(1, Math.ceil(total / query.limit)) };
-    });
-};
+/** `countMedia` with its statements on a reader thread, for a route. */
+export const countMediaOffThread = (
+    asked: MediaQuery,
+    auth: AuthContext,
+    overlayUserId?: string,
+    walking = false
+): Promise<{ total: number; pageCount: number }> =>
+    runOffThread(countMediaReads(asked, auth, overlayUserId, walking));
 
 /**
  * What the player will actually receive for this item (§8).

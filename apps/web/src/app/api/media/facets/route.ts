@@ -61,7 +61,7 @@ export async function GET(request: Request) {
         const query = mediaQuerySchema.parse(params);
 
         return NextResponse.json(
-            getFacets(
+            await getFacets(
                 query,
                 auth,
                 undefined,

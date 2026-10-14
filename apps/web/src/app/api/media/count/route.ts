@@ -5,7 +5,7 @@ import { mediaQuerySchema } from "@private-stock/core";
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { prepareLook } from "@/lib/services/lookService";
-import { countMedia } from "@/lib/services/mediaService";
+import { countMediaOffThread } from "@/lib/services/mediaService";
 import { overlayForRequest } from "@/lib/services/savedFilterService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -38,7 +38,12 @@ export async function GET(request: Request) {
 
         // Resolved exactly as the page was, or the count describes a different set (§6).
         return NextResponse.json(
-            countMedia(query, auth, overlayForRequest(filter ?? null, query, auth), true)
+            await countMediaOffThread(
+                query,
+                auth,
+                overlayForRequest(filter ?? null, query, auth),
+                true
+            )
         );
     } catch (error) {
         return toErrorResponse(error, request);
