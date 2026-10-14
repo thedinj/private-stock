@@ -4340,6 +4340,22 @@ The players report into module state (`warmMonitor.ts`) through `useWarmReport`,
 polls that state, so a player is never re-rendered on the overlay's behalf. With the overlay off,
 each report returns at its first line.
 
+### A removed element keeps its request
+
+React unmounting a `<video>` does not stop it loading. The detached element keeps its player, and
+the player keeps its request open — deferred, reading nothing — until the element is garbage
+collected, which can be minutes later. The tasting makes a new element for every film it plays,
+so a long tasting left a trail of them, and over HTTP/2 that is worse than a leak: bytes a stream
+has received but not read still count against the **connection's** flow-control window, which
+every request to the app shares. Once a few abandoned streams had filled it, every later stream,
+cover and API call arrived as headers and no body — DevTools showing a column of `206`s at
+0.1 kB, "Pending", while the server's event loop sat at 21 ms and it had no media file open.
+
+Every `<video>` in the app is a `ReleasingVideo` (`components/media/ReleasingVideo.tsx`), which on
+unmount removes `src` and calls `load()` — the spec's way to drop a media resource, which aborts
+the fetch there and then. It releases only an element that has left the document, because
+Strict Mode's rehearsed cleanup runs on a node that stays mounted.
+
 ### Known limits
 
 - **The amount buffered is the browser's decision.** `preload="auto"` says "buffer this"; there

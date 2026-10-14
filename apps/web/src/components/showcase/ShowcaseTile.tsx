@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { MediaListItem } from "@private-stock/core";
 
+import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { PREVIEW_PRIORITY_VOICE } from "@/lib/previewBudget";
 import { segmentProgress } from "@/lib/tasting/segment";
@@ -196,7 +197,7 @@ const ShowcaseTileBase: React.FC<ShowcaseTileProps> = ({
             )}
 
             {mayPlay && item.previewUrl && (
-                <video
+                <ReleasingVideo
                     ref={videoRef}
                     src={item.previewUrl}
                     className={classes.clip}

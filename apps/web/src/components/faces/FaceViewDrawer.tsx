@@ -6,6 +6,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import type { FaceReviewFace } from "@private-stock/core";
 
+import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { itemHref } from "@/lib/lookMoment";
 import { useCloseOnBack } from "@/lib/useCloseOnBack";
 
@@ -43,7 +44,7 @@ export const FaceViewDrawer: React.FC<{
             {face && (
                 <Stack gap="sm">
                     {face.kind === "video" ? (
-                        <video
+                        <ReleasingVideo
                             key={`${face.mediaId}:${face.atMs ?? 0}`}
                             src={src}
                             controls

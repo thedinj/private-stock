@@ -6,6 +6,7 @@ import { AspectRatio, Badge, Box, Card, Checkbox, Group, Text } from "@mantine/c
 
 import type { LookMoment, MediaListItem } from "@private-stock/core";
 
+import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
 import { itemHref } from "@/lib/lookMoment";
 import { rememberReturn } from "@/lib/returnTo";
@@ -250,7 +251,7 @@ export const MediaTile: React.FC<MediaTileProps> = ({
                     )}
 
                     {mayPlay && item.previewUrl && (
-                        <video
+                        <ReleasingVideo
                             ref={videoRef}
                             src={item.previewUrl}
                             className={classes.preview}

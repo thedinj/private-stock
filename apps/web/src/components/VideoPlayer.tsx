@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Box, Group, Select, Text } from "@mantine/core";
 
+import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
 import { api } from "@/lib/api/client";
 import { readPlaybackPref, usePlaybackPref } from "@/lib/playbackPrefs";
@@ -1614,7 +1615,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 const live = index === slots.active;
 
                 return (
-                    <video
+                    <ReleasingVideo
                         key={slotId}
                         ref={live ? attach : attachWarming}
                         src={`/api/media/${slotId}/stream`}
