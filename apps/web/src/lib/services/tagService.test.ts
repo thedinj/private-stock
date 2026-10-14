@@ -302,12 +302,11 @@ vi.mock("@private-stock/db", () => ({
             assignments.filter((row) => row.tagId === tagId).map((row) => row.mediaId),
         /**
          * The filter panel reads the vocabulary rather than scanning the library (§20), so
-         * these two are on the tag repo now. Empty here: what this file tests is who may
+         * this is on the tag repo now. Empty here: what this file tests is who may
          * write to which system, and the facet reads have their own tests against a real
          * database, where an in-memory stub would only restate the fixture back at itself.
          */
         listFacetValues: () => [],
-        countFacetValues: () => [],
         /** Every tag of the owner's vocabulary with an assignment, as the browse query would. */
         browseTags: (owner: string | null) => {
             const rows = tags

@@ -391,7 +391,9 @@ describe("which pairs a change can move", () => {
 
         expect(plan).toContain("sqlite_autoindex_OcrTagMatch_1");
         expect(plan).toContain("COVERING INDEX idx_MediaText_textNorm");
-        expect(plan).toContain("idx_MediaTag_unique_library");
+        // Either MediaTag index answers the (tag, item) probe exactly; which one is the
+        // planner's choice. What matters is that it is a probe.
+        expect(plan).toMatch(/SEARCH mt USING .*INDEX idx_MediaTag_(unique_library|tagId)/);
         expect(plan).not.toMatch(/SCAN (t|m|mt|s)\b/);
     });
 });

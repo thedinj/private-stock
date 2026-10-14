@@ -1806,7 +1806,8 @@ const OWNER_PREDICATE: Record<FacetScope, string> = {
  *
  * What makes an exact count affordable is the direction of the query. It asks, per tag,
  * "how many of *your* assignments survive the filter" -- driven from `idx_MediaTag_tagId`,
- * one primary-key probe per assignment. The cost is the tagging, not the library, so it does
+ * which covers the scope and the item so no `MediaTag` row is read, then one primary-key
+ * probe per assignment. The cost is the tagging, not the library, so it does
  * not grow with the 200k items the cap was there to protect against. Asked the other way
  * round -- build the filtered set, then group the tags in it -- the library is the cost and
  * a cap is the only answer.

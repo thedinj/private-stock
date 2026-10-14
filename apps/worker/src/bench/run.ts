@@ -178,7 +178,6 @@ console.log("=== facets ===");
 const facetIds = tagRepo.listFacetValues({ owner: null, limit: 20 }).map((row) => row.tagId);
 
 time(`listFacetValues top 20`, 200, () => tagRepo.listFacetValues({ owner: null, limit: 20 }));
-time(`countFacetValues`, 200, () => tagRepo.countFacetValues({ owner: null }));
 time(`facetCountsForTags unfiltered`, 200, () =>
     mediaRepo.facetCountsForTags(q(), userId, [rootId], facetIds, "public")
 );

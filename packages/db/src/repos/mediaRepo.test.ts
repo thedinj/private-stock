@@ -869,7 +869,10 @@ describe("facet values", () => {
             });
         }
 
-        expect(tagRepo.countFacetValues({ owner: null })).toEqual([{ kind: "genre", total: 3 }]);
+        // Capped at one, it still knows there are three: the total is counted before the cap.
+        expect(tagRepo.listFacetValues({ owner: null, limit: 1 })).toEqual([
+            expect.objectContaining({ kind: "genre", total: 3 }),
+        ]);
     });
 
     it("caps each facet independently", () => {

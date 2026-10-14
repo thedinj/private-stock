@@ -820,11 +820,10 @@ export const searchByKind = (
 };
 
 /**
- * The conditions `listFacetValues` and `countFacetValues` share.
+ * The conditions `listFacetValues` filters the vocabulary by.
  *
- * Written once because the two have to agree exactly: a list and a total built from
- * different conditions produce "showing 20 of 19", which reads as a bug in the counting
- * rather than in the query that fed it.
+ * Its own function so the list and its per-facet `total` cannot be built from different
+ * conditions -- that produced "showing 20 of 19" when they were two queries.
  */
 const facetValueFilters = (
     options: Omit<FacetValueOptions, "limit">
@@ -867,6 +866,16 @@ export interface FacetValueRow {
      * jumping position every time an unrelated filter moves.
      */
     uses: number;
+    /**
+     * How many values this row's facet holds before the cap, so "show all" can say what "all"
+     * is.
+     *
+     * The same on every row of a facet. It rides on the rows rather than coming from a query
+     * of its own because that query was this one again -- the same join over every
+     * assignment, grouped the same way -- and on the NAS a second pass over the tagging was a
+     * second second.
+     */
+    total: number;
 }
 
 export interface FacetValueOptions {
@@ -908,13 +917,15 @@ export const listFacetValues = (options: FacetValueOptions): FacetValueRow[] => 
 
     return db
         .prepare(
-            `SELECT "tagId", "kind", "name", "colorKey", "uses" FROM (
+            `SELECT "tagId", "kind", "name", "colorKey", "uses", "total" FROM (
                  SELECT t."id" AS "tagId", t."kind", t."name", t."colorKey",
                         count(m."id") AS "uses",
                         row_number() OVER (
                             PARTITION BY t."kind"
                             ORDER BY count(m."id") DESC, t."name" COLLATE NOCASE
-                        ) AS "rank"
+                        ) AS "rank",
+                        -- Counted over the grouped rows, before the cap below removes any.
+                        count(*) OVER (PARTITION BY t."kind") AS "total"
                    FROM "Tag" t
                    JOIN "MediaTag" mt ON mt."tagId" = t."id" AND mt."userId" IS :owner
                    -- Only items the library would actually show. Counting raw assignments
@@ -928,33 +939,6 @@ export const listFacetValues = (options: FacetValueOptions): FacetValueRow[] => 
              ORDER BY "kind", "uses" DESC, "name" COLLATE NOCASE`
         )
         .all({ ...params, limit: options.limit }) as FacetValueRow[];
-};
-
-/**
- * How many values each facet's vocabulary holds, so "show all" can say what "all" is.
- *
- * Separate from `listFacetValues` because that one caps per facet, and a list capped at
- * twenty cannot report the three hundred it is not showing. Counted the same way, over the
- * same rows, so the two can never disagree about what exists.
- */
-export const countFacetValues = (
-    options: Omit<FacetValueOptions, "limit">
-): { kind: string; total: number }[] => {
-    const { where, params } = facetValueFilters(options);
-
-    return db
-        .prepare(
-            `SELECT "kind", count(*) AS "total" FROM (
-                 SELECT t."kind" AS "kind"
-                   FROM "Tag" t
-                   JOIN "MediaTag" mt ON mt."tagId" = t."id" AND mt."userId" IS :owner
-                   JOIN "Media" m ON m."id" = mt."mediaId" AND m."listable" = 1
-                  WHERE ${where.join(" AND ")}
-                  GROUP BY t."id"
-             )
-             GROUP BY "kind"`
-        )
-        .all(params) as { kind: string; total: number }[];
 };
 
 export interface VocabularyOptions {

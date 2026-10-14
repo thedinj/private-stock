@@ -1274,9 +1274,7 @@ export const getFacets = (
             values,
             selected,
             countOf: (tagId) => countOf.get(tagId) ?? 0,
-            totals: new Map(
-                tagRepo.countFacetValues({ owner, search }).map((row) => [row.kind, row.total])
-            ),
+            totals: new Map(values.map((row) => [row.kind, row.total])),
             selectedTagIds,
             order: listFacetKinds(auth),
         });

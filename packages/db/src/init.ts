@@ -920,7 +920,11 @@ export function initializeDatabase(db: Database): void {
             ON "MediaTag" ("mediaId", "tagId") WHERE "userId" IS NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS "idx_MediaTag_unique_user"
             ON "MediaTag" ("mediaId", "tagId", "userId") WHERE "userId" IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS "idx_MediaTag_tagId" ON "MediaTag" ("tagId");
+        -- Covering for the facet statements, which walk a tag's assignments reading only whose
+        -- each is and which item it is on (§20 "Facet values come from the vocabulary"). With
+        -- "tagId" alone every assignment cost a random read of its row.
+        CREATE INDEX IF NOT EXISTS "idx_MediaTag_tagId"
+            ON "MediaTag" ("tagId", "userId", "mediaId");
         -- Undo reads by batch and nothing else does, so the index carries only the rows a
         -- bulk operation wrote.
         CREATE INDEX IF NOT EXISTS "idx_MediaTag_batchId"

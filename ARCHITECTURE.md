@@ -10778,7 +10778,8 @@ So the panel asks two questions instead of one:
 - **What each one holds under the current filter** — `mediaRepo.facetCountsForTags`, asked
   only about the values on their way to the screen. Exact. It counts per tag, driven from
   `idx_MediaTag_tagId` with one primary-key probe per assignment, so its cost is the tagging
-  rather than the library. That is why it needs no cap where the old grouping did: asked in
+  rather than the library. That index is `("tagId", "userId", "mediaId")` so the walk never
+  reads a `MediaTag` row; see the costing note below. That is why it needs no cap where the old grouping did: asked in
   this direction the library is never the unit of work.
 
 `EXISTS` rather than `mediaId IN (SELECT ...)` for the same reason. The `IN` form materialises
@@ -10794,6 +10795,27 @@ library-wide rather than restricted to the viewer's accessible roots, because th
 from the vocabulary and not through the media filter. That is exact today, when every user
 can reach every root, and has to be revisited with per-library access (§6) — at which point
 both would describe items the viewer cannot open.
+
+**What a facet request costs, and why it is two passes over the tagging, not three
+(2026-10-13).** On the NAS a filter-panel request took 5–6.5 s, and because `better-sqlite3`
+is synchronous the web process answered nothing else meanwhile — the grid's covers and video
+ranges sat Pending behind it, and `[loop]` reported 7.9 s and 10.7 s stalls. Its statements
+were each a walk over every assignment of the values on screen, and each step of that walk
+was a random read:
+
+- `idx_MediaTag_tagId` held only `tagId`, so every assignment cost a read of its `MediaTag`
+  row for `userId` (the scope) and `mediaId` (the join). The index now carries both and the
+  walk stays inside it. Replaced rather than added beside: the wider index answers every
+  `tagId` lookup the narrow one did, and two would be two B-tree writes per tag applied.
+- `countFacetValues` was `listFacetValues` again — the same join over every assignment,
+  grouped the same way — run only to learn how many values each facet had before the cap. The
+  total is now a `count(*) OVER (PARTITION BY kind)` on the listing's own grouped rows.
+
+On a synthetic 80k-item library with a warm cache, the covering index alone took the listing
+from 265 to 150 ms and the filtered counts from 202 to 128 ms. Cold, on the NAS, the saving is
+the larger share, since each row no longer read was a disk seek. The tile joins in the counts'
+`EXISTS` were suspected too and are not a cost: every one of them is on a unique key, and
+SQLite drops an unreferenced left join to a unique key from the plan.
 
 ### Relevance does not page indefinitely
 

@@ -1253,7 +1253,8 @@ CREATE INDEX "idx_MediaTag_batchId"
 CREATE INDEX "idx_MediaTag_ocr"
             ON "MediaTag" ("createdAt", "id") WHERE "source" = 'ocr' AND "userId" IS NULL;
 
-CREATE INDEX "idx_MediaTag_tagId" ON "MediaTag" ("tagId");
+CREATE INDEX "idx_MediaTag_tagId"
+            ON "MediaTag" ("tagId", "userId", "mediaId");
 
 CREATE UNIQUE INDEX "idx_MediaTag_unique_library"
             ON "MediaTag" ("mediaId", "tagId") WHERE "userId" IS NULL;
