@@ -37,7 +37,7 @@ vi.mock("@private-stock/db", async () => {
                 walks += 1;
                 calls.push({ fn: "orderedRowids", query });
 
-                return [5, 4, 3, 2, 1];
+                return { rowids: [5, 4, 3, 2, 1], kinds: new Uint8Array(5).fill(1) };
             },
             stillMatching: (
                 _query: MediaQuery,
@@ -107,6 +107,18 @@ describe("a kept order behind the walked lists", () => {
         expect(countMedia(query, auth, undefined, true)).toEqual({ total: 5, pageCount: 3 });
         expect(walks).toBe(1);
         expect(calls.map((call) => call.fn)).toEqual(["orderedRowids"]);
+    });
+
+    it("serves both kind tabs and All from one walk taken without the kind", () => {
+        const query = mediaQuerySchema.parse({ sort: "random", seed: "3", kind: "video" });
+
+        listMedia(query, auth, undefined, true);
+        countMedia(query, auth, undefined, true);
+        countMedia({ ...query, kind: "image" }, auth, undefined, true);
+        countMedia({ ...query, kind: undefined }, auth, undefined, true);
+
+        expect(calls.map((call) => call.fn)).toEqual(["orderedRowids"]);
+        expect(calls[0].query.kind).toBeUndefined();
     });
 
     it("keeps a walked untagged list's order, in date order", () => {

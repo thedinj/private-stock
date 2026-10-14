@@ -8,7 +8,8 @@
  * never exercises, because under vitest the pool runs inline. A thread that cannot load fails
  * every plan sent to it, which is every grid page, so this is a boot check rather than a test.
  *
- * Asks one plan of each driver and requires the same answer. Exits non-zero otherwise.
+ * Asks one plan of each driver and requires the same answer, then one plan that begins by waiting
+ * on another's work (`join`), which only a thread-backed driver can do. Exits non-zero otherwise.
  */
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ import { mediaQuerySchema } from "@private-stock/core";
 
 import { getDb } from "../db.js";
 import { runOffThread } from "../readPool.js";
-import { read, runNow } from "../reads.js";
+import { join, read, runNow } from "../reads.js";
 
 const entry = fileURLToPath(new URL("../readThread.js", import.meta.url));
 
@@ -46,3 +47,16 @@ if (JSON.stringify(inline) !== JSON.stringify(offThread)) {
 }
 
 console.log("reader thread answered", offThread);
+
+function* sharing(other: Promise<string>) {
+    return (yield* join(other)) ?? "did not wait";
+}
+
+const shared = await runOffThread(sharing(Promise.resolve("waited")));
+
+if (shared !== "waited") {
+    console.error("a plan off the thread did not wait on another's work", { shared });
+    process.exit(1);
+}
+
+console.log("a plan off the thread waited on another's work");

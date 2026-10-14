@@ -11,7 +11,7 @@ import {
 } from "@private-stock/core";
 
 import { getDb } from "./db.js";
-import { runNow, type ReadPlan, type ReadRequest } from "./reads.js";
+import { isJoin, runNow, type ReadPlan } from "./reads.js";
 import type { ReaderReply, ReaderRequest } from "./readThread.js";
 
 /**
@@ -217,8 +217,27 @@ const call = (reader: Reader, message: ReaderRequest): Promise<unknown> =>
         reader.worker.postMessage({ ...message, id });
     });
 
+/** A reader for one plan, with the plan's read transaction open on it. */
+const begin = async (entry: string): Promise<Reader> => {
+    const reader = await lease(entry);
+
+    try {
+        await call(reader, { op: "begin" });
+    } catch (error) {
+        release(reader);
+        throw error;
+    }
+
+    return reader;
+};
+
 /**
  * Runs a plan with its statements on a reader thread, and everything else here.
+ *
+ * The reader is leased at the plan's first statement and kept to its end, so its statements share
+ * a snapshot and a cache. Not before: a plan that begins by waiting on another's work (`join`) --
+ * the count that wants the order the grid is already taking -- holds no reader while it waits, and
+ * with two of them a reader held idle is half the pool.
  *
  * Inline under one deferred snapshot when there are no threads -- tests, `tsx`, or
  * `PRIVATE_STOCK_READ_THREADS=0` -- which is what the services did before plans existed.
@@ -232,21 +251,22 @@ export const runOffThread = async <T>(plan: ReadPlan<T>): Promise<T> => {
             .deferred();
     }
 
-    const reader = await lease(entry);
+    let reader: Reader | null = null;
 
     try {
-        await call(reader, { op: "begin" });
-
         let step = plan.next();
 
         while (!step.done) {
+            const request = step.value;
             let value: unknown;
 
             try {
-                value = await call(reader, {
-                    op: "read",
-                    request: step.value satisfies ReadRequest,
-                });
+                if (isJoin(request)) {
+                    value = await request.join;
+                } else {
+                    reader ??= await begin(entry);
+                    value = await call(reader, { op: "read", request });
+                }
             } catch (error) {
                 step = plan.throw(error);
                 continue;
@@ -257,7 +277,9 @@ export const runOffThread = async <T>(plan: ReadPlan<T>): Promise<T> => {
 
         return step.value;
     } finally {
-        await call(reader, { op: "end" }).catch(() => undefined);
-        release(reader);
+        if (reader !== null) {
+            await call(reader, { op: "end" }).catch(() => undefined);
+            release(reader);
+        }
     }
 };

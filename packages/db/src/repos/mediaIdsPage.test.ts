@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mediaQuerySchema, mediaSortSchema } from "@private-stock/core";
+import { mediaKinds, mediaQuerySchema, mediaSortSchema } from "@private-stock/core";
 
 import { initializeDatabase } from "../init.js";
 
@@ -244,16 +244,42 @@ describe("orderedRowids and stillMatching", () => {
         tag(id(8));
 
         const query = mediaQuerySchema.parse({ ...params, limit: "10" });
-        const rowids = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
+        const { rowids } = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
         const { ids } = walkBoth(query);
 
         expect(keptPages(query, rowids)).toEqual(ids.filter((page) => page.length > 0));
         expect(rowids).toHaveLength(mediaRepo.countMedia(query, USER, [ROOT]));
     });
 
+    it.each([
+        ["a shuffle", { sort: "random", seed: "17" }],
+        ["a rated shuffle", { sort: "random", seed: "9", minRating: "2" }],
+        ["untagged, newest first", { sort: "addedAt", direction: "desc", groups: untagged }],
+    ])("holds each kind's order among its slots, taken without a kind: %s", (_name, params) => {
+        // What lets one walk serve both kind tabs (§20): a kind's order is the slots of that kind
+        // in the order taken for both, item for item.
+        tag(id(4));
+
+        const both = mediaRepo.orderedRowids(mediaQuerySchema.parse(params), USER, [ROOT], 1000);
+
+        for (const kind of ["image", "video"] as const) {
+            const alone = mediaRepo.orderedRowids(
+                mediaQuerySchema.parse({ ...params, kind }),
+                USER,
+                [ROOT],
+                1000
+            );
+
+            expect(alone.rowids.length).toBeGreaterThan(0);
+            expect(both.rowids.filter((_, slot) => mediaKinds[both.kinds[slot]] === kind)).toEqual(
+                alone.rowids
+            );
+        }
+    });
+
     it("drops an item tagged out of an untagged list and moves nothing else", () => {
         const query = mediaQuerySchema.parse({ sort: "random", seed: "11", groups: untagged });
-        const rowids = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
+        const { rowids } = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
         const before = mediaRepo.stillMatching(query, USER, [ROOT], rowids).map((row) => row.id);
         const leaving = before[3];
 
@@ -266,7 +292,7 @@ describe("orderedRowids and stillMatching", () => {
 
     it("re-applies hidden and listable, not only the filter", () => {
         const query = mediaQuerySchema.parse({ sort: "random", seed: "2" });
-        const rowids = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
+        const { rowids } = mediaRepo.orderedRowids(query, USER, [ROOT], 1000);
         const first = mediaRepo.stillMatching(query, USER, [ROOT], rowids)[0];
 
         userMediaRepo.setHidden(USER, first.id, true);
@@ -298,7 +324,7 @@ describe("orderedRowids and stillMatching", () => {
     it("stops one past the cap, so a caller can refuse a set too long to keep", () => {
         const query = mediaQuerySchema.parse({ sort: "random", seed: "1" });
 
-        expect(mediaRepo.orderedRowids(query, USER, [ROOT], 5)).toHaveLength(6);
+        expect(mediaRepo.orderedRowids(query, USER, [ROOT], 5).rowids).toHaveLength(6);
     });
 
     it("sees an arrival in the newest rowid", () => {
@@ -307,5 +333,113 @@ describe("orderedRowids and stillMatching", () => {
         addItem(99);
 
         expect(mediaRepo.newestRowid()).toBeGreaterThan(before);
+    });
+});
+
+/**
+ * What the whole-set statements read (§20 "The disk, not the CPU"). On the NAS a statement costs
+ * the pages it touches, and the plans that keep these cheap were chosen by naming indexes and
+ * terms the planner -- with no statistics -- would not have found on its own. The plan is the
+ * assertion: a renamed index, a lost `kind IN` term or a group tested row by row again would pass
+ * every result test above and put the walks back.
+ */
+describe("the plans behind a kept order and a count", () => {
+    /** The plan of the statement a repo call ran that contains `match`, with its own bindings. */
+    const planOf = (run: () => void, match: string): string => {
+        const db = sharedDb as Database.Database;
+        const prepare = db.prepare.bind(db);
+        let ran: { sql: string; args: unknown[] } | undefined;
+        const spy = vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
+            const statement = prepare(sql);
+
+            if (!sql.includes(match)) return statement;
+
+            // `pluck()` and `raw()` hand back the statement, so they hand back this instead.
+            const recording: typeof statement = new Proxy(statement, {
+                get: (target, key) => {
+                    const value = Reflect.get(target, key, target) as unknown;
+
+                    if (typeof value !== "function") return value;
+
+                    return (...args: unknown[]) => {
+                        if (key === "all" || key === "get") ran = { sql, args };
+
+                        const result = (value as (...a: unknown[]) => unknown).apply(target, args);
+
+                        return result === target ? recording : result;
+                    };
+                },
+            });
+
+            return recording;
+        });
+
+        try {
+            run();
+        } finally {
+            spy.mockRestore();
+        }
+
+        if (!ran) throw new Error(`no statement containing ${match} ran`);
+
+        return (
+            db.prepare(`EXPLAIN QUERY PLAN ${ran.sql}`).all(...ran.args) as { detail: string }[]
+        )
+            .map((row) => row.detail)
+            .join("\n");
+    };
+
+    const anyOfMine = [
+        {
+            match: "any",
+            rules: [
+                { t: "favTags", kind: "performer" },
+                { t: "rating", min: 4 },
+                { t: "favorite" },
+            ],
+        },
+    ];
+
+    it("starts an 'any of' my favourites from their sources, not from a walk", () => {
+        const query = mediaQuerySchema.parse({ sort: "random", seed: "3", groups: anyOfMine });
+        const plan = planOf(
+            () => mediaRepo.orderedRowids(query, USER, [ROOT], 1000),
+            `SELECT m."rowid", m."kind"`
+        );
+
+        expect(plan).toContain("idx_Media_listable_id_kind_root");
+        expect(plan).toContain("idx_UserMedia_favorite");
+        expect(plan).not.toContain("CORRELATED");
+        expect(plan).not.toMatch(/SCAN m\b/);
+    });
+
+    it("counts the same way, and pages a sorted list from its index as before", () => {
+        const query = mediaQuerySchema.parse({ sort: "addedAt", groups: anyOfMine });
+
+        expect(
+            planOf(() => mediaRepo.countMedia(query, USER, [ROOT]), "SELECT count(*)")
+        ).toContain("idx_Media_listable_id_kind_root");
+        // A page in an indexed order stops when it is full; starting from the group would gather
+        // and sort all of it first.
+        expect(
+            planOf(() => mediaRepo.listMediaIdsPage(query, USER, [ROOT]), `SELECT m."id"`)
+        ).not.toContain("idx_Media_listable_id_kind_root");
+    });
+
+    it("walks an orientation as a range of its index, for both kinds and for one", () => {
+        for (const kind of [undefined, "video"]) {
+            const query = mediaQuerySchema.parse({
+                sort: "random",
+                seed: "3",
+                orientation: "portrait",
+                ...(kind && { kind }),
+            });
+            const plan = planOf(
+                () => mediaRepo.orderedRowids(query, USER, [ROOT], 1000),
+                `SELECT m."rowid", m."kind"`
+            );
+
+            expect(plan).toContain("idx_Media_list_orientation (listRootId=? AND orientation=?");
+        }
     });
 });

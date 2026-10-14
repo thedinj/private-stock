@@ -9178,11 +9178,20 @@ is parsed.
 something a person can read and edit; `?minDuration=60000` is something they get wrong. The
 conversion happens in the one function that builds the SQL.
 
-Plus three that are not ranges: `orientation` (landscape, portrait, square — compared from the
-two columns rather than stored, because a third column would be a third thing to keep in step
-on every re-probe), `animated` for stills, and `maxRating` to close the rating band.
+Plus three that are not ranges: `orientation` (landscape, portrait, square), `animated` for
+stills, and `maxRating` to close the rating band.
 
 No schema change. Everything above is already on `Media`, `listSize` included.
+
+**Orientation was compared, and is now a generated column (2026-10-14).** It was first compared
+from the two sides on every row and deliberately not stored, because a third column would be a
+third thing to keep in step on every re-probe. A _generated_ column answers that objection —
+SQLite computes `Media.orientation` from `width` and `height` and nothing writes it, so it cannot
+drift — and gives the planner an index the comparison could not have: a portrait shuffle read every
+item's row for its two sides, 1,429 pages for the videos on the production replica (§20 "The disk,
+not the CPU"). It is VIRTUAL, the only kind `ADD COLUMN` allows and the kind wanted anyway, and NULL
+when either side is unknown, exactly as the comparisons were: an item never probed has no
+orientation rather than a square one.
 
 ### Resolution is the shorter side, not the height
 
@@ -9200,7 +9209,8 @@ and the root clause have already narrowed the candidate set — and if it ever m
 established fix is a denormalised column, which is what `listSize` already is. As a **sort** it
 has an index of its own, `idx_Media_list_resolution`, built on the expression itself: SQLite
 walks an expression index when the ORDER BY spells the same expression, so sorting by
-resolution pages like any column sort (1.1 ms for page one at 200k). The filter, the sort and
+resolution pages like any column sort (1.1 ms for page one at 200k). Like the other four measure
+indexes it carries `kind` after `id`, so a kind's page, count or shuffle never reads a row (§20). The filter, the sort and
 the tile's "1080p" label all read the short side, so none of them disagrees with another.
 
 ### The bands must cover the axis, and the labels have to say so
@@ -10716,11 +10726,81 @@ with an untagged rule, or an `any` group of only untagged rules) is run newest f
 is sorted by (`withSortOverride`, applied by the server; the sort control shows it disabled with
 the reason, and the saved filter keeps its stored sort): 538 pages a shuffled page against 144.
 And the whole order of a shuffle, or of an untagged list being walked, is kept as rowids
-(`keptOrders`: 9 bytes a slot, at most 32 orders and 1M slots — ~9 MB worst case — for 5 min).
+(`keptOrders`: 10 bytes a slot and 4 more once a kind is paged, at most 32 orders and 1M slots —
+~14 MB worst case — for 5 min).
 Each page re-checks its slice against the full filter, so items that left are dropped in place
 and the walk never shifts; the count is slots minus departures (4 pages); arrivals are seen
 through the newest rowid; joiners wait for the TTL; `clearLibraryCaches` empties it. A viewer step
 went from 934 + 934 pages to ~200.
+
+**Opening a shuffled saved filter walked the library three times (2026-10-14).** The first load of
+a shuffled saved filter took 9–10 s for `/api/media` on the NAS, with each kind tab's
+`/api/media/count` at 4.7–7.7 s, all at once. Measured on a production snapshot (12,996 listable
+items: 8,184 videos, 4,812 images; `Media` is 1,355 pages), with two filters: **A**, "any of: my
+favourite performers, four stars and up, my favourites", and **B**, portrait only. The grid, its
+count and the other tab's count each took their own order — the grid and its count the same one
+twice, the other tab a second key — and each walk was dear for its own reason. Five changes:
+
+- **Orientation is an indexed generated column** (§14e). `idx_Media_list_orientation` is
+  `("listRootId", "orientation", "kind", "id") WHERE "listable" = 1`; orientation leads kind so one
+  range serves both tabs. A virtual column referenced in a query marks every column of the row
+  as used, so `EXPLAIN QUERY PLAN` says `INDEX` rather than `COVERING INDEX` — but the table cursor
+  is a deferred seek that no column ever triggers, and the row is never read. B's videos 1,429 →
+  74 pages, its images 1,110 → 93, both kinds at once 164; the Videos tab's count sorted by date
+  1,429 → 74. Sorted pages keep their own indexes (the planner still prefers
+  `idx_Media_list_kind_addedAt` for date, which stops at the page).
+- **The measure indexes carry `kind`.** The same check for the other "The file" filters found the
+  same cost: duration, resolution, bit rate, frame rate and size have an index each, without
+  `kind`, so a shuffle, a kind's count or a kind's sorted page read every candidate's row — over
+  ten minutes 1,177 pages, over 1080p 1,584, over 5 Mbps 1,593, over 500 MB 1,106, over 50 fps 595,
+  against 275 for the videos unfiltered. `kind` now follows `id` in each (after it, because `id` is
+  unique, so the order and every sort's plan are unchanged): 97, 221, 236, 71 and 24. The Videos tab
+  sorted by resolution went 813 → 62 for its first page, by bit rate 1,022 → 101.
+- **An "any of" made of indexed sources starts from them** (`mediaRepo.groupSourceSql`). A's group
+  was tested on every item: a walk of the kind's index with, per item, an overlay probe and a
+  correlated `EXISTS` over all 51 favourite tags — 688 pages and 357 ms of CPU for the videos, 452
+  pages for the images. Each of its rules — a tag, favourite tags, a rating range, favourites —
+  names its items from an index of its own, so a statement that reads the whole matching set (a
+  kept order, a count, a shuffled page) takes their `UNION` as its rows (`CROSS JOIN`, which SQLite
+  never reorders), probes `idx_Media_listable_id_kind_root` once per item, and leaves the group out
+  of the WHERE, where every other condition stays. Each branch is its rule's condition turned
+  round with the same scoping — assignments the viewer can see, a favourite tag that is not
+  somebody else's private one, the rater being the viewer or a shared filter's owner — so the
+  union is the group exactly; `listCompleteness.test.ts` holds it to the brute-force model under
+  both raters, and checks every slot of the kept order against the filter asked row by row. Two
+  details carry the numbers: `INDEXED BY` plus an always-true `kind IN ('image', 'video')` term,
+  without which the planner probes the primary key and reads rows (1,391 pages); and the favourites
+  branch naming `idx_UserMedia_favorite` (3 pages, against 198 through the rating index). A, both
+  kinds: 508 pages, 5–10 ms warm. Not for a page in an indexed order, which stops walking when it
+  is full; starting from the group would gather and sort all of it first.
+- **One walk serves both kind tabs.** A shuffle or an untagged list is taken without its kind,
+  each slot keeping its item's kind (read from the same index entry, so free); a kind's pages are
+  the windows of its own slots and its count is its slots less its departures. A kind's order
+  within the order of both is exactly the walk of that kind alone, item for item
+  (`mediaIdsPage.test.ts`), so "A filter never depends on the sort" holds per tab: pages are full
+  but for departures, slots never move, `hasMore` comes from the kind's slots. A look is still
+  taken per kind, because it ranks and caps each kind separately (§5e).
+- **One take, however many ask.** The three requests arrive together and each found no order kept,
+  so even one shared key would have been walked three times. A take in progress is recorded by key
+  with the newest rowid it began under; a request for the same order joins it instead of walking
+  — a read plan yields `join(promise)`, which `runOffThread` awaits holding no reader (it leases one
+  at a plan's first statement now, not at its start) and `runNow`, being synchronous, answers with
+  nothing, so the plan takes its own as before. A take that fails settles its joiners with nothing
+  and they take their own; one begun before an arrival is not joined; `forgetKeptOrders` forgets the
+  takes in progress too, and an order taken across a forget is served to everyone who was already
+  waiting for it and kept by nobody, as the generation guard already did for the taker.
+
+And `tagsForMediaIds` reads the library's assignments and the viewer's own as two halves
+(`UNION ALL`), each through the unique index that holds exactly its rows: as one `"userId" IS NULL
+OR "userId" = ?` it ran a multi-index OR whose library half read every assignment's row, 157 pages
+per sixty tiles; split, 100.
+
+A first load, cold, counting pages per statement as each runs on its own connection: A 2,620 →
+1,243 (walks 1,828 → 508), B 4,653 → 806 (walks 3,968 → 164); timed end to end on the NAS under
+load, with the counts' walks run beside the grid's on two readers as the browser asks, A 6.3–6.6 s →
+4.6–4.9 s and B 6.4–6.9 s → 3.5–3.6 s. What is left is the page itself: re-checking the sixty
+slots against the filter (A 234 pages, B 137) and hydrating sixty tiles (~400 pages, the four
+artifact joins and the overlay at about seven pages a tile) — the next thing to measure.
 
 **The web process's own memory.** After a deploy it grew from 155 MB to 235 MB (resident plus
 swap) in 19 h: ~87 MB of V8 pages, a 71 MB glibc main heap, ~45 MB of other native memory.
@@ -10983,7 +11063,16 @@ is handed the rows — and one of two drivers runs it:
   view's covers), and every test.
 - `runOffThread` leases one reader for the plan's whole run, opens a deferred read transaction
   on it, and sends each statement there. One reader per plan keeps what `inOneSnapshot` gave on
-  the main thread: one snapshot and one warm cache across the plan's statements.
+  the main thread: one snapshot and one warm cache across the plan's statements. The lease is
+  taken at the plan's first statement rather than its start, so a plan that begins by waiting
+  on another's work holds no reader meanwhile (below).
+
+**A plan can wait on another's work instead of repeating it** (2026-10-14). Besides a statement it
+may yield `join(promise)` — the kept order another request is already taking is the case (§20 "One
+take, however many ask"). `runOffThread` awaits the promise; `runNow` cannot wait inside a
+synchronous call, so it hands back nothing and the plan does the work itself. The promise must
+not reject: a failure settles it with nothing, which reads the same way. `readPoolCheck.js`
+checks the waiting from compiled output, since vitest only ever runs plans inline.
 
 Everything between two reads — authorization, the kept-order cache, URL signing — runs on the
 main thread under either driver. A plan is the same code under both; only the transport differs.

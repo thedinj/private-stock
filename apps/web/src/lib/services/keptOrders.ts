@@ -1,5 +1,5 @@
-import { findsUntagged, type MediaQuery } from "@private-stock/core";
-import { mediaRepo, read, type ReadPlan } from "@private-stock/db";
+import { findsUntagged, mediaKinds, type MediaKind, type MediaQuery } from "@private-stock/core";
+import { join, mediaRepo, read, type ReadPlan } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { createTtlCache } from "../ttlCache";
@@ -35,12 +35,25 @@ import { orderCacheKey } from "./queryCacheKey";
  * - The count is the order's length less the slots found empty so far, so it falls as items are
  *   tagged out and checked, and does not rise for joiners until the order is taken again.
  *
- * **Memory.** Eight bytes a slot for the rowid, one for "left the set": an order of the whole
- * production library (13k) is ~120 KB, one of a 200k library ~1.8 MB. At most `ORDER_ENTRIES`
- * orders and `ORDER_SLOTS` slots across all of them, so the worst case is 9 MB of typed arrays
- * plus a key of a kilobyte or two apiece, whatever the library. A set larger than the whole
- * budget is not kept -- recorded as such, so it is not re-sorted only to be refused -- and is
- * paged as before.
+ * **One order serves both kind tabs** (§20 "One walk serves both kind tabs"). Opening a filter
+ * asks for the grid, its count and the other kind's count at once, and the two kinds' orders were
+ * two walks under two keys. A shuffle or an untagged list is now taken without its kind, each
+ * slot keeping its item's kind, and a kind's pages and count are the slots of that kind: the same
+ * items in the same order as a walk of that kind alone (`mediaIdsPage.test.ts` holds the repo to
+ * it), so the Videos tab, the Photos tab and All are three views of one walk. A look is still
+ * taken per kind, because it ranks and caps each kind separately (§5e).
+ *
+ * **One take, however many ask** (§20). Those three requests arrive together, so the order would
+ * still have been walked three times -- each finding nothing kept and starting its own take. The
+ * first now records its take as in flight, and a request for the same order while it runs waits
+ * for it (`join`) instead of walking again.
+ *
+ * **Memory.** Eight bytes a slot for the rowid, one for its kind, one for "left the set", and
+ * four more for a kind's slots once one kind is paged: an order of the whole production library
+ * (13k) is ~180 KB, one of a 200k library ~2.8 MB. At most `ORDER_ENTRIES` orders and
+ * `ORDER_SLOTS` slots across all of them, so the worst case is 14 MB of typed arrays plus a key of
+ * a kilobyte or two apiece, whatever the library. A set larger than the whole budget is not kept
+ * -- recorded as such, so it is not re-sorted only to be refused -- and is paged as before.
  *
  * Emptied by everything in this process that changes membership broadly (`clearLibraryCaches`:
  * trash, restore, purge, hiding, a library added, moved, enabled or disabled). A restart
@@ -51,15 +64,26 @@ import { orderCacheKey } from "./queryCacheKey";
 export const ORDER_TTL_MS = 5 * 60_000;
 /** Orders kept at once: one per viewer, filter and seed in use in the last few minutes. */
 const ORDER_ENTRIES = 32;
-/** Slots kept across every order: ~9 MB at nine bytes a slot. */
+/** Slots kept across every order: ~14 MB at fourteen bytes a slot. */
 export const ORDER_SLOTS = 1_000_000;
 
 interface KeptOrder {
     /** The matching items' rowids, in the list's order, as they were when it was taken. */
     rowids: Float64Array;
+    /**
+     * Each slot's kind, as its index in `mediaKinds`, for an order taken across both kinds;
+     * absent for a look's, which is taken for the kind asked.
+     */
+    kinds?: Uint8Array;
+    /** How many slots of each kind, indexed as `kinds`. */
+    kindSlots: number[];
+    /** Each kind's slot numbers, in order, made the first time a page of that kind is asked. */
+    slotsOfKind: (Uint32Array | undefined)[];
     /** 1 where a check of that slot found its item no longer in the set. */
     departed: Uint8Array;
     departedCount: number;
+    /** `departedCount` by kind, indexed as `kinds`. */
+    departedOfKind: number[];
     /** `mediaRepo.newestRowid()` when the order was taken. */
     newest: number;
     /** A look's matching moment for each item, by rowid (§5e); absent for every other order. */
@@ -84,27 +108,54 @@ const orders = createTtlCache<KeptOrder | null>(ORDER_TTL_MS, ORDER_ENTRIES, {
 export const keepsOrder = (query: MediaQuery, walking: boolean): boolean =>
     query.sort === "random" || query.sort === "look" || (walking && findsUntagged(query.groups));
 
+/**
+ * The query whose order is taken and kept for `query`: the same without its kind, unless a look.
+ *
+ * A kind's order is the slots of that kind in the order of both (`slotsFor`), so leaving the kind
+ * out lets one walk serve the Videos tab, the Photos tab and All. A look ranks and caps each kind
+ * separately (`takeLookOrder`), so its order for one kind is not a part of its order for both.
+ */
+const orderedQuery = (query: MediaQuery): MediaQuery =>
+    query.sort === "look" ? query : { ...query, kind: undefined };
+
+/** A taken order, with nothing yet found to have left it. */
+const keptFrom = (
+    rowids: readonly number[],
+    newest: number,
+    extra: { kinds?: Uint8Array; moments?: Map<number, number> } = {}
+): KeptOrder => {
+    const kindSlots = mediaKinds.map(() => 0);
+
+    extra.kinds?.forEach((kind) => {
+        kindSlots[kind] += 1;
+    });
+
+    return {
+        rowids: Float64Array.from(rowids),
+        kindSlots,
+        slotsOfKind: [],
+        departed: new Uint8Array(rowids.length),
+        departedCount: 0,
+        departedOfKind: mediaKinds.map(() => 0),
+        newest,
+        ...extra,
+    };
+};
+
 /** Taking an order: the walk on the reader, a look's ranking here (§5e). */
 function* take(
     query: MediaQuery,
     auth: AuthContext,
-    overlayUserId?: string
+    overlayUserId: string | undefined,
+    newest: number
 ): ReadPlan<KeptOrder | null> {
-    const newest = mediaRepo.newestRowid();
-
     if (query.sort === "look") {
         const { rowids, moments } = takeLookOrder(query, auth, overlayUserId);
 
-        return {
-            rowids: Float64Array.from(rowids),
-            departed: new Uint8Array(rowids.length),
-            departedCount: 0,
-            newest,
-            moments,
-        };
+        return keptFrom(rowids, newest, { moments });
     }
 
-    const rowids = yield* read(
+    const { rowids, kinds } = yield* read(
         "orderedRowids",
         query,
         auth.userId,
@@ -117,12 +168,7 @@ function* take(
         return null;
     }
 
-    return {
-        rowids: Float64Array.from(rowids),
-        departed: new Uint8Array(rowids.length),
-        departedCount: 0,
-        newest,
-    };
+    return keptFrom(rowids, newest, { kinds });
 }
 
 /**
@@ -133,10 +179,23 @@ function* take(
 let generation = 0;
 
 /**
+ * Takes in progress, by key: what a request for the same order waits on rather than walking
+ * again (`join`). `newest` is the newest rowid the take began under, so a request that sees an
+ * arrival since does not wait for an order that will be stale when it lands. The promise never
+ * rejects: a take that fails settles it with `undefined`, and whoever waited takes their own.
+ */
+const taking = new Map<string, { newest: number; order: Promise<KeptOrder | null | undefined> }>();
+
+/**
  * The kept order for a query, taken now if there is none or something has arrived since.
  *
  * Null when the set is too large to keep; the caller pages it the ordinary way. Run inside the
  * caller's snapshot or plan, so the newest-rowid check and the walk see the same database.
+ *
+ * A request that finds the same order being taken by another waits for that take (`join`) and is
+ * served its result. Under `runNow`, which cannot wait, it takes its own as it always did. Waiting
+ * across a forget is harmless: both requests began before it, and the order is served to them and
+ * not kept, exactly as for the request that took it.
  */
 export function* keptOrder(
     query: MediaQuery,
@@ -144,22 +203,87 @@ export function* keptOrder(
     overlayUserId?: string,
     now = Date.now()
 ): ReadPlan<KeptOrder | null> {
-    const key = orderCacheKey(query, auth, overlayUserId);
+    const ordered = orderedQuery(query);
+    const key = orderCacheKey(ordered, auth, overlayUserId);
     const kept = orders.peek(key, now);
 
-    if (kept === null || (kept !== undefined && kept.newest === mediaRepo.newestRowid())) {
+    if (kept === null) {
         return kept;
     }
 
-    const taking = generation;
-    const taken = yield* take(query, auth, overlayUserId);
+    const newest = mediaRepo.newestRowid();
 
-    if (taking === generation) {
-        orders.set(key, taken, now);
+    if (kept !== undefined && kept.newest === newest) {
+        return kept;
     }
 
-    return taken;
+    const inFlight = taking.get(key);
+
+    if (inFlight !== undefined && inFlight.newest === newest) {
+        const joined = yield* join(inFlight.order);
+
+        if (joined !== undefined) {
+            return joined;
+        }
+    }
+
+    let settle: (order: KeptOrder | null | undefined) => void = () => undefined;
+    const mine = {
+        newest,
+        order: new Promise<KeptOrder | null | undefined>((resolve) => {
+            settle = resolve;
+        }),
+    };
+    const takingGeneration = generation;
+    let taken: KeptOrder | null | undefined;
+
+    taking.set(key, mine);
+
+    try {
+        taken = yield* take(ordered, auth, overlayUserId, newest);
+
+        if (takingGeneration === generation) {
+            orders.set(key, taken, now);
+        }
+
+        return taken;
+    } finally {
+        // Also when the take threw or its plan was abandoned: `taken` is then still undefined,
+        // which tells whoever waited to take their own.
+        if (taking.get(key) === mine) taking.delete(key);
+
+        settle(taken);
+    }
 }
+
+/**
+ * The slots a query's pages are cut from: a kind's, in order, when the order holds both kinds and
+ * the query asks for one; null for all of them.
+ */
+const slotsFor = (order: KeptOrder, kind: MediaKind | undefined): Uint32Array | null => {
+    if (kind === undefined || order.kinds === undefined) {
+        return null;
+    }
+
+    const code = mediaKinds.indexOf(kind);
+    const made = order.slotsOfKind[code];
+
+    if (made !== undefined) {
+        return made;
+    }
+
+    const kinds = order.kinds;
+    const slots = new Uint32Array(order.kindSlots[code]);
+    let next = 0;
+
+    for (let slot = 0; slot < kinds.length; slot += 1) {
+        if (kinds[slot] === code) slots[next++] = slot;
+    }
+
+    order.slotsOfKind[code] = slots;
+
+    return slots;
+};
 
 /**
  * One page of a kept order: its slots' items that are still in the set, in order.
@@ -167,6 +291,11 @@ export function* keptOrder(
  * Slots are fixed, so `hasMore` is whether any slot lies beyond this page -- a page can be short,
  * or empty, before the last. What each check finds is recorded against the slot, which is what
  * keeps the count honest about items that have left (and returned).
+ *
+ * A query for one kind pages that kind's slots of an order of both (`slotsFor`): its page `n` is
+ * the `n`th window of them, so every page of a kind is full but for departures, as a walk of that
+ * kind alone would have made it. The slice is checked with the query's own kind, which every slot
+ * in it has, so what is recorded holds for the order of both as well.
  */
 export function* pageOfOrder(
     order: KeptOrder,
@@ -174,9 +303,14 @@ export function* pageOfOrder(
     auth: AuthContext,
     overlayUserId?: string
 ): ReadPlan<{ ids: string[]; hasMore: boolean; moments?: Record<string, number> }> {
+    const slots = slotsFor(order, query.kind);
+    const length = slots === null ? order.rowids.length : slots.length;
     const start = query.page * query.limit;
-    const end = Math.min(start + query.limit, order.rowids.length);
-    const slice = Array.from(order.rowids.subarray(start, Math.max(start, end)));
+    const end = Math.min(start + query.limit, length);
+    const positions = Array.from({ length: Math.max(0, end - start) }, (_, offset) =>
+        slots === null ? start + offset : slots[start + offset]
+    );
+    const slice = positions.map((slot) => order.rowids[slot]);
     const found = yield* read(
         "stillMatching",
         query,
@@ -188,18 +322,20 @@ export function* pageOfOrder(
     const present = new Set(found.map((row) => row.rowid));
 
     slice.forEach((rowid, offset) => {
-        const slot = start + offset;
-        const gone = present.has(rowid) ? 0 : 1;
+        const slot = positions[offset];
+        const change = (present.has(rowid) ? 0 : 1) - order.departed[slot];
 
-        order.departedCount += gone - order.departed[slot];
-        order.departed[slot] = gone;
+        order.departed[slot] += change;
+        order.departedCount += change;
+
+        if (order.kinds !== undefined) order.departedOfKind[order.kinds[slot]] += change;
     });
 
     const moments = order.moments;
 
     return {
         ids: found.map((row) => row.id),
-        hasMore: end < order.rowids.length,
+        hasMore: end < length,
         ...(moments && {
             moments: Object.fromEntries(
                 found.flatMap((row) => {
@@ -212,17 +348,28 @@ export function* pageOfOrder(
     };
 }
 
-/** How many items a kept order holds now, and how many pages its slots make. */
+/**
+ * How many items a kept order holds now for a query, and how many pages its slots make: the
+ * query's kind's slots in an order of both kinds, else all of them.
+ */
 export const countOfOrder = (
     order: KeptOrder,
-    limit: number
-): { total: number; pageCount: number } => ({
-    total: order.rowids.length - order.departedCount,
-    pageCount: Math.max(1, Math.ceil(order.rowids.length / limit)),
-});
+    query: MediaQuery
+): { total: number; pageCount: number } => {
+    const code = query.kind === undefined ? -1 : mediaKinds.indexOf(query.kind);
+    const [slots, departed] =
+        code < 0 || order.kinds === undefined
+            ? [order.rowids.length, order.departedCount]
+            : [order.kindSlots[code], order.departedOfKind[code]];
+
+    return { total: slots - departed, pageCount: Math.max(1, Math.ceil(slots / query.limit)) };
+};
 
 /** Forgets every kept order: something changed which items any list can show. */
 export const forgetKeptOrders = (): void => {
     generation += 1;
     orders.clear();
+    // A take already running finishes for whoever asked and waited, and is not kept; a request
+    // after this one must not wait on it, or it would be served the library before the change.
+    taking.clear();
 };

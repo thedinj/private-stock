@@ -115,6 +115,38 @@ describe("what each person can see", () => {
     });
 });
 
+/**
+ * A page of tiles' tags (§14b), which reads the library's assignments and the viewer's own as two
+ * halves, each through its own index (§20). Split, a half that read the wrong rows would leak
+ * somebody else's private tag onto a tile, or drop the viewer's own.
+ */
+describe("the tags on a page of tiles", () => {
+    it("are the library's and the viewer's own, by facet then name, and nobody else's", () => {
+        db.prepare(
+            `INSERT INTO "Media" ("id", "kind", "addedAt", "updatedAt")
+             VALUES ('m2', 'image', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        ).run();
+        tagIt("noir", null, BEN);
+        tagIt("Archive", ADA, ADA);
+        tagIt("therapy", BEN, BEN);
+        tagRepo.assign({
+            mediaId: "m2",
+            tagId: tagRepo.ensureTag("genre", "drama", null),
+            userId: null,
+            createdById: ADA,
+        });
+
+        const page = (userId: string) =>
+            tagRepo
+                .listForMediaIds([MEDIA, "m2"], userId)
+                .map((row) => `${row.mediaId}:${row.kind}:${row.name}`);
+
+        expect(page(ADA)).toEqual(["m2:genre:drama", "m1:tag:Archive", "m1:tag:noir"]);
+        expect(page(BEN)).toEqual(["m2:genre:drama", "m1:tag:noir", "m1:tag:therapy"]);
+        expect(tagRepo.listForMediaIds([], ADA)).toEqual([]);
+    });
+});
+
 describe("the two systems do not blend", () => {
     it("keeps a public and a private tag of the same name separate", () => {
         tagIt("beach", null, ADA);

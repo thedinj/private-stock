@@ -344,7 +344,7 @@ function* countMediaReads(
     const order = keepsOrder(query, walking) ? yield* keptOrder(query, auth, overlayUserId) : null;
 
     if (order !== null) {
-        return countOfOrder(order, query.limit);
+        return countOfOrder(order, query);
     }
 
     const total = yield* read(

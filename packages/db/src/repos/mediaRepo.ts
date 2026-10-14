@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
     groupsArePersonal,
     groupsReadUserMedia,
+    mediaKinds,
     naturalDirection,
     searchTerms,
     rowidShuffleParams,
@@ -437,6 +438,11 @@ interface QueryBuild {
      * resolving against themselves, which is the only way `oum` ever appears (§6).
      */
     ratingAlias: string;
+    /**
+     * The group the rows come from, when `source` is its items (`groupSourceSql`): it is not
+     * among `where`, and a caller deciding which joins the WHERE needs asks without it.
+     */
+    driven: FilterGroup | null;
 }
 
 /**
@@ -650,6 +656,143 @@ const groupSql = (
 };
 
 /**
+ * The rules a group can be driven from: each names its items through an index of its own.
+ *
+ * A tag's assignments (`idx_MediaTag_tagId`), somebody's favourite tags' assignments (from
+ * `UserTag`), their rated items (`idx_UserMedia_rating`) and their favourites
+ * (`idx_UserMedia_favorite`). The rest cannot be: `unrated` and `untagged` are absences, and
+ * `watched`, the measures and the item's own facts have no index that lists the items they hold.
+ */
+type SourceRule = Extract<FilterRule, { t: "tag" | "favTags" | "favorite" | "rating" }>;
+
+const isSourceRule = (rule: FilterRule): rule is SourceRule =>
+    rule.t === "tag" || rule.t === "favTags" || rule.t === "favorite" || rule.t === "rating";
+
+/**
+ * A group's rules, when a whole-set statement may start from its items rather than walk the
+ * library (`groupSourceSql`); null when it may not. An "any of" made only of rules with a source
+ * can, and so can a single such rule, which means the same whatever the group's match says --
+ * except "none of", whose items are the ones the source does not name.
+ */
+const sourceRulesOf = (group: FilterGroup): SourceRule[] | null => {
+    const sources = group.rules.filter(isSourceRule);
+    const drivable =
+        sources.length === group.rules.length &&
+        (group.match === "any" || (group.match === "all" && sources.length === 1));
+
+    return drivable ? sources : null;
+};
+
+/**
+ * A group's items, gathered from its rules' sources, as the start of the statement (§20 "The
+ * disk, not the CPU").
+ *
+ * The "any of" a saved filter is most often made of -- my favourite performers, four stars and
+ * up, my favourites -- was a condition on every item: a walk of the kind's index with, for each
+ * item, a probe of the viewer's overlay and a correlated `EXISTS` over all of their favourite
+ * tags. On the production replica that was 688 pages and 357 ms of CPU for the videos alone, and
+ * 452 pages more for the images. Asked from the other side, each rule names its items from an
+ * index -- a few pages each -- and their `UNION` is the group exactly, one row per item; the
+ * matching set is then one probe per item into `idx_Media_listable_id_kind_root`, which carries
+ * everything a kept order, a count or a shuffled page reads. 508 pages for both kinds at once,
+ * 5-10 ms warm.
+ *
+ * Each branch is its rule's condition turned round, with the same scoping, so the union holds
+ * exactly the items the group's condition admits and the group is not tested again:
+ *
+ * - a tag rule: the item's assignments of it that the viewer can see, as `anyTagSql`;
+ * - `favTags`: assignments the viewer can see of a tag `favUser` marked favourite, of the facet,
+ *   that is not somebody else's private tag -- `favoriteTagsSql` from the tag's end;
+ * - `rating` and `favorite`: `rater`'s overlay rows, which is whoever the group's rating rules
+ *   read (the viewer, or a shared filter's owner). An item with no row has neither, as the left
+ *   join said.
+ *
+ * Everything else the query asks -- listable, the libraries, hidden, kind, every other group and
+ * field -- stays in its WHERE and is asked of each item the union names. The `CROSS JOIN` keeps
+ * the union first (SQLite never reorders one); `INDEXED BY` and the caller's `kind IN` term are
+ * what make the index usable, since it is partial on that term and the planner, with no
+ * statistics, otherwise probes the primary key and reads every row (1,391 pages, not 508). The
+ * favourites branch names its index because the planner ties it with `idx_UserMedia_rating` on
+ * `userId` and takes that one, which reads every overlay row the rater has (198 pages, not 3).
+ */
+const groupSourceSql = (
+    rules: SourceRule[],
+    name: string,
+    params: Record<string, unknown>,
+    context: { favUser: string; rater: string }
+): string => {
+    const sources: string[] = [];
+    const tagPlaceholders: string[] = [];
+    const rater = `:${name}rater`;
+
+    rules.forEach((rule, index) => {
+        const ruleName = `${name}r${index}`;
+
+        switch (rule.t) {
+            case "tag":
+                params[ruleName] = rule.id;
+                tagPlaceholders.push(`:${ruleName}`);
+                break;
+            case "favTags":
+                params[`${ruleName}kind`] = rule.kind;
+                params[`${ruleName}user`] = context.favUser;
+                sources.push(
+                    `fmt."mediaId" AS "mediaId" FROM "UserTag" fut
+                       JOIN "Tag" ft ON ft."id" = fut."tagId" AND ft."kind" = :${ruleName}kind
+                            AND (ft."ownerId" IS NULL OR ft."ownerId" = :${ruleName}user)
+                       JOIN "MediaTag" fmt ON fmt."tagId" = fut."tagId"
+                            AND (fmt."userId" IS NULL OR fmt."userId" = :userId)
+                      WHERE fut."userId" = :${ruleName}user AND fut."favorite" IS NOT NULL`
+                );
+                break;
+            case "favorite":
+                params[`${name}rater`] = context.rater;
+                sources.push(
+                    `"mediaId" AS "mediaId"
+                       FROM "UserMedia" INDEXED BY "idx_UserMedia_favorite"
+                      WHERE "userId" = ${rater} AND "favorite" IS NOT NULL AND "favorite" = 1`
+                );
+                break;
+            case "rating": {
+                const bounds: string[] = [];
+
+                if (rule.min !== undefined) {
+                    bounds.push(`"rating" >= :${ruleName}min`);
+                    params[`${ruleName}min`] = rule.min;
+                }
+
+                if (rule.max !== undefined) {
+                    bounds.push(`"rating" <= :${ruleName}max`);
+                    params[`${ruleName}max`] = rule.max;
+                }
+
+                params[`${name}rater`] = context.rater;
+                sources.push(
+                    `"mediaId" AS "mediaId" FROM "UserMedia"
+                      WHERE "userId" = ${rater} AND ${bounds.join(" AND ")}`
+                );
+                break;
+            }
+        }
+    });
+
+    if (tagPlaceholders.length > 0) {
+        sources.unshift(
+            `"mediaId" AS "mediaId" FROM "MediaTag"
+              WHERE "tagId" IN (${tagPlaceholders.join(", ")})
+                AND ("userId" IS NULL OR "userId" = :userId)`
+        );
+    }
+
+    // `UNION` makes one row per item however many rules name it. A lone rule needs `DISTINCT`
+    // for the same: an item can carry two of the tags, or two of somebody's favourites.
+    const select = sources.length === 1 ? "SELECT DISTINCT" : "SELECT";
+
+    return `(${sources.map((body) => `${select} ${body}`).join(" UNION ")}) hit
+        CROSS JOIN "Media" m INDEXED BY "idx_Media_listable_id_kind_root" ON m."id" = hit."mediaId"`;
+};
+
+/**
  * Whose personal overlay the rating predicates should read.
  *
  * `overlayUserId` is deliberately a parameter rather than a field on `MediaQuery`: the query
@@ -668,8 +811,13 @@ const buildFilters = (
      * Only for a statement that walks its own matching set -- a count, a page, a list of ids.
      * Never inside a correlated `EXISTS` (the facet counts), where the item is already pinned
      * and a join from the matches would replay them once per assignment.
+     *
+     * `driveGroups` lets an "any of" group of indexed sources be the starting point as well
+     * (`groupSourceSql`). Only for a statement that reads its *whole* matching set -- a kept
+     * order, a count, a shuffled page: a page in an indexed order stops walking when it is full,
+     * and starting from the group would gather and sort every item of it first.
      */
-    options: { drive?: boolean } = {}
+    options: { drive?: boolean; driveGroups?: boolean } = {}
 ): QueryBuild => {
     /**
      * An overlay identical to the viewer's is not an overlay.
@@ -866,9 +1014,27 @@ const buildFilters = (
      * a shared filter resolves against its owner, exactly as its ratings do, else the viewer's.
      */
     const favUser = overlay ?? userId;
+    let driven: FilterGroup | null = null;
 
     (query.groups ?? []).forEach((group, index) => {
-        where.push(groupSql(group, `g${index}`, params, { ratingAlias, favUser }));
+        const sources =
+            options.driveGroups && driven === null && source === `"Media" m`
+                ? sourceRulesOf(group)
+                : null;
+
+        if (sources === null) {
+            where.push(groupSql(group, `g${index}`, params, { ratingAlias, favUser }));
+            return;
+        }
+
+        // The group's own items are the rows, so it is not asked again of each of them; the
+        // `kind IN` term is always true and is what lets the source's index be used at all.
+        driven = group;
+        source = groupSourceSql(sources, `g${index}`, params, {
+            favUser,
+            rater: overlay ?? userId,
+        });
+        where.push(`m."kind" IN ('image', 'video')`);
     });
 
     if (query.favorite) {
@@ -891,7 +1057,7 @@ const buildFilters = (
 
     appendMeasureFilters(query, where, params);
 
-    return { where, params, ratingAlias, source };
+    return { where, params, ratingAlias, source, driven };
 };
 
 /**
@@ -994,17 +1160,23 @@ const MEASURE_SQL: Record<FilterMeasure, { column: string; scale: number }> = {
 };
 
 /**
- * Orientation, compared rather than stored.
+ * Orientation, read from the generated column `Media.orientation` (§14e).
  *
- * No column, and deliberately none: it is a fact about two columns that are already there,
- * and a third that had to be kept in step with them would be a third thing to get wrong on
- * every re-probe. Both sides must be present — an item that was never probed has no
- * orientation rather than a square one.
+ * It used to be compared here from the two sides, and deliberately had no column: a third fact
+ * kept in step with two already there would be a third thing to get wrong on every re-probe. A
+ * *generated* column answers that -- SQLite computes it from `width` and `height` and nothing
+ * writes it, so it cannot disagree with them -- and it gives the planner what a comparison could
+ * not, an index (`idx_Media_list_orientation`). Comparing the sides read every candidate's row:
+ * a portrait shuffle of the videos on the production replica was 1,429 pages, against 275 for the
+ * same walk with no orientation (§20 "The disk, not the CPU").
+ *
+ * The column's definition is the comparisons this replaced, so both sides must still be present:
+ * an item that was never probed has no orientation rather than a square one, and is NULL here.
  */
 const ORIENTATION_SQL: Record<"landscape" | "portrait" | "square", string> = {
-    landscape: `m."width" > m."height"`,
-    portrait: `m."height" > m."width"`,
-    square: `m."width" = m."height" AND m."width" IS NOT NULL`,
+    landscape: `m."orientation" = 'landscape'`,
+    portrait: `m."orientation" = 'portrait'`,
+    square: `m."orientation" = 'square'`,
 };
 
 /**
@@ -1193,12 +1365,16 @@ const hiddenMediaIds = (userId: string): string[] | null => {
  * way. Shared by `pageIds`, `orderedRowids` and `countMedia`, so a page of the grid, the whole
  * order the web process keeps for a shuffle (§20) and the count cannot disagree about what
  * matches or where it goes.
+ *
+ * `whole` says the statement reads the entire matching set -- a count, a kept order, a shuffled
+ * page -- so it may start from an "any of" group's own items (`groupSourceSql`).
  */
 const pagingStatement = (
     query: MediaQuery,
     userId: string,
     rootIds: string[],
-    overlayUserId: string | undefined
+    overlayUserId: string | undefined,
+    whole: boolean
 ): {
     from: string;
     where: string;
@@ -1206,12 +1382,12 @@ const pagingStatement = (
     params: Record<string, unknown>;
     order: string;
 } => {
-    const { where, params, ratingAlias, source } = buildFilters(
+    const { where, params, ratingAlias, source, driven } = buildFilters(
         query,
         userId,
         rootIds,
         overlayUserId,
-        { drive: true }
+        { drive: true, driveGroups: whole }
     );
 
     // Shuffle is an ordinary sort now, so it pages exactly like the others: filter, order,
@@ -1236,8 +1412,13 @@ const pagingStatement = (
      * One extra row answers "is there another page" without counting. Comparing the page
      * length against the page size is wrong the moment a page can be legitimately short, and
      * a count is three orders of magnitude dearer than the page itself.
+     *
+     * Whether the join is needed is asked of the query less any group it is driven from: that
+     * group's ratings are read by its source (`groupSourceSql`), not through the join.
      */
-    const hidden = needsUserJoin(query) ? null : hiddenMediaIds(userId);
+    const rest =
+        driven === null ? query : { ...query, groups: query.groups?.filter((g) => g !== driven) };
+    const hidden = needsUserJoin(rest) ? null : hiddenMediaIds(userId);
     const pagingWhere = [...where];
     const pagingParams: Record<string, unknown> = { ...params };
 
@@ -1293,11 +1474,14 @@ const pageIds = (
     limit: number,
     offset: number
 ): { ids: string[]; params: Record<string, unknown>; order: string } => {
+    // A shuffle reads its whole matching set whichever page is asked for; every other sort is a
+    // walk that stops when the page is full.
     const { from, where, pagingParams, params, order } = pagingStatement(
         query,
         userId,
         rootIds,
-        overlayUserId
+        overlayUserId,
+        query.sort === "random"
     );
 
     const ids = db
@@ -1397,12 +1581,16 @@ export const shuffledIds = (
     pageIds({ ...query, sort: "random", seed }, userId, rootIds, overlayUserId, count, 0).ids;
 
 /**
- * The whole of a query's order, as rowids, up to `cap` of them (§20 "A shuffle is sorted once").
+ * A query's whole order, as rowids with each item's kind (§20 "A shuffle is sorted once").
  *
  * The paging statement without its window: one walk of the matching set, which is what any page
  * of a shuffle costs anyway, kept by the web process so the pages after it cost nothing like it.
  * Rowids rather than ids because the caller holds them in memory -- eight bytes each in a typed
  * array, against a 36-character string apiece -- and `stillMatching` turns them back into ids.
+ *
+ * The kind comes with each, as its index in `mediaKinds`, so one order taken without a kind
+ * serves both kind tabs: a tab's order is the slots of its kind, in the same order (§20 "One walk
+ * serves both kind tabs"). It is read from the same index entry as the rowid, so it costs nothing.
  *
  * Returns up to `cap + 1`, so a caller can tell an order it may keep from one too long to.
  */
@@ -1412,18 +1600,23 @@ export const orderedRowids = (
     rootIds: string[],
     cap: number,
     overlayUserId?: string
-): number[] => {
+): { rowids: number[]; kinds: Uint8Array } => {
     const { from, where, order, pagingParams } = pagingStatement(
         query,
         userId,
         rootIds,
-        overlayUserId
+        overlayUserId,
+        true
     );
+    const rows = db
+        .prepare(`SELECT m."rowid", m."kind" FROM ${from} WHERE ${where} ${order} LIMIT :limit`)
+        .raw()
+        .all({ ...pagingParams, limit: cap + 1 }) as [number, MediaKind][];
 
-    return db
-        .prepare(`SELECT m."rowid" FROM ${from} WHERE ${where} ${order} LIMIT :limit`)
-        .pluck()
-        .all({ ...pagingParams, limit: cap + 1 }) as number[];
+    return {
+        rowids: rows.map(([rowid]) => rowid),
+        kinds: Uint8Array.from(rows, ([, kind]) => mediaKinds.indexOf(kind)),
+    };
 };
 
 /** An item a kept order holds; its kind, because a look caps each kind separately (§5e). */
@@ -1531,7 +1724,13 @@ export const countMedia = (
      * scroll"). Counting the same way reads what a page walk reads: on the production replica
      * 722 pages → 538 for untagged videos, 460 → 275 for all videos.
      */
-    const { from, where, pagingParams } = pagingStatement(query, userId, rootIds, overlayUserId);
+    const { from, where, pagingParams } = pagingStatement(
+        query,
+        userId,
+        rootIds,
+        overlayUserId,
+        true
+    );
 
     return db
         .prepare(`SELECT count(*) AS n FROM ${from} WHERE ${where}`)

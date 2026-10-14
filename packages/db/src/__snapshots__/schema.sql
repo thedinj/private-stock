@@ -404,6 +404,9 @@ CREATE TABLE "Media" (
             "lastSeenAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "orientation" TEXT GENERATED ALWAYS AS (CASE WHEN "width" > "height" THEN 'landscape'
+                WHEN "height" > "width" THEN 'portrait' WHEN "width" = "height" THEN 'square'
+                END) VIRTUAL,
             -- Forward reference: "Artifact" is created below. SQLite resolves foreign keys
             -- when they are used rather than when the table is declared, so the order of
             -- CREATE TABLE statements does not have to break the cycle.
@@ -1279,25 +1282,28 @@ CREATE INDEX "idx_Media_list_addedAt"
             ON "Media" ("listRootId", "addedAt", "id") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_bitrate"
-            ON "Media" ("listRootId", "bitrate", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "bitrate", "id", "kind") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_capturedAt"
             ON "Media" ("listRootId", "capturedAt", "id") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_duration"
-            ON "Media" ("listRootId", "durationMs", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "durationMs", "id", "kind") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_fps"
-            ON "Media" ("listRootId", "fps", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "fps", "id", "kind") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_kind_addedAt"
             ON "Media" ("listRootId", "kind", "addedAt", "id") WHERE "listable" = 1;
 
+CREATE INDEX "idx_Media_list_orientation"
+            ON "Media" ("listRootId", "orientation", "kind", "id") WHERE "listable" = 1;
+
 CREATE INDEX "idx_Media_list_resolution"
-            ON "Media" ("listRootId", MIN("width", "height"), "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", MIN("width", "height"), "id", "kind") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_size"
-            ON "Media" ("listRootId", "listSize", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "listSize", "id", "kind") WHERE "listable" = 1;
 
 CREATE INDEX "idx_Media_list_title"
             ON "Media" ("listRootId", "title" COLLATE NOCASE, "id") WHERE "listable" = 1;

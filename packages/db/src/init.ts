@@ -252,6 +252,9 @@ export function initializeDatabase(db: Database): void {
             "lastSeenAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "orientation" TEXT GENERATED ALWAYS AS (CASE WHEN "width" > "height" THEN 'landscape'
+                WHEN "height" > "width" THEN 'portrait' WHEN "width" = "height" THEN 'square'
+                END) VIRTUAL,
             -- Forward reference: "Artifact" is created below. SQLite resolves foreign keys
             -- when they are used rather than when the table is declared, so the order of
             -- CREATE TABLE statements does not have to break the cycle.
@@ -277,6 +280,12 @@ export function initializeDatabase(db: Database): void {
         -- The sort expressions must match these exactly. Wrapping a sort column in
         -- COALESCE -- which the first version did, to order NULLs predictably -- makes the
         -- ORDER BY an expression rather than a column and silently disables the index.
+        --
+        -- The five that are also measure filters (§14e) carry "kind" after "id". The order is
+        -- unchanged -- "id" is unique, so nothing after it sorts -- and the index then holds
+        -- everything a kept order, a count or a kind's page reads: a twenty-minute shuffle, or
+        -- the Videos tab sorted by length, no longer reads each item's row to learn its kind
+        -- (1,100-1,600 pages each on the production replica, against 275 for the bare walk).
         CREATE INDEX IF NOT EXISTS "idx_Media_list_addedAt"
             ON "Media" ("listRootId", "addedAt", "id") WHERE "listable" = 1;
         CREATE INDEX IF NOT EXISTS "idx_Media_list_capturedAt"
@@ -284,21 +293,31 @@ export function initializeDatabase(db: Database): void {
         CREATE INDEX IF NOT EXISTS "idx_Media_list_title"
             ON "Media" ("listRootId", "title" COLLATE NOCASE, "id") WHERE "listable" = 1;
         CREATE INDEX IF NOT EXISTS "idx_Media_list_duration"
-            ON "Media" ("listRootId", "durationMs", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "durationMs", "id", "kind") WHERE "listable" = 1;
         CREATE INDEX IF NOT EXISTS "idx_Media_list_size"
-            ON "Media" ("listRootId", "listSize", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "listSize", "id", "kind") WHERE "listable" = 1;
         -- On the expression rather than a column: the short side, which is what resolution
         -- means to the filter and the sort alike. The ORDER BY in mediaRepo spells it
         -- identically, which is what lets SQLite walk this index instead of sorting.
         CREATE INDEX IF NOT EXISTS "idx_Media_list_resolution"
-            ON "Media" ("listRootId", MIN("width", "height"), "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", MIN("width", "height"), "id", "kind") WHERE "listable" = 1;
         CREATE INDEX IF NOT EXISTS "idx_Media_list_bitrate"
-            ON "Media" ("listRootId", "bitrate", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "bitrate", "id", "kind") WHERE "listable" = 1;
         CREATE INDEX IF NOT EXISTS "idx_Media_list_fps"
-            ON "Media" ("listRootId", "fps", "id") WHERE "listable" = 1;
+            ON "Media" ("listRootId", "fps", "id", "kind") WHERE "listable" = 1;
         -- Kind is a filter rather than a sort, so it leads the sort column here.
         CREATE INDEX IF NOT EXISTS "idx_Media_list_kind_addedAt"
             ON "Media" ("listRootId", "kind", "addedAt", "id") WHERE "listable" = 1;
+        -- Orientation, for the statements that read a whole matching set: a shuffle's kept
+        -- order, a count (§20 "The disk, not the CPU"). "orientation" is the generated column
+        -- above -- computed from the two sides, so it cannot drift from them, and declared last
+        -- with no comment beside it because a column added by ALTER TABLE carries none and the
+        -- drift test compares the two definitions word for word. Without this a portrait
+        -- shuffle read every item's row for its width and height: 1,429 pages for the videos on
+        -- the production replica, against 275 for the same walk unfiltered. Orientation leads
+        -- kind so one range serves both kind tabs' shared order as well as one tab's.
+        CREATE INDEX IF NOT EXISTS "idx_Media_list_orientation"
+            ON "Media" ("listRootId", "orientation", "kind", "id") WHERE "listable" = 1;
 
         -- The processing view's denominator (§13c): listable items by kind and by whether the
         -- probe has read them, counted from ~50 pages instead of a three-table join over the

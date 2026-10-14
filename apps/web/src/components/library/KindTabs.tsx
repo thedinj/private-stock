@@ -29,7 +29,9 @@ import classes from "./KindTabs.module.scss";
  *
  * The counts are the current filter's, asked per kind. The tab you are on shares its key with
  * the grid's own count and costs nothing; the other kind is one more exact count per filter
- * (§20), fetched once and cached like the grid's.
+ * (§20), fetched once and cached like the grid's. For a shuffle or an untagged list it costs no
+ * walk of its own either: the server keeps one order for both kinds and counts each tab from it
+ * (§20 "One walk serves both kind tabs").
  *
  * **The other kind waits for the filter to settle.** The search box is debounced at 300 ms for
  * the grid, and somebody typing a word slowly pauses that long after every letter -- each pause

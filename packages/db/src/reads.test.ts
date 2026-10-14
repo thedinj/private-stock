@@ -20,7 +20,7 @@ vi.mock("./db", async () => {
     return { db: instance, getDb: () => instance };
 });
 
-const { read, runNow } = await import("./reads.js");
+const { join, read, runNow } = await import("./reads.js");
 const { runOffThread } = await import("./readPool.js");
 const { db: sharedDb } = await import("./db.js");
 const db = sharedDb as unknown as Database.Database;
@@ -80,5 +80,22 @@ describe("read plans", () => {
 
         expect(runNow(recovering())).toBe("caught");
         await expect(runOffThread(recovering())).resolves.toBe("caught");
+    });
+
+    it("answer a wait on another plan with nothing where the driver cannot wait", async () => {
+        // A plan that would rather share another's work, and does its own when it cannot.
+        function* sharing(other: Promise<string[]>) {
+            const shared = yield* join(other);
+
+            return shared ?? (yield* namesOf(["m1"]));
+        }
+
+        addTagged("m1", "noir");
+
+        expect(runNow(sharing(Promise.resolve(["shared"])))).toEqual(["m1:noir"]);
+        // Inline under vitest, as with no reader threads: the same answer as `runNow`.
+        await expect(runOffThread(sharing(Promise.resolve(["shared"])))).resolves.toEqual([
+            "m1:noir",
+        ]);
     });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mediaQuerySchema, type MediaQuery } from "@private-stock/core";
+import { mediaKinds, mediaQuerySchema, type MediaKind, type MediaQuery } from "@private-stock/core";
 
 import type { AuthContext } from "../auth/withAuth";
 
@@ -17,18 +17,35 @@ let matching: number[] = [];
 let gone = new Set<number>();
 let newest = 100;
 let walks = 0;
+/** What each walk was asked for. */
+let walked: MediaQuery[] = [];
+
+/** Every third item is a photo, the rest videos. */
+const kindOf = (rowid: number): MediaKind => (rowid % 3 === 0 ? "image" : "video");
+
+/** What `orderedRowids` answers for these rowids, as a walk handed to a plan by hand. */
+const walkOf = (rowids: number[]) => ({
+    rowids,
+    kinds: Uint8Array.from(rowids, (rowid) => mediaKinds.indexOf(kindOf(rowid))),
+});
 
 /** The repo's two walks, behind the same names the read plans ask for them by. */
 const repo = {
     newestRowid: () => newest,
-    orderedRowids: (_query: MediaQuery, _user: string, _roots: string[], cap: number) => {
+    orderedRowids: (query: MediaQuery, _user: string, _roots: string[], cap: number) => {
         walks += 1;
+        walked.push(query);
 
-        return matching.slice(0, cap + 1);
+        const rowids = matching
+            .filter((rowid) => query.kind === undefined || kindOf(rowid) === query.kind)
+            .slice(0, cap + 1);
+
+        return walkOf(rowids);
     },
-    stillMatching: (_q: MediaQuery, _u: string, roots: string[], rowids: number[]) =>
+    stillMatching: (query: MediaQuery, _u: string, roots: string[], rowids: number[]) =>
         rowids
             .filter((rowid) => roots.length > 0 && !gone.has(rowid))
+            .filter((rowid) => query.kind === undefined || kindOf(rowid) === query.kind)
             .map((rowid) => ({ rowid, id: `m${rowid}` })),
 };
 
@@ -78,6 +95,7 @@ beforeEach(() => {
     gone = new Set();
     newest = 100;
     walks = 0;
+    walked = [];
 });
 
 describe("keepsOrder", () => {
@@ -109,7 +127,7 @@ describe("keptOrder", () => {
         plan.next();
         forgetKeptOrders();
 
-        const step = plan.next(range(1, 25));
+        const step = plan.next(walkOf(range(1, 25)));
 
         // Served to the request that took it...
         expect(step.done && step.value?.rowids).toHaveLength(25);
@@ -125,7 +143,7 @@ describe("keptOrder", () => {
             range(11, 20).map((n) => `m${n}`)
         );
         expect(kept(shuffle({ page: "2", limit: "200" }), auth(), undefined, 1)).toBe(order);
-        expect(countOfOrder(order, 10)).toEqual({ total: 25, pageCount: 3 });
+        expect(countOfOrder(order, shuffle())).toEqual({ total: 25, pageCount: 3 });
         expect(walks).toBe(1);
     });
 
@@ -198,7 +216,7 @@ describe("pageOfOrder and countOfOrder", () => {
         expect(first.hasMore).toBe(true);
         // The next page starts where it always did: nothing slid onto this one.
         expect(page(order, shuffle({ page: "1" }), auth()).ids[0]).toBe("m11");
-        expect(countOfOrder(order, 10)).toEqual({ total: 24, pageCount: 3 });
+        expect(countOfOrder(order, shuffle())).toEqual({ total: 24, pageCount: 3 });
     });
 
     it("counts an item back in when a later check finds it again", () => {
@@ -209,7 +227,7 @@ describe("pageOfOrder and countOfOrder", () => {
         gone.clear();
         page(order, shuffle(), auth());
 
-        expect(countOfOrder(order, 10).total).toBe(25);
+        expect(countOfOrder(order, shuffle()).total).toBe(25);
     });
 
     it("says whether any slot lies past the page, however short the page came back", () => {
@@ -226,5 +244,105 @@ describe("pageOfOrder and countOfOrder", () => {
             ids: [],
             hasMore: false,
         });
+    });
+});
+
+describe("one order for both kind tabs", () => {
+    const videos = range(1, 25).filter((rowid) => kindOf(rowid) === "video");
+    const photos = range(1, 25).filter((rowid) => kindOf(rowid) === "image");
+
+    it("walks once, without the kind, for the Videos tab, the Photos tab and All", () => {
+        const video = kept(shuffle({ kind: "video" }), auth(), undefined, 0)!;
+
+        expect(kept(shuffle({ kind: "image" }), auth(), undefined, 1)).toBe(video);
+        expect(kept(shuffle(), auth(), undefined, 2)).toBe(video);
+        expect(walks).toBe(1);
+        expect(walked[0].kind).toBeUndefined();
+    });
+
+    it("pages and counts each kind from its own slots, full pages and in order", () => {
+        const order = kept(shuffle({ kind: "video" }), auth(), undefined, 0)!;
+        const pageOf = (kind: MediaKind, n: number) =>
+            page(order, shuffle({ kind, page: String(n) }), auth());
+
+        expect(pageOf("video", 0).ids).toEqual(videos.slice(0, 10).map((n) => `m${n}`));
+        expect(pageOf("video", 1)).toEqual({
+            ids: videos.slice(10, 20).map((n) => `m${n}`),
+            hasMore: false,
+        });
+        expect(pageOf("image", 0)).toEqual({
+            ids: photos.map((n) => `m${n}`),
+            hasMore: false,
+        });
+        expect(countOfOrder(order, shuffle({ kind: "video" }))).toEqual({
+            total: videos.length,
+            pageCount: 2,
+        });
+        expect(countOfOrder(order, shuffle({ kind: "image" }))).toEqual({
+            total: photos.length,
+            pageCount: 1,
+        });
+        expect(countOfOrder(order, shuffle())).toEqual({ total: 25, pageCount: 3 });
+    });
+
+    it("counts a departure against its own kind and against All, wherever it was seen", () => {
+        const order = kept(shuffle({ kind: "video" }), auth(), undefined, 0)!;
+
+        gone.add(photos[0]);
+        // Seen leaving on the All tab's page, then counted out of the Photos tab too.
+        page(order, shuffle(), auth());
+
+        expect(countOfOrder(order, shuffle({ kind: "image" })).total).toBe(photos.length - 1);
+        expect(countOfOrder(order, shuffle({ kind: "video" })).total).toBe(videos.length);
+        expect(countOfOrder(order, shuffle()).total).toBe(24);
+    });
+});
+
+describe("one take, however many ask", () => {
+    /** A plan as `runOffThread` drives it: up to its first request, which is then answered. */
+    const start = (query: MediaQuery, now = 0) => {
+        const plan = keptOrder(query, auth(), undefined, now);
+
+        return { plan, first: plan.next() };
+    };
+
+    it("lets a request for the order being taken wait for that take, not walk again", async () => {
+        const list = start(shuffle({ kind: "video" }));
+        const count = start(shuffle({ kind: "image" }));
+
+        expect(count.first.done).toBe(false);
+        expect(count.first.value).toHaveProperty("join");
+
+        const taken = list.plan.next(walkOf(range(1, 25)));
+        const waited = await (count.first.value as { join: Promise<unknown> }).join;
+
+        expect(taken.done && taken.value).toBe(waited);
+        expect(count.plan.next(waited)).toEqual({ done: true, value: waited });
+    });
+
+    it("takes its own when the driver cannot wait, or the take it waited on failed", async () => {
+        const list = start(shuffle());
+        const count = start(shuffle());
+
+        // The walk failing, as a reader thread's death hands it into the plan.
+        expect(() => list.plan.throw(new Error("the reader stopped"))).toThrow("stopped");
+
+        await expect(
+            (count.first.value as { join: Promise<unknown> }).join
+        ).resolves.toBeUndefined();
+
+        // Handed `undefined`, the plan asks for the walk itself.
+        expect(count.plan.next(undefined).value).toMatchObject({ name: "orderedRowids" });
+    });
+
+    it("does not wait on a take begun before an arrival, or before a forget", () => {
+        start(shuffle());
+        newest = 101;
+
+        expect(start(shuffle()).first.value).toMatchObject({ name: "orderedRowids" });
+
+        forgetKeptOrders();
+
+        expect(start(shuffle()).first.value).toMatchObject({ name: "orderedRowids" });
     });
 });

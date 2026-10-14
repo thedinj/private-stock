@@ -9,7 +9,7 @@ export {
     type Db,
 } from "./db.js";
 export { HAS_RELEASED } from "./released.js";
-export { read, reads, runNow, type ReadName, type ReadPlan } from "./reads.js";
+export { join, read, reads, runNow, type ReadName, type ReadPlan } from "./reads.js";
 export { runOffThread } from "./readPool.js";
 export * from "./repos/index.js";
 export { generateBaseline, renderSchemaSql, BASELINE_PATH } from "./baseline.js";

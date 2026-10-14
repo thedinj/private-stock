@@ -38,11 +38,13 @@ export const readPlanMock = async (repos: Record<string, Record<string, unknown>
         return fn(...request.args);
     };
 
+    // A wait on another plan (`join`) is answered as the real `runNow` answers it: it cannot wait,
+    // so the plan does the work itself.
     const runNow = <T>(plan: Db.ReadPlan<T>): T => {
         let step = plan.next();
 
         while (!step.done) {
-            step = plan.next(run(step.value));
+            step = plan.next("join" in step.value ? undefined : run(step.value));
         }
 
         return step.value;
@@ -50,6 +52,7 @@ export const readPlanMock = async (repos: Record<string, Record<string, unknown>
 
     return {
         read: actual.read,
+        join: actual.join,
         runNow,
         runOffThread: async <T>(plan: Db.ReadPlan<T>): Promise<T> => runNow(plan),
     };

@@ -1604,6 +1604,16 @@ export const listKinds = (userId: string): { kind: string; tagCount: number }[] 
  *
  * Ordered so the two that survive the cut are stable between renders rather than whatever
  * the planner happened to emit.
+ *
+ * **The library's assignments and the viewer's own are read as two halves**, each from the
+ * unique index that holds exactly its rows and covers what is read (§20 "The disk, not the
+ * CPU"). As one `"userId" IS NULL OR "userId" = ?` the planner could use neither: it ran a
+ * multi-index OR whose library half, `idx_MediaTag_unique_library`, does not carry `userId` to
+ * test, so every assignment on the page cost a read of its row -- 157 pages a page of sixty on
+ * the production replica, against 100 split. `INDEXED BY` because each half is only that cheap
+ * through its own index, and a renamed one should fail here rather than quietly read rows again.
+ * `UNION ALL`, since a row is in one half or the other; the `DISTINCT` outside still folds two
+ * tags of one name and facet, as before.
  */
 export const listForMediaIds = (
     mediaIds: string[],
@@ -1618,13 +1628,17 @@ export const listForMediaIds = (
     return db
         .prepare(
             `SELECT DISTINCT mt."mediaId", t."name", t."kind"
-               FROM "MediaTag" mt
+               FROM (SELECT "mediaId", "tagId"
+                       FROM "MediaTag" INDEXED BY "idx_MediaTag_unique_library"
+                      WHERE "mediaId" IN (${placeholders}) AND "userId" IS NULL
+                     UNION ALL
+                     SELECT "mediaId", "tagId"
+                       FROM "MediaTag" INDEXED BY "idx_MediaTag_unique_user"
+                      WHERE "mediaId" IN (${placeholders}) AND "userId" = ?) mt
                JOIN "Tag" t ON t."id" = mt."tagId"
-              WHERE mt."mediaId" IN (${placeholders})
-                AND (mt."userId" IS NULL OR mt."userId" = ?)
               ORDER BY t."kind", t."name" COLLATE NOCASE`
         )
-        .all(...mediaIds, userId) as { mediaId: string; name: string; kind: string }[];
+        .all(...mediaIds, ...mediaIds, userId) as { mediaId: string; name: string; kind: string }[];
 };
 
 export interface SelectionTagRow {

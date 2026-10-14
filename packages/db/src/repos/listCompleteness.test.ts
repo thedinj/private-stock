@@ -2,9 +2,11 @@ import Database from "better-sqlite3";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+    mediaKinds,
     mediaQuerySchema,
     type FilterGroup,
     type FilterRule,
+    type MediaKind,
     type MediaQuery,
 } from "@private-stock/core";
 
@@ -560,6 +562,63 @@ const FILTERS: [string, () => Filter][] = [
             ],
         }),
     ],
+    // "Any of" groups made only of rules with an index of their own, which a count, a kept order
+    // and a shuffled page start from rather than test on every item (§20, `groupSourceSql`).
+    [
+        "a favourite genre, four stars up, or a favourite",
+        () => ({
+            groups: [
+                {
+                    match: "any",
+                    rules: [
+                        { t: "favTags", kind: "genre" },
+                        { t: "rating", min: 4 },
+                        { t: "favorite" },
+                    ],
+                },
+            ],
+        }),
+    ],
+    [
+        "a rating band or a tag, videos not portrait",
+        () => ({
+            kind: "video",
+            groups: [
+                {
+                    match: "any",
+                    rules: [
+                        { t: "rating", min: 2, max: 3 },
+                        { t: "tag", id: tags.drama as string },
+                    ],
+                },
+                { match: "none", rules: [{ t: "orientation", value: "portrait" }] },
+            ],
+        }),
+    ],
+    [
+        "a lone favourite as an all group, landscape",
+        () => ({
+            orientation: "landscape",
+            groups: [{ match: "all", rules: [{ t: "favorite" }] }],
+        }),
+    ],
+    [
+        "two tags or my favourite keywords, unwatched, without a private tag",
+        () => ({
+            watched: "no",
+            notTags: [tags.mine as string],
+            groups: [
+                {
+                    match: "any",
+                    rules: [
+                        { t: "tag", id: tags.noir as string },
+                        { t: "favTags", kind: "tag" },
+                        { t: "tag", id: tags.theirs as string },
+                    ],
+                },
+            ],
+        }),
+    ],
     [
         "favourite or watched, in two groups",
         () => ({
@@ -641,6 +700,28 @@ describe.each([
                 const query = mediaQuerySchema.parse({ ...filter, sort, direction, seed: 11 });
 
                 expect(mediaRepo.countMedia(query, USER, [ROOT], overlayUserId)).toBe(want.length);
+
+                // A kept order holds the same set, each slot with its item's kind, and every
+                // slot passes the filter asked of it item by item -- which is the condition a
+                // group that the order was driven from is otherwise never tested by.
+                const order = mediaRepo.orderedRowids(query, USER, [ROOT], 10_000, overlayUserId);
+                const byRowid = new Map(
+                    (
+                        sharedDb.prepare(`SELECT "rowid", "id", "kind" FROM "Media"`).all() as {
+                            rowid: number;
+                            id: string;
+                            kind: MediaKind;
+                        }[]
+                    ).map((row) => [row.rowid, row])
+                );
+
+                expect(order.rowids.map((rowid) => byRowid.get(rowid)?.id).sort()).toEqual(want);
+                expect([...order.kinds].map((kind) => mediaKinds[kind])).toEqual(
+                    order.rowids.map((rowid) => byRowid.get(rowid)?.kind)
+                );
+                expect(
+                    mediaRepo.stillMatching(query, USER, [ROOT], order.rowids, overlayUserId)
+                ).toHaveLength(order.rowids.length);
                 expect(
                     mediaRepo.listMediaIds(query, USER, [ROOT], 10_000, overlayUserId).sort()
                 ).toEqual(want);
