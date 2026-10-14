@@ -35,8 +35,8 @@ interface TastingControlsProps {
     title: string | null;
     held: boolean;
     muted: boolean;
-    /** Whether there is an item on stage for the item-shaped controls to act on. */
-    hasItem: boolean;
+    /** The item on stage for the item-shaped controls to act on, if there is one. */
+    itemId: string | null;
     isFullscreen: boolean;
     clipSeconds: TastingSeconds;
     photoSeconds: TastingSeconds;
@@ -59,7 +59,7 @@ export const TastingControls: React.FC<TastingControlsProps> = ({
     title,
     held,
     muted,
-    hasItem,
+    itemId,
     isFullscreen,
     clipSeconds,
     photoSeconds,
@@ -76,6 +76,7 @@ export const TastingControls: React.FC<TastingControlsProps> = ({
     onClose,
     onPointerOnControls,
 }) => {
+    const hasItem = itemId !== null;
     const pointer = {
         onPointerEnter: () => onPointerOnControls(true),
         onPointerLeave: () => onPointerOnControls(false),
@@ -95,6 +96,9 @@ export const TastingControls: React.FC<TastingControlsProps> = ({
                         color="gray"
                         size={44}
                         aria-label="Open this item"
+                        // Which item this opens, so pressing or resting on it warms that item
+                        // before the click arrives (`useItemWarming`, §14 "Waiting").
+                        data-warm-item={itemId ?? undefined}
                         onClick={onOpen}
                         disabled={!hasItem}
                     >

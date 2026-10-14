@@ -134,7 +134,12 @@ export const queryKeys = {
         lookup: (ids: string) => ["media", "lookup", ids],
         count: (filter: FilterParams) => ["media", "count", filter],
         facets: () => ["media", "facets"],
-        facetsFor: (filter: FilterParams) => ["media", "facets", filter],
+        /**
+         * The filter panel's tags. Not keyed by the filter: the numbers are library-wide (§20
+         * "Facets without counts"), so the key is only the filter's tag ids, plus an expanded
+         * facet and its search in the "show all" list.
+         */
+        facetsFor: (params: string) => ["media", "facets", params],
         /**
          * The Captures page (§9): this viewer's own stills of listable items.
          *
@@ -186,6 +191,11 @@ export const queryKeys = {
          * different order is a cache hit rather than a second count.
          */
         selection: (mediaIds: string) => ["tags", "selection", mediaIds],
+        /**
+         * What a filter's tag ids are called, keyed by the ids, sorted and comma-joined. Under
+         * `tags` so a rename reaches it through `invalidateVocabulary`.
+         */
+        names: (tagIds: string) => ["tags", "names", tagIds],
         /** The management table: one facet of one system, paged, searched, filtered. */
         list: (scope: string, params: string) => ["tags", "list", scope, params],
         /**

@@ -15,13 +15,12 @@ import {
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 
-import type { FaceReviewFace, MediaDetail, MediaListItem } from "@private-stock/core";
+import type { FaceReviewFace, MediaListItem } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { FaceCropView } from "@/components/faces/FaceCropView";
 import { useConfirmedFaces } from "@/lib/api/faces";
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/api/queryKeys";
+import { mediaDetailQuery } from "@/lib/api/media";
 
 import { KeepStandInDialog } from "./KeepStandInDialog";
 import { TagPictureDialog } from "./TagPictureDialog";
@@ -62,8 +61,7 @@ const FrameChoices: React.FC<{
     onPick: (atMs: number) => void;
 }> = ({ mediaId, onPick }) => {
     const { data, isLoading } = useQuery({
-        queryKey: queryKeys.media.detail(mediaId),
-        queryFn: () => api<MediaDetail>(`/api/media/${mediaId}`),
+        ...mediaDetailQuery(mediaId),
     });
 
     if (isLoading || !data) {

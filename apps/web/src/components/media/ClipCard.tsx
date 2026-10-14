@@ -49,7 +49,14 @@ export const ClipCard: React.FC<ClipCardProps> = ({
         withBorder
         radius="sm"
         p={6}
-        onClick={onToggle}
+        // Not for a click on the link to the item, which opens it. That link used to stop its
+        // click from reaching here, which also stopped it reaching the page turn's listener
+        // (`PageTurn`) -- the listener reads a stopped click as a cancelled one, so the link
+        // did nothing at all.
+        onClick={(event) => {
+            if (event.target instanceof Element && event.target.closest("a")) return;
+            onToggle();
+        }}
         style={{
             cursor: "pointer",
             // The whole card is the target: a checkbox is a small thing to hit forty times.
@@ -130,10 +137,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                         c="dimmed"
                         size="xs"
                         lineClamp={1}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            rememberReturn();
-                        }}
+                        onClick={rememberReturn}
                     >
                         {clip.mediaTitle}
                     </Anchor>

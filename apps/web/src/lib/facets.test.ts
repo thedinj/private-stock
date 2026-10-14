@@ -2,32 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { buildFacets, type FacetValue } from "./facets";
 
-/**
- * A vocabulary value, and what the filter leaves of it.
- *
- * The two numbers are one here unless a test separates them, because that is the ordinary
- * case -- an unfiltered library counts every use -- and the tests that care about the
- * difference are clearer for saying so explicitly.
- */
-const count = (
-    tagId: string,
-    kind: string,
-    name: string,
-    n: number,
-    filtered = n
-): FacetValue & { filtered: number } => ({
+/** A vocabulary value, carried by `n` items across the library. */
+const count = (tagId: string, kind: string, name: string, n: number): FacetValue => ({
     tagId,
     kind,
     name,
     colorKey: null,
     uses: n,
-    filtered,
 });
 
 const build = (
-    values: (FacetValue & { filtered: number })[],
+    values: FacetValue[],
     options: {
-        selected?: (FacetValue & { filtered: number })[];
+        selected?: FacetValue[];
         totals?: Record<string, number>;
         selectedTagIds?: string[];
         order?: string[];
@@ -36,15 +23,9 @@ const build = (
         scope?: "public" | "private";
     } = {}
 ) => {
-    const selected = options.selected ?? [];
-    const counts = new Map(
-        [...values, ...selected].map((row) => [row.tagId, row.filtered] as const)
-    );
-
     return buildFacets({
         values,
-        selected,
-        countOf: (tagId) => counts.get(tagId) ?? 0,
+        selected: options.selected ?? [],
         totals: new Map(Object.entries(options.totals ?? {})),
         selectedTagIds: options.selectedTagIds ?? [],
         order: options.order ?? ["tag", "performer", "source"],
@@ -146,49 +127,27 @@ describe("buildFacets", () => {
             expect(facets[0].values.map((value) => value.name)).toEqual(["Niche", "Popular"]);
         });
 
-        it("keeps a zero count rather than dropping the value", () => {
-            // With AND semantics a selection can exclude everything. "Noir (0)" is how
-            // someone understands why the grid is empty and what to click to fix it.
+        it("keeps a selection nothing carries any more, so it can still be undone", () => {
             const facets = build([], {
                 selected: [count("t1", "tag", "Noir", 0)],
                 selectedTagIds: ["t1"],
             });
 
-            expect(facets[0].values[0]).toMatchObject({ name: "Noir", count: 0 });
+            expect(facets[0].values[0]).toMatchObject({ name: "Noir", uses: 0 });
         });
     });
 
-    /**
-     * The list and the numbers answer different questions (§5c, §20).
-     *
-     * Which values exist comes from the vocabulary; what each one holds comes from counting
-     * against the current filter. Ordering by the first and displaying the second is the
-     * whole arrangement, and it is worth pinning down: the alternative -- ordering by the
-     * filtered count -- makes chips swap places every time an unrelated filter moves.
-     */
-    describe("vocabulary order against filtered counts", () => {
-        it("orders by library-wide use, not by what the filter leaves", () => {
+    describe("vocabulary order", () => {
+        it("orders by library-wide use and shows that number", () => {
             const facets = build([
-                count("popular", "tag", "Popular", 100, 0),
-                count("niche", "tag", "Niche", 2, 50),
+                count("niche", "tag", "Niche", 2),
+                count("popular", "tag", "Popular", 100),
             ]);
 
-            expect(facets[0].values.map((value) => value.name)).toEqual(["Popular", "Niche"]);
-        });
-
-        it("shows a value the filter excludes entirely, rather than dropping it", () => {
-            // The list is the vocabulary, so a value does not vanish because the current
-            // filter reaches none of it. "(0)" says why the chip would not help, which is
-            // more than a missing chip says.
-            const facets = build([count("t1", "tag", "Noir", 7, 0)]);
-
-            expect(facets[0].values[0]).toMatchObject({ name: "Noir", count: 0 });
-        });
-
-        it("reports the filtered count rather than the vocabulary's", () => {
-            const facets = build([count("t1", "tag", "Drama", 400, 12)]);
-
-            expect(facets[0].values[0].count).toBe(12);
+            expect(facets[0].values.map((value) => [value.name, value.uses])).toEqual([
+                ["Popular", 100],
+                ["Niche", 2],
+            ]);
         });
     });
 

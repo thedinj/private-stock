@@ -164,6 +164,8 @@
 }
 
 .thumb {
+    // Positioned for the light drawn round it while its item opens (`data-open-frame`).
+    position: relative;
     display: block;
     flex: none;
     line-height: 0;

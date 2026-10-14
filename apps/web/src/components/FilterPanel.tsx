@@ -24,7 +24,7 @@ import {
     type TagScope,
 } from "@private-stock/core";
 
-import { useFilterNames, useLibraryFacets } from "@/lib/api/facets";
+import { facetParams, useFilterNames, useLibraryFacets, useTagNames } from "@/lib/api/facets";
 import { describeGroup } from "@/lib/filterWords";
 import {
     MEASURES,
@@ -32,7 +32,6 @@ import {
     fileFilterGroups,
     hasClearableFilters,
     hasLook,
-    viewToRequestParams,
     withMeasure,
     type FileFilterRow,
     type LibraryView,
@@ -147,10 +146,10 @@ const MOVEMENTS: { value: "yes" | "no"; label: string }[] = [
 /**
  * "Your 2 favourite performers": the ♥ chip's name, for its tooltip and accessible name.
  *
- * The chip itself says only "♥ (3)", like every chip under it. It once spelled this out with
- * both numbers -- "♥ 2 favourite performers · 3 items" -- which was the widest thing in the
- * section; with the word "Favourites" gone, the bare number reads as items, as it does beside
- * every tag.
+ * The chip itself says only "♥". It once spelled this out with both numbers -- "♥ 2 favourite
+ * performers · 3 items" -- which was the widest thing in the section, and then "♥ (3)", the
+ * items under the filter; that number went with the rest of the filter counts (§20 "Facets
+ * without counts").
  */
 const favoritesName = (kind: string, tags: number): string => {
     const noun = tags === 1 ? facetLabel(kind) : facetLabelPlural(kind);
@@ -235,8 +234,6 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     heading = true,
     clearAll = true,
 }) => {
-    const requestParams = viewToRequestParams(view);
-
     /**
      * Which measurements are worth offering, given what is on screen.
      *
@@ -264,6 +261,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         (view.animated ? 1 : 0);
 
     const { data, isLoading } = useLibraryFacets(view);
+    const { data: tagNames } = useTagNames(view);
 
     const facets = data?.facets ?? [];
 
@@ -271,11 +269,11 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
      * Which facet a tag id belongs to, from what the panel has just been sent.
      *
      * The view holds ids alone, and switching a facet between "all of" and "any of" has to know
-     * which of the flat `tags` are that facet's. Every id the filter names comes back in
-     * `referencedTags`, and every chip drawn in its facet's values.
+     * which of the flat `tags` are that facet's. Every id the filter names comes back from
+     * `useTagNames`, and every chip drawn in its facet's values.
      */
     const kindOf = (tagId: string): string | undefined =>
-        data?.referencedTags[tagId]?.kind ??
+        tagNames?.referencedTags[tagId]?.kind ??
         facets.find((facet) => facet.values.some((value) => value.tagId === tagId))?.kind;
 
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -637,7 +635,6 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                             <TriChip
                                 accent="oxblood"
                                 name={favoritesName(section.kind, section.favorites.tags)}
-                                count={section.favorites.items}
                                 state={favoritesState(view, section.kind)}
                                 onCycle={() => onChange(cycleFavorites(view, section.kind))}
                                 display="♥"
@@ -698,7 +695,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                                     <TriChip
                                         key={value.tagId}
                                         name={value.name}
-                                        count={value.count}
+                                        count={value.uses}
                                         state={chipState(view, value.tagId)}
                                         onCycle={() =>
                                             onChange(cycleChip(view, value.tagId, section.kind))
@@ -744,17 +741,17 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                 kind={expanded?.kind ?? null}
                 scope={expanded?.scope ?? "public"}
                 label={facetLabelPlural(expanded?.kind ?? "")}
-                filterParams={requestParams.toString()}
+                filterParams={facetParams(view)}
                 view={view}
                 onChange={onChange}
                 onClose={() => setExpanded(null)}
             />
 
             {/* Once, on the first visit only: every later filter change keeps the last answer
-                on screen while the next is counted (`useLibraryFacets`). */}
+                on screen while the next is asked for (`useLibraryFacets`). */}
             {isLoading && (
                 <Text size="sm" c="dimmed">
-                    Counting tags…
+                    Loading tags…
                 </Text>
             )}
 

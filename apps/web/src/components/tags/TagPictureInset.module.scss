@@ -11,6 +11,8 @@
 }
 
 .picture {
+    // Positioned for the light drawn round it while its item opens (`data-open-frame`).
+    position: relative;
     display: block;
     aspect-ratio: 16 / 9;
     overflow: hidden;

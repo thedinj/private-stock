@@ -111,6 +111,9 @@ export const FilmstripRow: React.FC<FilmstripRowProps> = ({
                     className={classes.frame}
                     title={frame.title}
                     onClick={frame.onClick}
+                    // A frame that opens an item is lit while it is on its way (§14,
+                    // "Waiting"); one that goes anywhere else is never marked, so this is inert.
+                    data-open-frame
                 >
                     {frame.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element

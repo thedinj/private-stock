@@ -8,6 +8,7 @@ import type { MediaCountResponse, MediaListItem } from "@private-stock/core";
 
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { isPlainClick, useItemWarming, useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
 import {
     type ConveyorPosition,
@@ -126,6 +127,10 @@ export const ShowcaseStage: React.FC<ShowcaseStageProps> = ({ set, onExit }) => 
     /** The identity of the wall: what it resets on, and what a saved position belongs to. */
     const filter = showcaseSetKey(set);
     const queryClient = useQueryClient();
+    const openItem = useOpenItem();
+
+    // Outside the shell, so `PageTurn` is not here to warm a tile that is pressed or rested on.
+    useItemWarming();
 
     const stageRef = useRef<HTMLDivElement>(null);
     const layerRef = useRef<HTMLDivElement>(null);
@@ -759,10 +764,12 @@ export const ShowcaseStage: React.FC<ShowcaseStageProps> = ({ set, onExit }) => 
 
     /**
      * Opening a tile: remember where the wall was, so coming back from the player lands here
-     * rather than at the first page.
+     * rather than at the first page -- and then open it the way every tile is opened (§14,
+     * "Waiting"): lit at once, warmed, and only then navigated to. A modified click is left to
+     * the browser, as a new tab, after the same bookkeeping.
      */
     const onOpen = useCallback(
-        (event: React.MouseEvent, tilePage: number) => {
+        (event: React.MouseEvent<HTMLAnchorElement>, tilePage: number, itemId: string) => {
             // Consumed first, so a drag that began as a waking tap does not leave it set.
             const onlyWoke = tapOnlyWoke();
 
@@ -792,9 +799,18 @@ export const ShowcaseStage: React.FC<ShowcaseStageProps> = ({ set, onExit }) => 
 
             address.set("page", String(tilePage));
             rememberReturnTo(`${window.location.pathname}?${address.toString()}`);
+
+            if (!isPlainClick(event)) return;
+
+            event.preventDefault();
+            openItem({
+                id: itemId,
+                href: `/media/${encodeURIComponent(itemId)}`,
+                marker: event.currentTarget,
+            });
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [filter, tapOnlyWoke]
+        [filter, tapOnlyWoke, openItem]
     );
 
     const loading = frame.rows.length === 0 && pageCount !== 0;

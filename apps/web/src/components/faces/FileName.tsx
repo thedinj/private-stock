@@ -3,10 +3,7 @@
 import { Stack, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 
-import type { MediaDetail } from "@private-stock/core";
-
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/api/queryKeys";
+import { mediaDetailQuery } from "@/lib/api/media";
 
 /**
  * An item's file name, whole, and the folder it is in, dimmed below (§5f): what a preview of an
@@ -16,8 +13,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
  */
 export const FileName: React.FC<{ mediaId: string }> = ({ mediaId }) => {
     const { data } = useQuery({
-        queryKey: queryKeys.media.detail(mediaId),
-        queryFn: () => api<MediaDetail>(`/api/media/${encodeURIComponent(mediaId)}`),
+        ...mediaDetailQuery(mediaId),
     });
 
     if (!data) {

@@ -5,6 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { navigationSettled, navigationStarted } from "@/lib/navigationPending";
 import {
+    abandonOpening,
+    isPlainClick,
+    itemIdOf,
+    openingSettled,
+    useItemWarming,
+    useOpenItem,
+} from "@/lib/openItem";
+import {
     canTransition,
     morphIntoStage,
     notifyRouteSettled,
@@ -14,7 +22,15 @@ import {
 /** Routes outside the shell, or not pages at all: left to the browser and to Next. */
 const OUTSIDE_SHELL = /^\/(api|tasting|showcase|login|register|setup)(\/|$)/;
 
-const ITEM_PATH = /^\/media\/[^/]+$/;
+/**
+ * What lights while an item link is on its way: the tile's frame, which is also what morphs, or
+ * a picture that is not a morph tile but says it can be lit (`data-open-frame`). A text link has
+ * neither, and is acknowledged by the header's rail alone.
+ */
+const openingMarker = (anchor: HTMLAnchorElement): HTMLElement | null =>
+    anchor.matches("[data-open-frame]")
+        ? anchor
+        : anchor.querySelector<HTMLElement>("[data-morph-frame], [data-open-frame]");
 
 /**
  * The page turn (§14, "Motion"): every in-app link inside the shell, run as a view transition.
@@ -28,7 +44,15 @@ const ITEM_PATH = /^\/media\/[^/]+$/;
  * Only a plain left click on a same-origin link that changes the page is taken: a modified
  * click, a new tab, a download, a hash, or the page you are already on all go the ordinary way,
  * and so does everything when the browser has no View Transitions or reduced motion is asked
- * for. A link that is a tile going to its item morphs instead of turning.
+ * for -- except a link to an item. A link that is a tile going to its item morphs instead of
+ * turning.
+ *
+ * **Links to an item are opened, not just followed** (§14, "Waiting", `lib/openItem.ts`): the
+ * tile is lit at once, the item is warmed, and only then does the morph or the turn start. That
+ * is taken over with or without View Transitions, so a browser that has none (Firefox) or a
+ * viewer who asked for reduced motion gets the same acknowledgement and the same warm cache --
+ * only the movement is left out. Pressing or resting on any item link warms it too
+ * (`useItemWarming`), which is mounted here for the whole shell.
  *
  * A click that a handler inside the link stops from propagating is left alone (see below).
  *
@@ -44,10 +68,14 @@ export const PageTurn: React.FC = () => {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const address = `${pathname}?${searchParams.toString()}`;
+    const openItem = useOpenItem();
+
+    useItemWarming();
 
     useEffect(() => {
         notifyRouteSettled();
         navigationSettled();
+        openingSettled();
     }, [address]);
 
     useEffect(() => {
@@ -66,16 +94,7 @@ export const PageTurn: React.FC = () => {
         const onCapture = (event: MouseEvent) => {
             pending = null;
 
-            if (
-                event.defaultPrevented ||
-                event.button !== 0 ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey
-            ) {
-                return;
-            }
+            if (event.defaultPrevented || !isPlainClick(event)) return;
 
             const target = event.target;
             if (!(target instanceof Element)) return;
@@ -92,26 +111,56 @@ export const PageTurn: React.FC = () => {
                 return;
             }
 
+            const itemId = itemIdOf(url);
+
             // A link in a dialog belongs to the dialog: it may replace rather than push, which a
             // listener cannot see, and the dialog closes as it goes in any case. Without View
-            // Transitions there is nothing to take over either. Both are left to Link, and only
+            // Transitions there is nothing to take over either -- unless the link opens an item,
+            // which is warmed first however it then arrives. Both are left to Link, and only
             // said to have started.
-            if (anchor.closest('[role="dialog"]') || !canTransition()) {
-                pending = { event, go: navigationStarted };
+            if (anchor.closest('[role="dialog"]') || (!itemId && !canTransition())) {
+                pending = {
+                    event,
+                    go: () => {
+                        abandonOpening();
+                        navigationStarted();
+                    },
+                };
                 return;
             }
 
             event.preventDefault();
 
             const href = url.pathname + url.search + url.hash;
+            const push = () => router.push(href);
+
+            if (!itemId) {
+                pending = {
+                    event,
+                    go: () => {
+                        abandonOpening();
+                        navigationStarted();
+                        runTransition("turn", push);
+                    },
+                };
+                return;
+            }
+
+            // Both fall back to a plain push where View Transitions cannot run.
             const frame = anchor.querySelector<HTMLElement>("[data-morph-frame]");
+            const marker = openingMarker(anchor);
 
             pending = {
                 event,
-                go:
-                    frame && ITEM_PATH.test(url.pathname)
-                        ? () => morphIntoStage(frame, () => router.push(href))
-                        : () => runTransition("turn", () => router.push(href)),
+                go: () =>
+                    openItem({
+                        id: itemId,
+                        href,
+                        marker,
+                        navigate: frame
+                            ? () => morphIntoStage(frame, push)
+                            : () => runTransition("turn", push),
+                    }),
             };
         };
 
@@ -121,7 +170,6 @@ export const PageTurn: React.FC = () => {
             const { go } = pending;
 
             pending = null;
-            navigationStarted();
             go();
         };
 
@@ -132,7 +180,7 @@ export const PageTurn: React.FC = () => {
             document.removeEventListener("click", onCapture, { capture: true });
             window.removeEventListener("click", onBubble);
         };
-    }, [router]);
+    }, [router, openItem]);
 
     return null;
 };

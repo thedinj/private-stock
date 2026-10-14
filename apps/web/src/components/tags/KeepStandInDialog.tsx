@@ -3,10 +3,9 @@
 import { Loader, Modal, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 
-import type { MediaDetail, MediaListItem } from "@private-stock/core";
+import type { MediaListItem } from "@private-stock/core";
 
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/api/queryKeys";
+import { mediaDetailQuery } from "@/lib/api/media";
 
 import { TagPictureDialog } from "./TagPictureDialog";
 
@@ -34,8 +33,7 @@ export const KeepStandInDialog: React.FC<KeepStandInDialogProps> = ({
 }) => {
     const video = item.kind === "video";
     const { data, isLoading } = useQuery({
-        queryKey: queryKeys.media.detail(item.id),
-        queryFn: () => api<MediaDetail>(`/api/media/${item.id}`),
+        ...mediaDetailQuery(item.id),
         enabled: video,
     });
     // Undefined while it is not known yet, or for a video whose cover has no moment.

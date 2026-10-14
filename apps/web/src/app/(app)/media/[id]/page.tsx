@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
     ActionIcon,
     Anchor,
+    AspectRatio,
     Box,
     Button,
     Center,
@@ -22,8 +23,6 @@ import {
 } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
-
-import type { MediaDetail } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { MediaDetailsDrawer } from "@/components/media/MediaDetailsDrawer";
@@ -52,10 +51,13 @@ import { StillStage } from "@/components/media/StillStage";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { api } from "@/lib/api/client";
+import { BACKGROUND } from "@/lib/api/background";
+import { mediaDetailQuery } from "@/lib/api/media";
 import { DEFAULT_VIEW, viewToParams } from "@/lib/libraryQuery";
 import { itemHref } from "@/lib/lookMoment";
 import { readReturn, rememberReturnTo, returnAtPage, returnLabel } from "@/lib/returnTo";
 import { leaveViewer } from "@/lib/viewerReturn";
+import { openingPicture } from "@/lib/openItem";
 import { morphOutOfStage } from "@/lib/viewTransitions";
 import { useViewerSequence } from "@/lib/useViewerSequence";
 import { parseAtParam, resumeTarget, visitPosition } from "@/lib/resumePoint";
@@ -73,7 +75,6 @@ import {
 } from "@/lib/api/userMedia";
 
 import classes from "@/components/media/PlayerStage.module.scss";
-import { queryKeys } from "@/lib/api/queryKeys";
 
 /**
  * Playback (§14).
@@ -363,8 +364,9 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         error,
         refetch: refetchItem,
     } = useQuery({
-        queryKey: queryKeys.media.detail(id),
-        queryFn: () => api<MediaDetail>(`/api/media/${id}`),
+        // The same entry a pressed tile warmed (`lib/openItem.ts`), so arriving from one is
+        // normally a cache hit.
+        ...mediaDetailQuery(id),
         // Only while a stage is on its way, so a result asked for from the drawer turns up
         // without a reload. Structural sharing keeps every unchanged field the same object,
         // so the player is not disturbed by a poll that changed nothing it reads.
@@ -402,12 +404,15 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * item — only on the details — so this query is both halves of the answer: it removes a
      * round trip, and it is the only thing that knows whether the file the browser is about to
      * download is one the browser can play (§8).
+     *
+     * Read-ahead, so `BACKGROUND`: nobody is waiting on the next item while looking at this one,
+     * and without it the header's rail lit after every open (§14, "Waiting").
      */
     const nextDetail = useQuery({
-        queryKey: queryKeys.media.detail(sequence.nextId ?? ""),
-        queryFn: () => api<MediaDetail>(`/api/media/${sequence.nextId}`),
+        ...mediaDetailQuery(sequence.nextId ?? ""),
         enabled: sequence.nextId !== null,
         staleTime: 60_000,
+        meta: BACKGROUND,
     });
 
     /**
@@ -726,8 +731,33 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         sequence.previousId,
     ]);
 
+    /**
+     * The item's picture at once, while its details are still on their way (§14, "Waiting").
+     *
+     * Opening an item waits for the details before navigating, so this is only seen when that
+     * wait ran out -- a slow NAS, a cold disk. The picture is the one the tile was showing, so it
+     * is already in the browser's cache; it stands where the stage will be, lit at the edge the
+     * way the pressed tile was, and gives a morph somewhere to land. Without one (a shared link,
+     * a new tab) there is nothing to show yet but the loader.
+     */
     if (isLoading) {
-        return (
+        const picture = openingPicture(id);
+
+        return picture ? (
+            <Stack gap="lg">
+                {/* Where the row with the way back and the way through the set will be, so the
+                    stage does not jump when it arrives. */}
+                <Box h={narrow ? 36 : 26} />
+                <Box className={classes.stage}>
+                    <Box className={classes.frame} data-morph-stage data-opening>
+                        <AspectRatio ratio={16 / 9} className={classes.standIn}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={picture} alt="" className={classes.standInPicture} />
+                        </AspectRatio>
+                    </Box>
+                </Box>
+            </Stack>
+        ) : (
             <Center h={320}>
                 <Loader color="brass" />
             </Center>

@@ -72,9 +72,10 @@ import {
 import { readSelection, selectionOwner, writeSelection } from "@/lib/librarySelection";
 import { useLiveUpdates } from "@/lib/events/useLiveUpdates";
 import { refreshListPage } from "@/lib/events/patchList";
-import { useLibraryFacets } from "@/lib/api/facets";
+import { useTagNames } from "@/lib/api/facets";
 import { useLibraries, useLibraryStats } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { useOpenItem } from "@/lib/openItem";
 import { rememberTagNames } from "@/lib/rememberedPages";
 import { rememberReturnTo } from "@/lib/returnTo";
 import { settling } from "@/lib/settling";
@@ -171,6 +172,7 @@ const NO_SELECTION: string[] = [];
 
 export const LibraryCellar: React.FC = () => {
     const router = useRouter();
+    const openItem = useOpenItem();
     const searchParams = useSearchParams();
 
     const urlView = parseView(new URLSearchParams(searchParams.toString()));
@@ -220,12 +222,12 @@ export const LibraryCellar: React.FC = () => {
 
     const view: LibraryView = { ...urlView, search: debouncedSearch };
     // Shared with the panel and the chips, so this costs no request of its own.
-    const facets = useLibraryFacets(view);
+    const tagNames = useTagNames(view);
     const gallery = view.mode === "gallery";
 
     // The names behind this search's tags, for the sidebar's "Last search" line, which cannot
     // ask for them without paying for the search again (`rememberTagNames`).
-    const referencedTags = facets.data?.referencedTags;
+    const referencedTags = tagNames.data?.referencedTags;
 
     useEffect(() => {
         if (!referencedTags) return;
@@ -464,7 +466,13 @@ export const LibraryCellar: React.FC = () => {
         if (!target) return;
 
         rememberReturnTo(`/?${viewToParams({ ...view, page: 0 }).toString()}`);
-        router.push(`/media/${target.id}`);
+        // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
+        openItem({
+            id: target.id,
+            href: `/media/${encodeURIComponent(target.id)}`,
+            marker: null,
+            picture: target.coverUrl,
+        });
     };
 
     /**
@@ -721,7 +729,7 @@ export const LibraryCellar: React.FC = () => {
      * whether it is private -- so the offer files it exactly where the tag lives, and offers
      * nothing for a tag this viewer cannot see.
      */
-    const mentioned = view.mentions ? facets.data?.referencedTags[view.mentions] : undefined;
+    const mentioned = view.mentions ? tagNames.data?.referencedTags[view.mentions] : undefined;
     const suggestedTag: SuggestedTag | null = mentioned
         ? {
               name: mentioned.name,

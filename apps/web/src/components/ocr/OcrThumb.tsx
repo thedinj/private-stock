@@ -105,6 +105,8 @@ export const OcrThumb: React.FC<OcrThumbProps> = ({
             prefetch={false}
             onClick={rememberReturn}
             className={classes.thumb}
+            // Lit while the item is on its way (§14, "Waiting").
+            data-open-frame
             aria-label={`Open ${label}${atMs === null ? "" : " at this moment"}`}
             title={label}
         >

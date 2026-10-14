@@ -1863,23 +1863,11 @@ export const facetCountsForTags = (
 };
 
 /**
- * The filter panel's Favourites chip for one facet: how many favourite tags of it somebody
- * has, and how many items under the current filter carry any of them (§14e "Favourites ♥").
- * Null when they have no favourites of that facet, which is the panel's cue to leave the chip
+ * The filter panel's Favourites chip for one facet: how many favourite tags of it somebody has
+ * (§14e "Favourites ♥"). Null when they have none, which is the panel's cue to leave the chip
  * out.
- *
- * Counted from the assignments, as `facetCountsForTags` is and for its reason: the cost is
- * the favourites' tagging, not the library. Whose favourites follows the rating overlay, so
- * the chip and the `favTags` rule it adds agree under a shared filter too.
  */
-export const facetCountForFavorites = (
-    query: MediaQuery,
-    userId: string,
-    rootIds: string[],
-    kind: string,
-    overlayUserId?: string
-): { tags: number; items: number } | null => {
-    const favUser = overlayUserId ?? userId;
+export const favoriteTagCount = (userId: string, kind: string): { tags: number } | null => {
     const { tags } = db
         .prepare(
             `SELECT count(*) AS "tags" FROM "UserTag" ut
@@ -1887,37 +1875,9 @@ export const facetCountForFavorites = (
                     AND (t."ownerId" IS NULL OR t."ownerId" = ?)
               WHERE ut."userId" = ? AND ut."favorite" IS NOT NULL`
         )
-        .get(kind, favUser, favUser) as { tags: number };
+        .get(kind, userId, userId) as { tags: number };
 
-    if (tags === 0) {
-        return null;
-    }
-
-    const { where, params } = buildFilters(query, userId, rootIds, overlayUserId);
-    const FROM = fromClause(query, params);
-
-    params.favKind = kind;
-    params.favUser = favUser;
-
-    const items = (
-        db
-            .prepare(
-                `SELECT count(DISTINCT fmt."mediaId") AS n
-                   FROM "MediaTag" fmt
-                   JOIN "UserTag" fut ON fut."tagId" = fmt."tagId"
-                        AND fut."userId" = :favUser AND fut."favorite" IS NOT NULL
-                   JOIN "Tag" ft ON ft."id" = fmt."tagId" AND ft."kind" = :favKind
-                        AND (ft."ownerId" IS NULL OR ft."ownerId" = :favUser)
-                  WHERE (fmt."userId" IS NULL OR fmt."userId" = :userId)
-                    AND EXISTS (
-                        SELECT 1 ${FROM}
-                         WHERE ${where.join(" AND ")} AND m."id" = fmt."mediaId"
-                    )`
-            )
-            .get(params) as { n: number }
-    ).n;
-
-    return { tags, items };
+    return tags === 0 ? null : { tags };
 };
 
 /**

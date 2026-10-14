@@ -72,7 +72,13 @@ export type {
 } from "./artifactRepo.js";
 export type { ChangeRow, ChangeEntity, ChangeOp, RecordChangeInput } from "./changeLogRepo.js";
 export type { VariantRow, UpsertVariantInput } from "./variantRepo.js";
-export type { TagRow, TagWithCountRow, MediaTagRow, AssignInput } from "./tagRepo.js";
+export type {
+    TagRow,
+    TagWithCountRow,
+    MediaTagRow,
+    AssignInput,
+    FacetValueRow,
+} from "./tagRepo.js";
 export type { SearchDocument } from "./searchRepo.js";
 export type { FacetCountRow, FacetScope } from "./mediaRepo.js";
 export type { PhashRow, VideoFrameRow, VideoFrameInput } from "./phashRepo.js";

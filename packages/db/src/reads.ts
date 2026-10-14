@@ -20,7 +20,7 @@ export const reads = {
     orderedRowids: mediaRepo.orderedRowids,
     stillMatching: mediaRepo.stillMatching,
     facetCountsForTags: mediaRepo.facetCountsForTags,
-    facetCountForFavorites: mediaRepo.facetCountForFavorites,
+    favoriteTagCount: mediaRepo.favoriteTagCount,
     listFacetValues: tagRepo.listFacetValues,
     tagsForMediaIds: tagRepo.listForMediaIds,
 };

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { mediaQuerySchema } from "@private-stock/core";
-
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
-import { overlayForRequest } from "@/lib/services/savedFilterService";
 import { getFacets } from "@/lib/services/tagService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -14,12 +11,12 @@ export const runtime = "nodejs";
 export const fetchCache = "force-no-store";
 
 /**
- * Tag counts for the filter currently applied to the grid (§5c).
+ * The filter panel's tags, each with how many items carry it across the library (§5c, §20
+ * "Facets without counts").
  *
- * Takes the same query the grid does, so the panel and the results cannot disagree about what
- * is being counted. Separate from the list response because the two have different lifetimes:
- * paging changes the rows but not the facets, and recomputing counts on every page of an
- * infinite scroll is exactly the wasted work a NAS cannot afford.
+ * Not the grid's query: the numbers are library-wide, so the filter would only split the cache.
+ * What it takes from the filter is the tag ids it names (`selected`), which are drawn first and
+ * even past the cap, being the controls that undo it.
  */
 /**
  * Facets the caller wants in full, as a comma-separated list of kinds.
@@ -52,23 +49,26 @@ const facetSearch = (value: string | undefined): string | undefined => {
     return trimmed.length > 0 ? trimmed : undefined;
 };
 
+/** The filter's tag ids, as a comma-separated list. Bounded like any list in an address. */
+const selectedIds = (value: string | undefined): string[] =>
+    (value ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .slice(0, 200);
+
 export async function GET(request: Request) {
     try {
         const auth = await requireAuth(request);
-        const { expand, find, filter, ...params } = Object.fromEntries(
-            new URL(request.url).searchParams
-        );
-        const query = mediaQuerySchema.parse(params);
+        const { selected, expand, find } = Object.fromEntries(new URL(request.url).searchParams);
 
         return NextResponse.json(
             await getFacets(
-                query,
+                selectedIds(selected),
                 auth,
                 undefined,
                 expandedKinds(expand),
-                facetSearch(find),
-                // Counted against the same ratings as the grid beside it (§6).
-                overlayForRequest(filter ?? null, query, auth)
+                facetSearch(find)
             )
         );
     } catch (error) {

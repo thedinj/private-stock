@@ -20,7 +20,14 @@ import { prefersReducedMotion } from "./motion";
 
 export type TransitionKind = "turn" | "morph";
 
-/** How long a transition will hold the screen still waiting for the new page. */
+/**
+ * How long a transition will hold the screen still waiting for the new page.
+ *
+ * A safety, no longer the usual wait. Opening an item warms its route and details before the
+ * transition starts (`lib/openItem.ts`), so the route normally arrives from the router's cache
+ * within a frame or two; this is for the press whose warm ran out of time, and for the turn
+ * between pages, which nothing warms.
+ */
 const ROUTE_TIMEOUT_MS = 1500;
 
 /** How long a morph waits, after the route, for the element it is morphing into. */
@@ -147,9 +154,10 @@ const byMediaId = (id: string): string => `[data-media-id="${CSS.escape(id)}"] [
  * Opening an item from its tile: the tile's frame grows into the stage.
  *
  * The stage is named by the stylesheet while a morph runs (`[data-morph-stage]`), so only the
- * tile needs naming here. The viewer fetches its item after it mounts, so the stage may arrive
- * a few frames after the route; the transition waits briefly for it, and without it the tile
- * simply fades with the page.
+ * tile needs naming here. The item is normally in the cache before this starts (`openItem`
+ * waits for it), so the stage mounts with the route; when it is not, the viewer stands the
+ * tile's picture on a stage of its own while the details arrive, which is a stage too. The
+ * transition still waits briefly for one, and without it the tile simply fades with the page.
  */
 export const morphIntoStage = (tileFrame: HTMLElement, navigate: () => void): void => {
     if (canTransition()) nameFrame(tileFrame);

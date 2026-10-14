@@ -1,17 +1,17 @@
 import type { Facet } from "@private-stock/core";
 
 /**
- * Assembling the filter panel's facets from a vocabulary and a set of counts (§5c, §20).
+ * Assembling the filter panel's facets from the vocabulary and the filter's selections (§5c, §20).
  *
  * Pure, and separate from the service, because the arithmetic here is the kind that looks
  * obviously right and is not. It reads plausibly in every case except the ones that matter,
  * and a running server is a poor place to discover which.
  *
- * **Two questions, not one.** Which values a facet has comes from the vocabulary, so the list
- * is complete however large the library grows; how many items each holds under the current
- * filter is counted separately and exactly. They used to be a single `GROUP BY` over a sample
- * of the filtered library, which answered the second question and only appeared to answer the
- * first -- a tag applied to one item was usually missing from the panel altogether.
+ * Which values a facet has comes from the vocabulary, so the list is complete however large
+ * the library grows. It used to be a `GROUP BY` over a sample of the filtered library, which
+ * only appeared to answer the question -- a tag applied to one item was usually missing from
+ * the panel altogether. Each value carries how many items it is on across the library; the
+ * filter's own counts were dropped for what they cost (§20 "Facets without counts").
  */
 
 export interface FacetValue {
@@ -22,10 +22,8 @@ export interface FacetValue {
     /**
      * How many items carry this value across the library.
      *
-     * The ordering key, and not what is displayed. Ordering by the library-wide figure rather
-     * than by the filtered count keeps a chip in one place while unrelated filters move, and
-     * it is exact -- so "most used first" is a fact about the vocabulary rather than a guess
-     * from whatever the counting happened to reach.
+     * The ordering key, and what the chip shows. It does not move with the filter, so a chip
+     * stays in one place while unrelated filters change.
      */
     uses: number;
 }
@@ -41,14 +39,6 @@ export interface BuildFacetsInput {
      * unfilter it.
      */
     selected: FacetValue[];
-    /**
-     * What each value holds under the current filter. Exact, and zero is a real answer.
-     *
-     * A function rather than a map of everything, because the counts are fetched for the
-     * values about to be drawn and nothing else -- asking for a number that was never
-     * requested is a bug in the caller, and `0` is the honest thing to draw either way.
-     */
-    countOf: (tagId: string) => number;
     /** Distinct values each facet's vocabulary holds, before the cap. */
     totals: Map<string, number>;
     selectedTagIds: string[];
@@ -98,7 +88,7 @@ export const buildFacets = (input: BuildFacetsInput): Facet[] => {
             tagId: row.tagId,
             name: row.name,
             colorKey: row.colorKey,
-            count: input.countOf(row.tagId),
+            uses: row.uses,
         });
     }
 

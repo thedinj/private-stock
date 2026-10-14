@@ -27,10 +27,10 @@ interface TriChipProps {
     /** What it is, for the accessible name; also what it shows unless `display` says otherwise. */
     name: string;
     /**
-     * Items it would show. Nought dims the chip while it is off.
+     * How many items it is on. Nought dims the chip while it is off.
      *
-     * Absent on None, whose count is a scan of the whole filtered set rather than a lookup per
-     * assignment -- the cost every other number in the panel is built to avoid (§20).
+     * Absent on None and the ♥, which would each be a scan of the whole filtered set -- the
+     * cost the panel's numbers are built to avoid (§20 "Facets without counts").
      */
     count?: number;
     state: ChipState;

@@ -8,13 +8,13 @@ import {
     ValidationError,
     FACET_EXPANDED_LIMIT,
     isKnownFacet,
+    mediaQuerySchema,
     normalizeName,
     SELECTION_TAG_LIMIT,
     orderTagMatches,
     rowidShuffleParams,
     TAG_BROWSE_PAGE_SIZE,
     TAG_STRIP_LENGTH,
-    tagIdsInGroups,
     tagKinds,
     tagProfileKind,
     type ApplyTagsInput,
@@ -32,6 +32,7 @@ import {
     type TagChangeResult,
     type TagCompanion,
     type TagCompanionsResponse,
+    type TagNamesResponse,
     type TagProfile,
     type TagScope,
     type TagSearchResponse,
@@ -50,11 +51,13 @@ import {
     tagRepo,
     userTagRepo,
     type FacetScope,
+    type FacetValueRow,
     type ReadPlan,
 } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { buildFacets } from "../facets";
+import { createTtlCache } from "../ttlCache";
 import { listMedia, toListPage } from "./mediaService";
 import { notThem } from "./notThem";
 import { tagsChangedOn, vocabularyChanged } from "./ocrMatchHooks";
@@ -1115,22 +1118,39 @@ export const getTagCompanions = (
 };
 
 /**
- * The filter panel's facets: a complete list of values, with exact counts (§5c, §20).
+ * How long one answer for the panel's values stands (§20 "Facets without counts").
  *
- * **Which values exist and what each one holds are two questions, and only the second is
- * about the library.** They used to be one: values were found by scanning the filtered media
- * and grouping the tags on it, which is proportional to the library, so the scan stopped at a
- * sample of 5,000 candidates. The counts were honest about being approximate; the *list* was
- * not, and could not be — a keyword applied to a single video fell outside the sample far
- * more often than not, and the panel simply had no chip for it. A filter you cannot reach is
- * worse than a count that is off by a few, because nothing on screen says it is missing.
+ * The values and their library-wide counts are the same for every filter, and on the NAS the
+ * read is seconds: one join over every assignment, grouped. A minute means a panel opened on
+ * every page of a session pays for it about once, and a tag applied here turns up in the
+ * panel within that minute rather than at once -- a fair price for a list that is otherwise
+ * read on every filter change.
+ */
+const FACET_VALUES_TTL_MS = 60_000;
+
+/** Keyed by vocabulary, depth and search; a handful of entries in practice. */
+const facetValuesCache = createTtlCache<FacetValueRow[]>(FACET_VALUES_TTL_MS, 64);
+
+/**
+ * The filter panel's facets: a complete list of values, each with how many items carry it
+ * across the library (§5c, §20 "Facets without counts").
  *
- * So the list comes from the vocabulary, where it is complete by construction and costs what
- * the vocabulary costs, and the counts are asked of exactly the values about to be drawn.
- * Both are exact; neither samples anything.
+ * **The list comes from the vocabulary**, where it is complete by construction. Values used to
+ * be found by scanning the filtered media and grouping the tags on it, which had to stop at a
+ * sample, so a keyword on a single video often had no chip at all.
+ *
+ * **The numbers are not the filter's.** They were, exactly -- "what this chip would leave",
+ * with "any of" groups counted without their own facet -- and that was the slowest read the
+ * library made: seconds on the NAS, asked again on every filter, sort and search change, and
+ * sharing the disks with the grid beside it. The panel's job is to offer the tags; the chip's
+ * number now says how much each one is used, which does not move with the filter, and so one
+ * answer serves every filter for `FACET_VALUES_TTL_MS`.
+ *
+ * Only the filter's *tag ids* are asked for, never the filter: every tag it names is drawn,
+ * first, even past the cap, because each is a control that undoes part of the current filter.
  */
 function* facetsReads(
-    query: Parameters<typeof mediaRepo.facetCountsForTags>[0],
+    selectedTagIds: string[],
     auth: AuthContext,
     perFacetLimit = 20,
     /**
@@ -1148,65 +1168,19 @@ function* facetsReads(
      * not be found by typing their name into a list that never contained them. Searching the
      * vocabulary reaches every value the facet has.
      */
-    search?: string,
-    /** Whose ratings the query asks about; see `savedFilterService.overlayForRequest`. */
-    overlayUserId?: string
-): ReadPlan<{ facets: Facet[]; referencedTags: Record<string, ReferencedTag> }> {
-    /**
-     * Every tag the filter names, in any role -- with, without, or inside a group.
-     *
-     * All of them are "selected" for the panel's purposes: each is a control that undoes part
-     * of the current filter, so each must be drawn even when it is not among a facet's most
-     * used, and sorted to the front where a cap cannot reach it.
-     */
-    const selectedTagIds = [
-        ...new Set([
-            ...(query.tags ?? []),
-            ...(query.notTags ?? []),
-            ...tagIdsInGroups(query.groups),
-        ]),
-    ];
-    /**
-     * The tag the filter looks for mentions of is named too, but not "selected": it is not one
-     * of the panel's controls, and the chip that undoes it is above the grid (§5b "Find
-     * untagged"). Its name and facet are also what the library offers to tag the matches with.
-     */
-    const referencedTags = referencedTagsOf(
-        query.mentions ? [...new Set([...selectedTagIds, query.mentions])] : selectedTagIds,
-        auth
-    );
+    search?: string
+): ReadPlan<{ facets: Facet[] }> {
     const limitFor = (kind: string): number =>
         expanded.includes(kind) ? FACET_EXPANDED_LIMIT : perFacetLimit;
 
-    /**
-     * The query a facet's own chips are counted against (§20 "Disjunctive counts").
-     *
-     * Without that facet's "any of" group and its excluded chips. Under "any of", a chip's
-     * count then says what selecting it would add -- counted against the group it would join,
-     * it would only ever show the items it already shares with the others. An excluded chip
-     * shows how many it is hiding, rather than a zero that says only that it is excluded.
-     *
-     * "All of" chips stay in, because there the drill-down count is the honest one: picking a
-     * second performer narrows to the items with both, and that is the number to show.
-     */
-    const queryForFacet = (kind: string): typeof query => ({
-        ...query,
-        notTags: (query.notTags ?? []).filter((id) => referencedTags[id]?.kind !== kind),
-        groups: (query.groups ?? []).filter((group) => group.facet !== kind),
-    });
-
-    /** Facets whose chips need their own count, because the filter has a part that is theirs. */
-    const ownCountKinds = new Set([
-        ...(query.groups ?? []).flatMap((group) => (group.facet ? [group.facet] : [])),
-        ...(query.notTags ?? []).flatMap((id) => {
-            const kind = referencedTags[id]?.kind;
-
-            return kind ? [kind] : [];
-        }),
-    ]);
-
     function* facetsFor(scope: FacetScope): ReadPlan<Facet[]> {
         const owner = writesTo(scope, auth);
+        const options = {
+            owner,
+            search,
+            limit: expanded.length > 0 ? FACET_EXPANDED_LIMIT : perFacetLimit,
+        };
+        const key = JSON.stringify(options);
 
         /**
          * One read at the largest limit any facet needs, trimmed per kind afterwards.
@@ -1214,72 +1188,39 @@ function* facetsReads(
          * Two reads to fetch two depths would pay for the vocabulary scan twice to save a few
          * hundred rows inside one process.
          */
-        const values = yield* read("listFacetValues", {
-            owner,
-            search,
-            limit: expanded.length > 0 ? FACET_EXPANDED_LIMIT : perFacetLimit,
-        });
+        let values = facetValuesCache.peek(key);
 
-        /**
-         * Counted for the values about to be drawn, and for the selections, and nothing else.
-         *
-         * This is what keeps an exact count affordable: the work is proportional to how much
-         * has been tagged among the values on screen, not to the size of the library. A
-         * thousand chips would be a thousand tags' worth of assignments to count, which is
-         * why the list is capped per facet before it gets here rather than after.
-         */
-        const wanted = [...new Set([...values.map((row) => row.tagId), ...selectedTagIds])];
-        const kindOfWanted = (tagId: string): string | undefined =>
-            values.find((row) => row.tagId === tagId)?.kind ?? referencedTags[tagId]?.kind;
-
-        /**
-         * One count for every facet that only narrows, and one more per facet with an "any of"
-         * group or an exclusion of its own. At most a handful of extra statements, each
-         * proportional to its facet's tagging rather than to the library (§20).
-         */
-        const counted = yield* read(
-            "facetCountsForTags",
-            query,
-            auth.userId,
-            auth.accessibleRootIds,
-            wanted.filter((tagId) => !ownCountKinds.has(kindOfWanted(tagId) ?? "")),
-            scope,
-            overlayUserId
-        );
-
-        for (const kind of ownCountKinds) {
-            counted.push(
-                ...(yield* read(
-                    "facetCountsForTags",
-                    queryForFacet(kind),
-                    auth.userId,
-                    auth.accessibleRootIds,
-                    wanted.filter((tagId) => kindOfWanted(tagId) === kind),
-                    scope,
-                    overlayUserId
-                ))
-            );
+        if (!values) {
+            values = yield* read("listFacetValues", options);
+            facetValuesCache.set(key, values);
         }
-        const countOf = new Map(counted.map((row) => [row.tagId, row.count]));
 
         /**
-         * Selections the vocabulary page did not reach, rebuilt from their counts.
+         * Selections the vocabulary page did not reach, counted on their own.
          *
-         * `facetCountsForTags` is already scoped to the tag rather than to its assignments,
-         * so a private selection cannot arrive in the public pass wearing a zero (§6). Their
-         * `uses` is irrelevant: selections sort to the front regardless.
+         * Library-wide like the rest, so with no filter: per tag, the cost is that tag's
+         * assignments. Scoped to the tag rather than to its assignments, so a private selection
+         * cannot arrive in the public pass (§6).
          */
         const listed = new Set(values.map((row) => row.tagId));
-        const selected = counted
-            .filter((row) => selectedTagIds.includes(row.tagId) && !listed.has(row.tagId))
-            .map((row) => ({ ...row, uses: 0 }));
+        const unlisted = selectedTagIds.filter((tagId) => !listed.has(tagId));
+        const selected =
+            unlisted.length === 0
+                ? []
+                : yield* read(
+                      "facetCountsForTags",
+                      mediaQuerySchema.parse({}),
+                      auth.userId,
+                      auth.accessibleRootIds,
+                      unlisted,
+                      scope
+                  );
 
         return buildFacets({
             limitFor,
             scope,
             values,
-            selected,
-            countOf: (tagId) => countOf.get(tagId) ?? 0,
+            selected: selected.map((row) => ({ ...row, uses: row.count })),
             totals: new Map(values.map((row) => [row.kind, row.total])),
             selectedTagIds,
             order: listFacetKinds(auth),
@@ -1290,41 +1231,35 @@ function* facetsReads(
     // of the two groups is the only ranking a panel of sections has.
     const facets = [...(yield* facetsFor("public")), ...(yield* facetsFor("private"))];
 
-    /**
-     * The Favourites ♥ chip, once per kind, on the first section of it drawn (§14e).
-     *
-     * Counted like the kind's own chips, without its group and exclusions: the chip says what
-     * choosing it would show, not what it already shows.
-     */
+    /** The Favourites ♥ chip, once per kind, on the first section of it drawn (§14e). */
     const placed = new Set<string>();
 
     for (const facet of facets) {
         if (placed.has(facet.kind)) continue;
 
         placed.add(facet.kind);
-        facet.favorites = yield* read(
-            "facetCountForFavorites",
-            queryForFacet(facet.kind),
-            auth.userId,
-            auth.accessibleRootIds,
-            facet.kind,
-            overlayUserId
-        );
+        facet.favorites = yield* read("favoriteTagCount", auth.userId, facet.kind);
     }
 
-    return { facets, referencedTags };
+    return { facets };
 }
 
 /**
  * `facetsReads` with its statements on a reader thread (§20 "Reads off the thread").
  *
- * The filter panel's counts are the slowest reads a page makes -- seconds, on the NAS, before
- * the tag walk was covered -- and the panel is the only caller, so there is no synchronous twin.
+ * The vocabulary read behind the panel is seconds on the NAS when it is not cached, and the
+ * panel is the only caller, so there is no synchronous twin.
  */
-export const getFacets = (
-    ...args: Parameters<typeof facetsReads>
-): Promise<{ facets: Facet[]; referencedTags: Record<string, ReferencedTag> }> =>
+export const getFacets = (...args: Parameters<typeof facetsReads>): Promise<{ facets: Facet[] }> =>
     runOffThread(facetsReads(...args));
+
+/**
+ * The names a filter's tag ids go by, for the chips above the grid and anything describing the
+ * filter in words (§14e). A lookup by id per tag, apart from the facets so it costs nothing.
+ */
+export const getTagNames = (tagIds: string[], auth: AuthContext): TagNamesResponse => ({
+    referencedTags: referencedTagsOf(tagIds, auth),
+});
 
 /**
  * Names for the tag ids a filter carries, as far as this viewer may see them (§14e).

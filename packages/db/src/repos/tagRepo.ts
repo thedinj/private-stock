@@ -859,11 +859,10 @@ export interface FacetValueRow {
     /**
      * How many listable items carry this tag across the library.
      *
-     * The ordering key, and only that. It is not what the panel prints beside the name —
-     * that number is counted against the current filter by `mediaRepo.facetCountsForTags`,
-     * and the two differ the moment anything is filtered. Ordering by the library-wide figure
-     * is deliberate: it is exact, it costs nothing extra here, and it keeps a chip from
-     * jumping position every time an unrelated filter moves.
+     * The ordering key, and what the panel prints beside the name (§20 "Facets without
+     * counts"). Library-wide on purpose: it is exact, it costs nothing extra here, it keeps a
+     * chip from jumping position every time an unrelated filter moves, and it is the same
+     * answer for every filter, so the web process can hold it for a while.
      */
     uses: number;
     /**

@@ -49,7 +49,7 @@ import {
     type FacetValue,
 } from "@/lib/advancedDraft";
 import { api } from "@/lib/api/client";
-import { useLibraryFacets } from "@/lib/api/facets";
+import { useTagNames } from "@/lib/api/facets";
 import { useLibraries } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { useTagSuggestions } from "@/lib/api/tags";
@@ -129,19 +129,19 @@ const AdvancedEditor: React.FC<Omit<AdvancedFilterModalProps, "opened">> = ({
     onApply,
     onClose,
 }) => {
-    const { data: facets } = useLibraryFacets(view);
+    const { data: tagNames } = useTagNames(view);
     const { data: libraries } = useLibraries();
-    // Names of tags picked here, which the facet response has not heard of yet.
+    // Names of tags picked here, which the names response has not heard of yet.
     const [picked, setPicked] = useState<Record<string, string>>({});
 
     const names: FilterNames = {
-        tag: (tagId) => picked[tagId] ?? facets?.referencedTags[tagId]?.name,
+        tag: (tagId) => picked[tagId] ?? tagNames?.referencedTags[tagId]?.name,
         root: (rootId) => libraries?.libraries.find((library) => library.id === rootId)?.label,
     };
 
     const original = advancedGroups(view);
     const [draft, setDraft] = useState<DraftGroup[]>(() => {
-        const loaded = groupsToDraft(original, (tagId) => facets?.referencedTags[tagId]?.kind);
+        const loaded = groupsToDraft(original, (tagId) => tagNames?.referencedTags[tagId]?.kind);
 
         // An empty editor opens on one group with one blank row, so the first click is
         // choosing what to filter by rather than finding the button that makes a place for it.

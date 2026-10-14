@@ -34,8 +34,11 @@ interface ShowcaseTileProps {
     drifting: boolean;
     /** Which page of the set the tile is on, handed back when it is opened. */
     page: number;
-    /** Called as the tile is opened, before navigation — the stage records where it was. */
-    onOpen: (event: React.MouseEvent, page: number) => void;
+    /**
+     * Called as the tile is opened. The stage records where it was and opens the item
+     * (`lib/openItem.ts`), which lights this tile while the item is on its way.
+     */
+    onOpen: (event: React.MouseEvent<HTMLAnchorElement>, page: number, itemId: string) => void;
     /** This tile's part in the wall's voice, if it has one (§14f). Null for nearly all. */
     voice: TileVoice | null;
     voiceHandlers: VoiceHandlers;
@@ -174,7 +177,7 @@ const ShowcaseTileBase: React.FC<ShowcaseTileProps> = ({
             data-voiced={speaking || undefined}
             draggable={false}
             style={{ left: x, top: y, width, height }}
-            onClick={(event) => onOpen(event, page)}
+            onClick={(event) => onOpen(event, page, item.id)}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
             onFocus={onEnter}

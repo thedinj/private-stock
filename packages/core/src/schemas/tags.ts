@@ -399,15 +399,16 @@ export const facetValueSchema = z.object({
     name: z.string(),
     colorKey: z.string().nullable(),
     /**
-     * How many items the current filter would leave carrying this value. Exact.
+     * How many listable items carry this value across the library -- not under the current
+     * filter (§20 "Facets without counts").
      *
-     * Zero is a real answer and is shown rather than hidden: with AND semantics a filter can
-     * exclude everything a value is on, and "Noir (0)" is how somebody understands why the
-     * grid is empty and what to click to fix it. Dropping the row instead would make the
-     * value disappear from a list that is otherwise complete, which is the one thing the
-     * vocabulary-sourced list exists to prevent.
+     * It used to be the filter's count, "what this chip would leave", and that was the
+     * costliest read on the page: recounted against the whole filter on every filter, sort and
+     * search change, seconds on the NAS, and sharing the disks with the grid it sat beside.
+     * Library-wide, it is the same for every filter, so one answer serves them all for a while
+     * (`FACET_VALUES_TTL_MS`), and it is the number the chips were already ordered by.
      */
-    count: z.number(),
+    uses: z.number(),
 });
 
 /**
@@ -448,21 +449,17 @@ export const facetSchema = z.object({
      * — and the number is already computed for `truncated`, so declining to send it was
      * withholding something free.
      *
-     * Counted over the vocabulary rather than over the current filter, which is what makes it
-     * a number the list can be trusted against: it is how many values the *panel* could show,
-     * not how many the filter reaches. Values the filter reaches are what `count` says, one
-     * chip at a time.
+     * Counted over the vocabulary, like everything else on a facet: it is how many values the
+     * panel could show.
      */
     total: z.number(),
     /**
      * The Favourites ♥ chip (§14e), or null when the viewer has no favourites of this facet --
      * the cue to leave the chip out rather than draw one that can only ever say nought.
      *
-     * Two numbers, and the chip says both with their units ("2 favourite performers · 3
-     * items"). It used to say one, in brackets like every other chip, and beside "brian (3)"
-     * a "Favourites ♥ (3)" read as "you have three favourites" -- the one thing it did not
-     * mean. `items` is counted like the facet's other chips: without the facet's own group, so
-     * it says what choosing the chip shows, or under "without" how many it is hiding.
+     * How many favourite tags of this facet the viewer has, for the chip's name ("Your 2
+     * favourite performers"). The chip once counted the items under the filter carrying any of
+     * them as well; that went with the rest of the filter counts (§20 "Facets without counts").
      *
      * Set on one facet per kind, the first drawn (the public one where both exist), because
      * the chip means every favourite of the kind whichever system it is in.
@@ -471,8 +468,6 @@ export const facetSchema = z.object({
         .object({
             /** Favourite tags of this facet the viewer has, that they can see. */
             tags: z.number(),
-            /** Items under the current filter carrying any of them. */
-            items: z.number(),
         })
         .nullable(),
 });
@@ -488,6 +483,17 @@ export type ReferencedTag = z.infer<typeof referencedTagSchema>;
 
 export const facetsResponseSchema = z.object({
     facets: z.array(facetSchema),
+});
+export type FacetsResponse = z.infer<typeof facetsResponseSchema>;
+
+/**
+ * The names a filter's tag ids go by (§14e), apart from the facets.
+ *
+ * They used to arrive with the facets, so the chips above the grid paid for the panel's counts
+ * on every filter change even with the panel closed. A name is a lookup by id; it has its own
+ * request now, keyed by the ids alone, so changing the sort or the search does not ask again.
+ */
+export const tagNamesResponseSchema = z.object({
     /**
      * Every tag the filter names -- with, without, or in a group -- that the viewer can see.
      *
@@ -497,4 +503,4 @@ export const facetsResponseSchema = z.object({
      */
     referencedTags: z.record(z.string(), referencedTagSchema),
 });
-export type FacetsResponse = z.infer<typeof facetsResponseSchema>;
+export type TagNamesResponse = z.infer<typeof tagNamesResponseSchema>;

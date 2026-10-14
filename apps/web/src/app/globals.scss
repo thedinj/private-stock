@@ -324,3 +324,65 @@ body {
         background-image: none;
     }
 }
+
+/**
+ * An item on its way (§14, "Waiting", `lib/openItem.ts`).
+ *
+ * The pressed tile -- or the tasting's stage, or the viewer's stand-in stage -- carries a candle
+ * round its edge until the item arrives: the activity rail's light, gilt with a warm-white heart,
+ * bent into a ring and travelling at the rail's pace. Drawn on the edge only, in the element's
+ * own `::after`, masked to a two-pixel band, so nothing is laid over the picture and no filter
+ * touches it. Set from script rather than by React, because the press is answered before React
+ * has done anything; the element it is set on is already positioned.
+ */
+@property --ps-opening-turn {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0turn;
+}
+
+[data-opening]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    padding: 2px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+        from var(--ps-opening-turn),
+        color-mix(in srgb, var(--mantine-color-brass-5) 30%, transparent) 0turn,
+        var(--mantine-color-brass-5) 0.07turn,
+        var(--ps-candle) 0.11turn,
+        var(--mantine-color-brass-5) 0.15turn,
+        color-mix(in srgb, var(--mantine-color-brass-5) 30%, transparent) 0.22turn,
+        color-mix(in srgb, var(--mantine-color-brass-5) 30%, transparent) 1turn
+    );
+    mask:
+        linear-gradient(black, black) content-box,
+        linear-gradient(black, black);
+    mask-composite: exclude;
+    animation:
+        ps-opening-light var(--ps-dur-brisk) var(--ps-ease-out) both,
+        ps-opening-round calc(2 * var(--ps-dur-signature)) linear infinite;
+}
+
+@keyframes ps-opening-light {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes ps-opening-round {
+    to {
+        --ps-opening-turn: 1turn;
+    }
+}
+
+// Under reduced motion the candle does not travel: the edge is gilt, whole and still.
+@media (prefers-reduced-motion: reduce) {
+    [data-opening]::after {
+        animation: none;
+        background: var(--mantine-color-brass-5);
+    }
+}

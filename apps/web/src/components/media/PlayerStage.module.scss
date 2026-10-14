@@ -152,3 +152,16 @@
         outline: 1px solid var(--ps-hairline-strong);
     }
 }
+
+// The picture the item was opened from, standing in for the stage until the details arrive
+// (§14, "Waiting"). Letterboxed on the ground rather than cropped: it is the whole picture.
+.standIn {
+    background-color: var(--ps-ground);
+}
+
+.standInPicture {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}

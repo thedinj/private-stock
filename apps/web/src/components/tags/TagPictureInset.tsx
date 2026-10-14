@@ -61,7 +61,13 @@ export const TagPictureInset: React.FC<TagPictureInsetProps> = ({
     return (
         <Box className={classes.inset} data-portrait={tag.kind === "performer" || undefined}>
             {origin ? (
-                <Link href={origin} className={classes.picture} title="Open where this was taken">
+                <Link
+                    href={origin}
+                    className={classes.picture}
+                    title="Open where this was taken"
+                    // Lit while the item is on its way (§14, "Waiting").
+                    data-open-frame
+                >
                     {image}
                 </Link>
             ) : (

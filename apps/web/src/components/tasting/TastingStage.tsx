@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button, Loader, Stack, Text } from "@mantine/core";
 
 import type { MediaListItem } from "@private-stock/core";
@@ -14,6 +13,7 @@ import {
     usePlaybackPref,
     useTastingPhotoSeconds,
 } from "@/lib/playbackPrefs";
+import { useItemWarming, useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
 import { type ShowcaseSet, showcaseSetKey } from "@/lib/showcase/set";
 import { readTastingPosition, saveTastingPosition } from "@/lib/tasting/restore";
@@ -98,7 +98,10 @@ const needed = (result: Seek | null): number | null =>
 
 export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
     const filter = showcaseSetKey(set);
-    const router = useRouter();
+    const open = useOpenItem();
+
+    // Outside the shell, so `PageTurn` is not here to warm the item the Open control names.
+    useItemWarming();
     const stageRef = useRef<HTMLDivElement | null>(null);
     const {
         isFullscreen,
@@ -499,8 +502,19 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
 
         address.set("page", String(current.position.page));
         rememberReturnTo(`${window.location.pathname}?${address.toString()}`);
-        router.push(`/media/${current.item.id}`);
-    }, [current, filter, router]);
+
+        /**
+         * Opened as a tile is (§14, "Waiting"): the stage's edge is lit at once, the item is
+         * warmed, and the viewer is navigated to with its details in hand. The show plays on
+         * meanwhile; the item opened is the one on screen when it was asked for.
+         */
+        open({
+            id: current.item.id,
+            href: `/media/${encodeURIComponent(current.item.id)}`,
+            marker: stageRef.current,
+            picture: current.item.coverUrl,
+        });
+    }, [current, filter, open]);
 
     // Read from the key handler, which is bound once.
     const keys = useRef({ step, togglePlay, openItem, toggleFullscreen, onExit, setMuted, muted });
@@ -718,7 +732,7 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
                 title={current?.item.title ?? null}
                 held={held}
                 muted={muted}
-                hasItem={current !== null}
+                itemId={current?.item.id ?? null}
                 isFullscreen={isFullscreen}
                 clipSeconds={clipSeconds}
                 photoSeconds={photoSeconds}

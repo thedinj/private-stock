@@ -7965,10 +7965,15 @@ checkbox — still cancels the navigation. `html[data-vt]` is set only for the l
 transition, so nothing carries a `view-transition-name` the rest of the time, and its value
 picks the kind: `turn`, where the shell holds still and the page sinks out and rises in under a
 plate title that inks itself in, or `morph`, where a tile's frame grows into the viewer's stage
-at 900 ms and shrinks back into its own slot when the viewer's Back button is used. The
-transition waits for the new route (1.5 s at most) and a morph for its target (0.7 s more).
+at 900 ms and shrinks back into its own slot when the viewer's Back button is used. A link to an
+item does not start its transition on the click: it is opened first ("Opening an item", under
+"Waiting" below), and the morph or the turn begins once the item's details are in the cache, so
+it plays at once and lands on a stage that already has its item. The transition still waits for
+the new route (1.5 s at most) and a morph for its target (0.7 s more), but those are safeties
+now, for a warm that ran out of time and for the turn between pages, which nothing warms.
 Browser Back is a plain cut, as is everything without View Transitions (Firefox) or under
-reduced motion. The morph moves the frame; no filter is ever applied to the picture.
+reduced motion -- though an item link there is still opened the same way, only without the
+movement. The morph moves the frame; no filter is ever applied to the picture.
 
 **The snuff into Tasting and Showcase is not a View Transition.** Full screen is requested inside
 the click, and the resize makes the browser abandon a transition, so the room's light closes to a
@@ -8019,6 +8024,34 @@ is you waiting for an answer.
 previous answer while the next loads (`placeholderData`): after 150 ms the list dims to half and a
 faint band of candlelight crosses it every 2.2 s, so a list of names or empty wells shows it as
 plainly as a wall of pictures. It marks the list `aria-busy`. Under reduced motion it only dims.
+
+**Opening an item** (`lib/openItem.ts`) is one path for every way into the viewer: a tile in the
+cellar, a shelf, a playlist or a filmstrip row, a title in Duplicates or Captures, a picture on
+the showcase's wall, the tasting's Open control and its `O` key. Measured on the NAS, the server
+answered the viewer's two requests quickly -- the item's details in about 250 ms, the route's
+payload in about 450 -- and the time went on the client, in series: the click started a view
+transition, which froze the screen; the route was fetched inside the freeze; the details only
+once the viewer had mounted; and for up to two seconds nothing moved, the rail could not paint,
+and the showcase and the tasting, which have no rail, said nothing at all. Three rules replace
+that. **Warm on intent, not on release**: a press on an item, or a mouse resting on one for
+150 ms, starts both requests for that one item -- `prefetchQuery` on the viewer's own
+`mediaDetailQuery(id)` and `router.prefetch` -- marked `BACKGROUND`, because a pointer resting on
+a tile is not somebody waiting. Delegated from the document (`useItemWarming`, mounted by
+`PageTurn` and by the two full-screen modes), so no link has to know; grids keep
+`prefetch={false}`, because sixty route payloads for a page nobody opens is what that avoided.
+**Acknowledge the press within a frame**: the pressed tile's frame is marked `data-opening`, drawn
+as the rail's candle bent into a ring and carried round the edge at the rail's pace -- on the
+edge only, masked to two pixels, never over the picture -- and the rail is told a navigation has
+started; under reduced motion the edge is plain gilt and still. A text link has no frame and is
+acknowledged by the rail alone. **Wait before freezing, not inside the freeze**: the navigation
+starts when the details are cached, or after 1.5 s regardless; the route's prefetch cannot be
+awaited, but it started at the same moment and is a few kilobytes. A second press supersedes the
+first and puts its light out; the light goes when the address changes, or after 15 s if it never
+does. Firefox and reduced motion get the same open, with a plain push at the end in place of the
+morph. When the wait did run out, the viewer stands the picture the item was opened from -- the
+one the tile was showing, already in the browser's cache -- on a stage lit the same way, until
+the details arrive, rather than a loader; opened from a shared link, there is nothing to show
+yet but the loader.
 
 ## 14b. What the library and viewer pages actually do
 
@@ -10814,15 +10847,31 @@ allowed. A shuffled playlist can still return a short page before the last, whic
 viewer decides whether there is a next page from the server's `hasMore` and never from how
 long the page is.
 
-### Disjunctive counts
+### Facets without counts
 
-A facet's own chips are counted **without that facet's "any of" group and its excluded chips**
-(`tagService.getFacets`, `queryForFacet`). Counted against the group it would join, an "any of"
-chip could only ever show what it already shared with the others; an excluded chip would always
-say nought. So under "any of" a count says what picking the chip adds, an excluded chip says how
-much it is hiding, and under "all of" nothing changes — the drill-down count is the honest one
-there. It costs one more count statement per facet that has a group or an exclusion, each
-proportional to that facet's tagging like the rest.
+Decided on 2026-10-14. The panel's chips used to carry the **filter's** count — what picking the
+chip would leave, with a facet's own "any of" group and exclusions taken out so an "any of" chip
+said what it would add ("Disjunctive counts", retired with it). It was exact and it was the
+costliest thing the library asked for: recounted against the whole filter on every filter, sort
+and search change, 6 s on the NAS for one rule-group filter, beside a 2.7 s read of which chips
+to show at all — and running in parallel with the grid's own reads on the same disks, so the
+counts slowed the list down too. The chips above the grid also paid for it, because they took
+their tag _names_ from the same response, panel open or not.
+
+Now:
+
+- **The chip's number is library-wide use** (`uses`), the figure the chips were already ordered
+  by. It does not move with the filter, so one answer serves every filter: the facets are keyed
+  by the filter's tag ids alone (`selected`, drawn first and past the cap so they can be undone),
+  and the vocabulary read behind them is held for a minute in the web process
+  (`FACET_VALUES_TTL_MS`). A tag applied in that minute reaches the panel when it lapses.
+- **The ♥ chip says no number**; its name still says how many favourites it means.
+- **Names are their own request** (`/api/tags/names`, `useTagNames`), a lookup by id, so the
+  chips above the grid, the panel's sections and the Advanced editor no longer cost a count.
+
+What was given up: a chip no longer warns that it would empty the grid. For a library whose main
+job is organising, that warning did not earn seconds of disk on every click; a chip that leaves
+nothing is one click to undo.
 
 ### Facet values come from the vocabulary; only the counts touch the library
 

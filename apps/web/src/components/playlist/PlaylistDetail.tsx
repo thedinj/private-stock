@@ -47,6 +47,7 @@ import {
 import { usePlaylistLayout } from "@/lib/playlistLayout";
 import { MoreGlyph } from "@/components/media/Glyph";
 import { useRememberedHref } from "@/lib/rememberedPages";
+import { useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
 import { settling } from "@/lib/settling";
 import { fetchShowcasePage } from "@/lib/showcase/pages";
@@ -68,6 +69,7 @@ import { playlistSetParams } from "@/lib/showcase/set";
 
 export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId }) => {
     const router = useRouter();
+    const openItem = useOpenItem();
     const searchParams = useSearchParams();
     const wide = useMediaQuery("(min-width: 62em)");
 
@@ -164,7 +166,13 @@ export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId })
         if (!target) return;
 
         rememberReturnTo(playlistHref(playlistId, { ...view, page: 0 }));
-        router.push(`/media/${target.id}`);
+        // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
+        openItem({
+            id: target.id,
+            href: `/media/${encodeURIComponent(target.id)}`,
+            marker: null,
+            picture: target.coverUrl,
+        });
     };
 
     const update = useUpdatePlaylist();

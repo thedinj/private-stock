@@ -40,7 +40,7 @@ interface FacetModalProps {
      */
     scope: TagScope;
     label: string;
-    /** The query the panel is describing, already serialised. */
+    /** The panel's tag selection, as `facetParams` serialises it. */
     filterParams: string;
     /** The panel's view: the chips here are the same three-state chips, writing to it. */
     view: LibraryView;
@@ -125,7 +125,7 @@ export const FacetModal: React.FC<FacetModalProps> = ({
                             <TriChip
                                 key={value.tagId}
                                 name={value.name}
-                                count={value.count}
+                                count={value.uses}
                                 state={chipState(view, value.tagId)}
                                 onCycle={() => kind && onChange(cycleChip(view, value.tagId, kind))}
                             />

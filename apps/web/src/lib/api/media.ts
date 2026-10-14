@@ -1,0 +1,21 @@
+import { queryOptions } from "@tanstack/react-query";
+
+import type { MediaDetail } from "@private-stock/core";
+
+import { api } from "@/lib/api/client";
+import { queryKeys } from "@/lib/api/queryKeys";
+
+/**
+ * One item's details, as the viewer reads them -- the key and the request, stated once.
+ *
+ * Several things ask for the same item: the viewer, its read-ahead of the next item, a tile
+ * being pressed (`lib/openItem.ts`), and a few dialogs that need one field of it. A warm is only
+ * worth anything if it lands in the entry the viewer will read, and two call sites that each
+ * spell the request are two chances for one of them to fetch something the other never finds.
+ * Callers spread this and add only what is theirs: a poll, a `staleTime`, `meta`.
+ */
+export const mediaDetailQuery = (mediaId: string) =>
+    queryOptions({
+        queryKey: queryKeys.media.detail(mediaId),
+        queryFn: () => api<MediaDetail>(`/api/media/${encodeURIComponent(mediaId)}`),
+    });
