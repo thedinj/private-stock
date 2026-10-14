@@ -32,6 +32,7 @@ import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { invalidateListable } from "@/lib/api/trash";
 import { formatBytes, removable } from "@/lib/dupeTriage";
+import { settling } from "@/lib/settling";
 import { DupeSheet } from "@/components/dupes/DupeSheet";
 import { LoadFailed } from "@/components/LoadFailed";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
@@ -162,7 +163,7 @@ export const IdenticalPanel: React.FC<{
         offset: String((page - 1) * CARDS_PER_PAGE),
     }).toString();
 
-    const { data, isLoading, error, refetch } = useQuery({
+    const { data, isLoading, isPlaceholderData, error, refetch } = useQuery({
         queryKey: queryKeys.dupes.identical(params),
         queryFn: () => api<IdenticalListResponse>(`/api/dupes/identical?${params}`),
         placeholderData: keepPreviousData,
@@ -376,7 +377,12 @@ export const IdenticalPanel: React.FC<{
                     <Text size="xs" c="dimmed">
                         Biggest first. Keep all takes a group out of the run and marks it reviewed.
                     </Text>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing="sm">
+                    {/* The last page stays up and settles while the next one loads. */}
+                    <SimpleGrid
+                        cols={{ base: 2, sm: 3, md: 4, lg: 6 }}
+                        spacing="sm"
+                        {...settling(isPlaceholderData)}
+                    >
                         {data.groups.map((group) => (
                             <IdenticalCard
                                 key={group.id}

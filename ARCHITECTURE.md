@@ -7995,6 +7995,31 @@ here do not count, or the ring would never stop.
 never carries the candle: touch and reduced motion get a fixed light. The **foil glint** is a
 background-image band that crosses a filled, enabled button once per hover or keyboard focus.
 
+### Waiting
+
+Added on 2026-10-14, because only the cellar said it was loading, and only with pictures: its
+grid dimmed to 0.6 while a filter change loaded, which nobody saw on tiles with empty wells, and
+every other screen kept the old answer up and said nothing at all.
+
+**The activity rail** (`ActivityRail`) is a gilt hairline along the header's bottom edge with a
+candle carried along it, there and back, at 1.8 s a pass. It is on every page and needs nothing
+from any of them: it lights while a link you followed has not rendered (`PageTurn`, which decides
+what is a navigation, says when one starts; the address changing is when it ends), while any
+mutation is pending, or while a query with **nothing to show yet** is fetching — a first load, or
+a new key whose list is still showing the previous answer. A refetch of data already on screen is
+not waiting, which is what keeps every poll in the app from lighting it without being listed; a
+query that only reads ahead — the viewer's neighbouring pages, its count, the up-next tiles —
+carries `meta: BACKGROUND`. It appears only after 250 ms, so a quick answer never flashes it, and
+once lit holds for 700 ms. Under reduced motion the light stands still in the middle of the rail.
+
+The seal's ring and the rail are two signals and stay two: the ring is the worker busy, the rail
+is you waiting for an answer.
+
+**Settling** (`settling()`, `lib/settling.ts`) is the local half, on every list that keeps its
+previous answer while the next loads (`placeholderData`): after 150 ms the list dims to half and a
+faint band of candlelight crosses it every 2.2 s, so a list of names or empty wells shows it as
+plainly as a wall of pictures. It marks the list `aria-busy`. Under reduced motion it only dims.
+
 ## 14b. What the library and viewer pages actually do
 
 §14 lists the views. This section records the decisions taken about what lives _on_ the two
@@ -8756,7 +8781,8 @@ follow, written down so the next page starts from them.
 3. **Headings:** `Title order={4}` for a page's sections and a card's title; `SectionLabel`
    (uppercase, tracked) for a group inside a panel or under the viewer's title. Bold `Text` is
    not a heading.
-4. **States:** loading is `PageLoader` (centred, brass) _under_ the plate, never instead of it;
+4. **States:** loading is `PageLoader` (centred, brass) _under_ the plate, never instead of it,
+   and a list showing its previous answer while the next loads is `settling()` (§14, "Waiting");
    a failure is `LoadFailed`, whose wording distinguishes a sleeping server from a missing
    item from a permission; nothing-here is `EmptyState` — a line in the display face and one
    sentence of what would fill it.

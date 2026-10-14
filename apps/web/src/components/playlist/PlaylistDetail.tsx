@@ -48,6 +48,7 @@ import { usePlaylistLayout } from "@/lib/playlistLayout";
 import { MoreGlyph } from "@/components/media/Glyph";
 import { useRememberedHref } from "@/lib/rememberedPages";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { settling } from "@/lib/settling";
 import { fetchShowcasePage } from "@/lib/showcase/pages";
 import { playlistSetParams } from "@/lib/showcase/set";
 
@@ -440,23 +441,26 @@ export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId })
                         : "What is on this page is in a library this account cannot open."}
                 </EmptyState>
             ) : reordering ? (
-                <PlaylistReorder
-                    items={items}
-                    offset={view.page * pageSize}
-                    busy={busy}
-                    onMove={(mediaId, toIndex) =>
-                        move.mutate({ id: playlistId, mediaId, toIndex: Math.max(0, toIndex) })
-                    }
-                    onRemove={(mediaId) => removeItem.mutate({ id: playlistId, mediaId })}
-                />
+                // The same page of the playlist, so it settles the same way when the page
+                // turns mid-arrangement; `busy` is about a move being saved, not this.
+                <Box {...settling(itemsQuery.isPlaceholderData)}>
+                    <PlaylistReorder
+                        items={items}
+                        offset={view.page * pageSize}
+                        busy={busy}
+                        onMove={(mediaId, toIndex) =>
+                            move.mutate({ id: playlistId, mediaId, toIndex: Math.max(0, toIndex) })
+                        }
+                        onRemove={(mediaId) => removeItem.mutate({ id: playlistId, mediaId })}
+                    />
+                </Box>
             ) : (
                 <Box
+                    {...settling(itemsQuery.isPlaceholderData)}
                     style={{
                         display: "grid",
                         gridTemplateColumns: view.mode === "gallery" ? GALLERY_TRACKS : GRID_TRACKS,
                         gap: GRID_GAP,
-                        opacity: itemsQuery.isPlaceholderData ? 0.6 : 1,
-                        transition: "opacity 120ms",
                     }}
                 >
                     {items.map((item, index) => (

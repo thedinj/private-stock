@@ -1,0 +1,66 @@
+// The header's activity rail. See ActivityRail.tsx.
+
+.rail {
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1px;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--ps-dur-leave) var(--ps-ease-out);
+
+    // The rail itself: a hairline of gilt, brightest in the middle of the bar.
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--mantine-color-brass-5) 28%, transparent) 30%,
+        color-mix(in srgb, var(--mantine-color-brass-5) 28%, transparent) 70%,
+        transparent
+    );
+}
+
+.shown {
+    opacity: 1;
+    transition-duration: var(--ps-dur-brisk);
+}
+
+// The candle carried along it: gilt with a warm-white heart, unhurried, there and back.
+.light {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 32%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--mantine-color-brass-5) 30%,
+        var(--ps-candle) 50%,
+        var(--mantine-color-brass-5) 70%,
+        transparent
+    );
+    animation: ps-carry 1.8s var(--ps-ease-in-out) infinite alternate;
+    animation-play-state: paused;
+}
+
+.shown .light {
+    animation-play-state: running;
+}
+
+@keyframes ps-carry {
+    from {
+        transform: translateX(-60%);
+    }
+    to {
+        // The rail is 100/32 of the light's width; it travels to just past the far end.
+        transform: translateX(calc(312.5% - 40%));
+    }
+}
+
+// Under reduced motion the light stays where it is: the rail glows whole instead.
+@media (prefers-reduced-motion: reduce) {
+    .light {
+        left: 34%;
+        transform: none;
+    }
+}

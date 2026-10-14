@@ -8,6 +8,7 @@ import type { TagBrowseSort, TagScope } from "@private-stock/core";
 import type { BrowseLayout } from "@/components/browse/RowsTilesSwitch";
 import { LoadFailed } from "@/components/LoadFailed";
 import { useTagBrowse } from "@/lib/api/tags";
+import { settling } from "@/lib/settling";
 
 import { TagFilmstripRow } from "./TagFilmstripRow";
 import { TagTile } from "./TagTile";
@@ -96,6 +97,7 @@ export const TagBrowseList: React.FC<TagBrowseListProps> = ({
 
     const rows = query.data?.pages.flatMap((page) => page.rows) ?? [];
     const total = query.data?.pages[0]?.total ?? 0;
+    const settled = settling(query.isPlaceholderData);
 
     if (!query.isLoading && rows.length === 0 && !search && empty === null) {
         return null;
@@ -127,7 +129,12 @@ export const TagBrowseList: React.FC<TagBrowseListProps> = ({
                           : empty}
                 </Text>
             ) : layout === "tiles" ? (
-                <Box className={tileClasses.wall}>
+                // The names for the last search or sort stay up and settle while the next
+                // answer loads.
+                <Box
+                    className={`${tileClasses.wall} ${settled.className}`}
+                    aria-busy={settled["aria-busy"]}
+                >
                     {rows.map((row) => (
                         <TagTile
                             key={row.tag.id}
@@ -140,21 +147,23 @@ export const TagBrowseList: React.FC<TagBrowseListProps> = ({
                     ))}
                 </Box>
             ) : (
-                rows.map((row) => (
-                    <TagFilmstripRow
-                        key={row.tag.id}
-                        row={row}
-                        // A performer's portrait has a column of its own; once any row on the
-                        // page has one, every row keeps it, so the names start in line.
-                        pictureSlot={rows.some(
-                            (other) => other.tag.kind === "performer" && other.tag.picture
-                        )}
-                        scope={scope}
-                        curator={curator}
-                        seed={seed}
-                        onDone={onDone}
-                    />
-                ))
+                <Box {...settled}>
+                    {rows.map((row) => (
+                        <TagFilmstripRow
+                            key={row.tag.id}
+                            row={row}
+                            // A performer's portrait has a column of its own; once any row on
+                            // the page has one, every row keeps it, so the names start in line.
+                            pictureSlot={rows.some(
+                                (other) => other.tag.kind === "performer" && other.tag.picture
+                            )}
+                            scope={scope}
+                            curator={curator}
+                            seed={seed}
+                            onDone={onDone}
+                        />
+                    ))}
+                </Box>
             )}
 
             <Box ref={sentinel} />

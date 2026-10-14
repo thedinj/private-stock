@@ -11,6 +11,7 @@ import type {
     MediaLookupResponse,
 } from "@private-stock/core";
 
+import { BACKGROUND } from "./api/background";
 import { api } from "./api/client";
 import { PAGE_SIZE, effectiveSort, parseView, viewToRequestParams } from "./libraryQuery";
 import { parsePlaylistView, playlistIdFromPath } from "./playlistView";
@@ -411,7 +412,12 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
     const hold = held.current;
 
     const currentPage = pageQuery(set, page, queryClient);
-    const current = useQuery({ ...currentPage, select: toHeld, enabled: fetched });
+    const current = useQuery({
+        ...currentPage,
+        select: toHeld,
+        enabled: fetched,
+        meta: BACKGROUND,
+    });
 
     if (!hold.current && enabled) {
         const picked = shelfItems
@@ -441,10 +447,16 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
         ...previousPage,
         select: toHeld,
         enabled: fetched && needed.previous,
+        meta: BACKGROUND,
     });
 
     const nextPage = pageQuery(set, page + 1, queryClient);
-    const next = useQuery({ ...nextPage, select: toHeld, enabled: fetched && needed.next });
+    const next = useQuery({
+        ...nextPage,
+        select: toHeld,
+        enabled: fetched && needed.next,
+        meta: BACKGROUND,
+    });
 
     /**
      * An adjacent page is held once it has been asked afresh, not from whatever the cache had:
@@ -478,6 +490,7 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
         queryFn: () => api<MediaCountResponse>(`/api/media/count?${libraryFilterParams}`),
         enabled: enabled && set?.kind === "library",
         staleTime: 60_000,
+        meta: BACKGROUND,
     });
 
     const pageIds = hold.current?.ids ?? [];
@@ -513,6 +526,7 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
         queryKey: queryKeys.media.lookup(missing.join(",")),
         queryFn: () => api<MediaLookupResponse>(`/api/media/lookup?ids=${missing.join(",")}`),
         enabled: missing.length > 0,
+        meta: BACKGROUND,
     });
 
     for (const item of lookup.data?.items ?? []) {

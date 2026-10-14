@@ -20,6 +20,7 @@ import type { TagScope } from "@private-stock/core";
 
 import { useVocabulary } from "@/lib/api/tags";
 import { facetLabel, facetLabelPlural } from "@/lib/facetLabels";
+import { settling } from "@/lib/settling";
 import { TagRowActions } from "@/components/tags/TagRowActions";
 import {
     defineView,
@@ -102,7 +103,7 @@ export const VocabularyTable: React.FC<VocabularyTableProps> = ({
         300
     );
 
-    const { data, isLoading, error } = useVocabulary({
+    const { data, isLoading, isPlaceholderData, error } = useVocabulary({
         scope,
         kind,
         search: view.search || undefined,
@@ -184,7 +185,8 @@ export const VocabularyTable: React.FC<VocabularyTableProps> = ({
                           : `You have no private ${many}. Add one in the Private box on any item.`}
                 </Text>
             ) : (
-                <Table.ScrollContainer minWidth={520}>
+                // The last page stays up and settles while the next one loads.
+                <Table.ScrollContainer minWidth={520} {...settling(isPlaceholderData)}>
                     <Table verticalSpacing="sm">
                         <Table.Thead>
                             <Table.Tr>

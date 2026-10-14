@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, Badge, Button, Group, Loader, Select, Stack, Text } from "@mantine/core";
+import { Alert, Badge, Box, Button, Group, Loader, Select, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -7,6 +7,7 @@ import type { OcrMatchCandidate, OcrMatchRow, OcrMatchStatus } from "@private-st
 
 import { ocrMatchesKey, useOcrMatches, useUndoOcrMatch, type OcrMatchFilters } from "@/lib/api/ocr";
 import { facetLabel } from "@/lib/facetLabels";
+import { settling } from "@/lib/settling";
 import { SearchInput } from "@/components/SearchInput";
 
 import { Highlighted, plural } from "./OcrMatchParts";
@@ -201,22 +202,25 @@ export const OcrRuleSheet: React.FC<OcrRuleSheetProps> = ({
                           : "Nothing marked never."}
                 </Text>
             ) : (
-                <VirtualFeed
-                    items={rows}
-                    keyOf={(row) => row.textNorm}
-                    estimate={120}
-                    hasMore={matches.hasNextPage}
-                    loadingMore={matches.isFetchingNextPage}
-                    onLoadMore={loadMore}
-                    render={(row) => (
-                        <RuleRow
-                            row={row}
-                            status={filters.status}
-                            busy={busy === row.textNorm}
-                            onUndo={(candidate) => undo(row, candidate)}
-                        />
-                    )}
-                />
+                // The rules for the last search stay up and settle while the next one loads.
+                <Box {...settling(matches.isPlaceholderData)}>
+                    <VirtualFeed
+                        items={rows}
+                        keyOf={(row) => row.textNorm}
+                        estimate={120}
+                        hasMore={matches.hasNextPage}
+                        loadingMore={matches.isFetchingNextPage}
+                        onLoadMore={loadMore}
+                        render={(row) => (
+                            <RuleRow
+                                row={row}
+                                status={filters.status}
+                                busy={busy === row.textNorm}
+                                onUndo={(candidate) => undo(row, candidate)}
+                            />
+                        )}
+                    />
+                </Box>
             )}
         </Stack>
     );

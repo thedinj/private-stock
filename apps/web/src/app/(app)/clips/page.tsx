@@ -35,6 +35,7 @@ import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useAddReelItems, useClips, useCreateReel, useOwnReels } from "@/lib/api/reels";
 import { useUndoBatch } from "@/lib/api/tags";
+import { settling } from "@/lib/settling";
 import selectionClasses from "@/components/library/SelectionBar.module.scss";
 import {
     defineView,
@@ -151,7 +152,7 @@ const ClipsPage: React.FC = () => {
     const addItems = useAddReelItems();
     const createReel = useCreateReel();
 
-    const { data, isLoading, error, refetch } = useClips({
+    const { data, isLoading, isPlaceholderData, error, refetch } = useClips({
         sort,
         direction: clipNaturalDirection(sort),
         search: view.search || undefined,
@@ -402,17 +403,24 @@ const ClipsPage: React.FC = () => {
                 </EmptyState>
             )}
 
-            {grouped
-                ? groups.map(([mediaId, group]) => (
-                      <Stack key={mediaId} gap={6}>
-                          <Text size="xs" c="dimmed" fw={600}>
-                              {group.title} · {group.clips.length}
-                          </Text>
-                          {/* The heading already says where these came from. */}
-                          {wall(group.clips, false)}
-                      </Stack>
-                  ))
-                : wall(items, true)}
+            {/* One element around every group, so the whole answer settles together while the
+                next one loads rather than each wall on its own. Absent when there is nothing to
+                hold, so an empty element does not add a gap to the page. */}
+            {items.length > 0 && (
+                <Stack gap="md" {...settling(isPlaceholderData)}>
+                    {grouped
+                        ? groups.map(([mediaId, group]) => (
+                              <Stack key={mediaId} gap={6}>
+                                  <Text size="xs" c="dimmed" fw={600}>
+                                      {group.title} · {group.clips.length}
+                                  </Text>
+                                  {/* The heading already says where these came from. */}
+                                  {wall(group.clips, false)}
+                              </Stack>
+                          ))
+                        : wall(items, true)}
+                </Stack>
+            )}
 
             {pages > 1 && (
                 <Group justify="center">

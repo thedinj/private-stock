@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { navigationSettled, navigationStarted } from "@/lib/navigationPending";
 import {
     canTransition,
     morphIntoStage,
@@ -33,6 +34,10 @@ const ITEM_PATH = /^\/media\/[^/]+$/;
  *
  * It also tells the transition when the new route has rendered, which is the one thing the
  * transition cannot find out for itself: the address this component sees changing is that.
+ *
+ * And it says when a navigation starts and ends for the header's activity rail, whether or not
+ * the navigation turns: the decision about which clicks are navigations is made here and
+ * nowhere else, so a browser without View Transitions still shows that a page is on its way.
  */
 export const PageTurn: React.FC = () => {
     const router = useRouter();
@@ -42,6 +47,7 @@ export const PageTurn: React.FC = () => {
 
     useEffect(() => {
         notifyRouteSettled();
+        navigationSettled();
     }, [address]);
 
     useEffect(() => {
@@ -66,8 +72,7 @@ export const PageTurn: React.FC = () => {
                 event.metaKey ||
                 event.ctrlKey ||
                 event.shiftKey ||
-                event.altKey ||
-                !canTransition()
+                event.altKey
             ) {
                 return;
             }
@@ -79,15 +84,20 @@ export const PageTurn: React.FC = () => {
             if (!anchor || anchor.hasAttribute("download")) return;
             if (anchor.target && anchor.target !== "_self") return;
 
-            // A link in a dialog belongs to the dialog: it may replace rather than push, which a
-            // listener cannot see, and the dialog closes as it goes in any case.
-            if (anchor.closest('[role="dialog"]')) return;
-
             const url = new URL(anchor.href, window.location.href);
             if (url.origin !== window.location.origin || OUTSIDE_SHELL.test(url.pathname)) return;
 
             // A hash on this page, or this page again: nothing to turn to.
             if (url.pathname + url.search === window.location.pathname + window.location.search) {
+                return;
+            }
+
+            // A link in a dialog belongs to the dialog: it may replace rather than push, which a
+            // listener cannot see, and the dialog closes as it goes in any case. Without View
+            // Transitions there is nothing to take over either. Both are left to Link, and only
+            // said to have started.
+            if (anchor.closest('[role="dialog"]') || !canTransition()) {
+                pending = { event, go: navigationStarted };
                 return;
             }
 
@@ -111,6 +121,7 @@ export const PageTurn: React.FC = () => {
             const { go } = pending;
 
             pending = null;
+            navigationStarted();
             go();
         };
 

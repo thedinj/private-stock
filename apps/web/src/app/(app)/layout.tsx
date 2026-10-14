@@ -19,6 +19,7 @@ import {
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 
 import { AboutModal } from "@/components/shell/AboutModal";
+import { ActivityRail } from "@/components/shell/ActivityRail";
 import { AppNavbar, AppNavbarUpkeep } from "@/components/shell/AppNavbar";
 import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
 import { HeaderPlateTitle } from "@/components/shell/HeaderPlateTitle";
@@ -127,6 +128,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             {isMobile && <HeaderSearch compact />}
                         </Group>
                     </Group>
+                    {/* Along the header's bottom edge, under every page (§14, "Waiting"). */}
+                    <ActivityRail />
                 </AppShell.Header>
 
                 {/* On a phone the open nav covers the page, but it is only a fixed panel: a

@@ -77,6 +77,7 @@ import { useLibraries, useLibraryStats } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { rememberTagNames } from "@/lib/rememberedPages";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { settling } from "@/lib/settling";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DIRECTION_LABELS, SORT_LABELS } from "@/lib/sortWords";
 import { SearchInput } from "@/components/SearchInput";
@@ -948,16 +949,16 @@ export const LibraryCellar: React.FC = () => {
                     ) : (
                         <Box
                             ref={flip.ref}
+                            // The grid settles in place while the next page loads rather than
+                            // being swapped for a spinner, which would make every page turn
+                            // flash.
+                            {...settling(pageQuery.isPlaceholderData)}
                             style={{
                                 display: "grid",
                                 // The browser does the column arithmetic, so there is nothing
                                 // to measure and nothing to get wrong on the first render.
                                 gridTemplateColumns: gallery ? GALLERY_TRACKS : GRID_TRACKS,
                                 gap: GRID_GAP,
-                                // Dimmed rather than replaced while the next page loads:
-                                // swapping to a spinner makes every page turn flash.
-                                opacity: pageQuery.isPlaceholderData ? 0.6 : 1,
-                                transition: "opacity 120ms",
                             }}
                         >
                             {items.map((item, index) => (

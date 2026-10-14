@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+    Box,
     Button,
     Group,
     Modal,
@@ -35,6 +36,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useCreateReel, useReels } from "@/lib/api/reels";
+import { settling } from "@/lib/settling";
 import { SearchInput } from "@/components/SearchInput";
 
 /**
@@ -83,7 +85,7 @@ const ReelsPage: React.FC = () => {
     const [naming, setNaming] = useState(false);
     const [name, setName] = useState("");
 
-    const { data, isLoading, error, refetch } = useReels({
+    const { data, isLoading, isPlaceholderData, error, refetch } = useReels({
         ownership,
         sort,
         direction: reelNaturalDirection(sort),
@@ -154,20 +156,23 @@ const ReelsPage: React.FC = () => {
                 </EmptyState>
             )}
 
-            <FlipWall
-                keys={data?.items.map((reel) => reel.id) ?? []}
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                    gap: "var(--mantine-spacing-sm)",
-                }}
-            >
-                {data?.items.map((reel) => (
-                    <div key={reel.id} data-flip-key={reel.id}>
-                        <ReelCard reel={reel} />
-                    </div>
-                ))}
-            </FlipWall>
+            {/* Settles while the next answer loads, rather than being swapped for a spinner. */}
+            <Box {...settling(isPlaceholderData)}>
+                <FlipWall
+                    keys={data?.items.map((reel) => reel.id) ?? []}
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                        gap: "var(--mantine-spacing-sm)",
+                    }}
+                >
+                    {data?.items.map((reel) => (
+                        <div key={reel.id} data-flip-key={reel.id}>
+                            <ReelCard reel={reel} />
+                        </div>
+                    ))}
+                </FlipWall>
+            </Box>
 
             {/* Pages, not an endless scroll (§20): a page is an address that can be shared,
                 reloaded and returned to with the back button. */}

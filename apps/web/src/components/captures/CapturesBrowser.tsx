@@ -30,6 +30,7 @@ import { FrameLightbox } from "@/components/media/FrameLightbox";
 import { useCaptures, useDiscardCaptures, useRenameCapture } from "@/lib/api/captures";
 import { captureView } from "@/lib/captureView";
 import { rememberReturn } from "@/lib/returnTo";
+import { settling } from "@/lib/settling";
 import { useUrlSearch, useUrlView } from "@/lib/urlView";
 import { SearchInput } from "@/components/SearchInput";
 
@@ -75,7 +76,7 @@ export const CapturesBrowser: React.FC = () => {
     const discard = useDiscardCaptures();
     const rename = useRenameCapture();
 
-    const { data, isLoading, error, refetch } = useCaptures({
+    const { data, isLoading, isPlaceholderData, error, refetch } = useCaptures({
         sort: view.sort,
         direction: view.direction ?? captureNaturalDirection(view.sort),
         search: view.search || undefined,
@@ -309,24 +310,31 @@ export const CapturesBrowser: React.FC = () => {
                 </EmptyState>
             )}
 
-            {!view.flat
-                ? groups.map(([mediaId, group]) => (
-                      <Stack key={mediaId} gap={6}>
-                          <Anchor
-                              component={Link}
-                              href={`/media/${mediaId}`}
-                              prefetch={false}
-                              onClick={rememberReturn}
-                              size="xs"
-                              c="dimmed"
-                              fw={600}
-                          >
-                              {group.title} · {group.captures.length}
-                          </Anchor>
-                          {wall(group.captures, false)}
-                      </Stack>
-                  ))
-                : wall(items, true)}
+            {/* One element around every group, so the whole answer settles together while the
+                next one loads rather than each wall on its own. Absent when there is nothing to
+                hold, so an empty element does not add a gap to the page. */}
+            {items.length > 0 && (
+                <Stack gap="md" {...settling(isPlaceholderData)}>
+                    {!view.flat
+                        ? groups.map(([mediaId, group]) => (
+                              <Stack key={mediaId} gap={6}>
+                                  <Anchor
+                                      component={Link}
+                                      href={`/media/${mediaId}`}
+                                      prefetch={false}
+                                      onClick={rememberReturn}
+                                      size="xs"
+                                      c="dimmed"
+                                      fw={600}
+                                  >
+                                      {group.title} · {group.captures.length}
+                                  </Anchor>
+                                  {wall(group.captures, false)}
+                              </Stack>
+                          ))
+                        : wall(items, true)}
+                </Stack>
+            )}
 
             {pages > 1 && (
                 <Group justify="center">

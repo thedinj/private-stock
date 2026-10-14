@@ -23,6 +23,7 @@ import {
     toResolveItem,
 } from "@/lib/dupeTriage";
 import { prefersReducedMotion } from "@/lib/motion";
+import { settling } from "@/lib/settling";
 import { isTypingTarget } from "@/lib/typingTarget";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DupeResolveDialog, type Decision } from "@/components/dupes/DupeResolveDialog";
@@ -128,11 +129,11 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         offset: String((page - 1) * PAGE_SIZE),
     });
 
-    const { data, isLoading, error, refetch } = useQuery({
+    const { data, isLoading, isPlaceholderData, error, refetch } = useQuery({
         queryKey: keyFor(params.toString()),
         queryFn: () => api<{ groups: DupeGroup[]; total: number }>(`${endpoint}?${params}`),
         // The rows stay put while the next page or a post-resolve refresh loads, rather than
-        // the sheet blanking to a spinner under the reviewer's pointer.
+        // the sheet blanking to a spinner under the reviewer's pointer; they settle meanwhile.
         placeholderData: keepPreviousData,
     });
 
@@ -393,7 +394,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                     <EmptyState title={emptyTitle}>{emptyText}</EmptyState>
                 )
             ) : (
-                <div ref={flip.ref}>
+                <div ref={flip.ref} {...settling(isPlaceholderData)}>
                     {groups.map((group, index) => (
                         <DupeRow
                             key={group.id}
