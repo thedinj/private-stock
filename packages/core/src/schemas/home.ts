@@ -72,10 +72,13 @@ export type HomeLayout = z.infer<typeof homeLayoutSchema>;
  * Deliberately modest and entirely builtin: it must work on a library with no tags, no
  * playlists and no saved filters, which is precisely the state of a library on the day it is
  * first scanned.
+ *
+ * What is new leads: the hero is drawn from it anyway, and the row under the hero should be
+ * the rest of the shelf the hero came from rather than what was just watched.
  */
 export const DEFAULT_HOME_LAYOUT: HomeLayout = [
-    { source: "builtin", builtin: "recentlyViewed", limit: 12 },
     { source: "builtin", builtin: "recentlyAdded", limit: 12 },
+    { source: "builtin", builtin: "recentlyViewed", limit: 12 },
     { source: "builtin", builtin: "favorites", limit: 12 },
     { source: "builtin", builtin: "random", limit: 12 },
 ];
