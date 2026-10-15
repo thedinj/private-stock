@@ -100,6 +100,21 @@ const sampleFor = (query: MediaQuery, auth: AuthContext, overlayUserId?: string)
         )
     );
 
+/**
+ * What a shuffled shelf dealt each visit, by the seed the page sent.
+ *
+ * The Room refetches while it is open -- on returning to it, and on every live update while the
+ * worker is busy -- and a fresh draw on each of those swapped the row for another while somebody
+ * was looking at it. A visit keeps one seed for as long as it shows the page (`LibraryRoom`), so
+ * a refetch is answered with the same items, re-read for their current state, rather than a new
+ * hand. Held apart from the sample because the sample is replaced every ten minutes and a hand
+ * drawn from the next one would be a different row.
+ *
+ * An hour, after which an open page is dealt again; a dozen ids an entry.
+ */
+const DEALT_TTL_MS = 60 * 60_000;
+const dealt = createTtlCache<string[]>(DEALT_TTL_MS, 256);
+
 /** `count` of `ids` in a random order, without disturbing the cached array. */
 const draw = (ids: string[], count: number): string[] => {
     const pool = [...ids];
@@ -117,6 +132,7 @@ const runQuery = (
     partial: Partial<MediaQuery>,
     limit: number,
     auth: AuthContext,
+    seed: number | undefined,
     overlayUserId?: string
 ): MediaListItem[] => {
     const query = {
@@ -128,13 +144,18 @@ const runQuery = (
     } as MediaQuery;
 
     /**
-     * A fresh draw per request for a shuffled shelf.
+     * A fresh draw per visit for a shuffled shelf.
      *
      * The grid holds its seed in the URL so paging stays stable; a shelf has no pages and is
-     * meant to be different each time the page is opened, so it wants the opposite behaviour.
+     * meant to be different each time the page is opened, so it wants a new hand per visit --
+     * and the same hand for every refetch within one (`dealt`).
      */
     if (query.sort === "random") {
-        const ids = draw(sampleFor(query, auth, overlayUserId), limit);
+        const deal = (): string[] => draw(sampleFor(query, auth, overlayUserId), limit);
+        const ids =
+            seed === undefined
+                ? deal()
+                : dealt.get(`${queryCacheKey(query, auth, overlayUserId)}:${seed}`, deal);
 
         return toListPage(
             mediaRepo.listByIds(ids, auth.userId, auth.accessibleRootIds),
@@ -154,7 +175,12 @@ const unavailable = (key: string, title: string, shelf: Shelf, reason: string): 
     unavailable: reason,
 });
 
-const resolveShelf = (shelf: Shelf, index: number, auth: AuthContext): ResolvedShelf => {
+const resolveShelf = (
+    shelf: Shelf,
+    index: number,
+    auth: AuthContext,
+    seed: number | undefined
+): ResolvedShelf => {
     if (shelf.source === "builtin") {
         const key = `${index}:builtin:${shelf.builtin}`;
         const title = shelf.title ?? BUILTIN_TITLES[shelf.builtin];
@@ -169,7 +195,7 @@ const resolveShelf = (shelf: Shelf, index: number, auth: AuthContext): ResolvedS
                       ),
                       auth.userId
                   )
-                : runQuery(BUILTIN_QUERIES[shelf.builtin], shelf.limit, auth);
+                : runQuery(BUILTIN_QUERIES[shelf.builtin], shelf.limit, auth, seed);
 
         return { key, title, shelf, items, unavailable: null };
     }
@@ -208,7 +234,7 @@ const resolveShelf = (shelf: Shelf, index: number, auth: AuthContext): ResolvedS
             title,
             shelf,
             // Whose ratings this asks about is the filter's business, not the shelf's.
-            items: runQuery(found.query, shelf.limit, auth, found.overlayUserId),
+            items: runQuery(found.query, shelf.limit, auth, seed, found.overlayUserId),
             unavailable: null,
         };
     }
@@ -261,7 +287,8 @@ const resolveShelf = (shelf: Shelf, index: number, auth: AuthContext): ResolvedS
         items: runQuery(
             { kind: "video", tags: [shelf.tagId], sort: "addedAt", direction: "desc" },
             shelf.limit,
-            auth
+            auth,
+            seed
         ),
         unavailable: null,
     };
@@ -357,14 +384,14 @@ const pinnedFilterShelves = (layout: HomeLayout, auth: AuthContext): Shelf[] => 
  * must not take the write lock. Holding the snapshot only delays a checkpoint past this point,
  * for as long as the page takes to build.
  */
-export const getHome = (auth: AuthContext): HomeResponse =>
+export const getHome = (auth: AuthContext, seed?: number): HomeResponse =>
     db
         .transaction((): HomeResponse => {
             const { layout, isDefault } = layoutFor(auth);
             const shelves = [...layout, ...pinnedFilterShelves(layout, auth)].slice(0, MAX_SHELVES);
 
             return {
-                shelves: shelves.map((shelf, index) => resolveShelf(shelf, index, auth)),
+                shelves: shelves.map((shelf, index) => resolveShelf(shelf, index, auth, seed)),
                 isDefault,
             };
         })

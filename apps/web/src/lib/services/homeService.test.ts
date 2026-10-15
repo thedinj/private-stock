@@ -286,20 +286,35 @@ describe("what each shelf asks for", () => {
     });
 
     /**
-     * The shuffled shelf is meant to differ each time.
+     * The shuffled shelf is meant to differ each visit.
      *
      * The grid does the opposite — its seed lives in the URL so paging stays stable — so this
-     * is the one place a fresh seed per request is the correct behaviour rather than a bug.
+     * is the one place a fresh draw per visit is the correct behaviour rather than a bug.
      */
-    it("reshuffles the random shelf on every request", () => {
+    it("reshuffles the random shelf for each new visit", () => {
         withLayout([{ source: "builtin", builtin: "random", limit: 6 }]);
 
-        getHome(AUTH);
-        getHome(AUTH);
+        getHome(AUTH, 1);
+        getHome(AUTH, 2);
 
         expect(hydrated).toHaveLength(2);
         expect(hydrated[0]).toHaveLength(6);
         expect(hydrated[0]).not.toEqual(hydrated[1]);
+    });
+
+    /**
+     * Within one visit the Room refetches -- on returning to it, on every live update -- and a
+     * new hand each time swapped the row while somebody was reading it. The items are still
+     * re-read on each request, so a trashed one drops out of the hand.
+     */
+    it("deals one visit the same hand on every refetch", () => {
+        withLayout([{ source: "builtin", builtin: "random", limit: 6 }]);
+
+        getHome(AUTH, 3);
+        getHome(AUTH, 3);
+
+        expect(hydrated).toHaveLength(2);
+        expect(hydrated[0]).toEqual(hydrated[1]);
     });
 
     /**

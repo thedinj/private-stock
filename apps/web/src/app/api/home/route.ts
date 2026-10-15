@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { homeLayoutSchema } from "@private-stock/core";
 
@@ -17,12 +18,19 @@ export const fetchCache = "force-no-store";
  *
  * One call rather than one per row: a home page that assembles itself in four stages looks
  * broken on a slow link, and each shelf is a capped indexed query anyway.
+ *
+ * `seed` names the visit, so its refetches deal a shuffled shelf the same items (`dealt`).
  */
+const homeQuerySchema = z.object({ seed: z.coerce.number().int().nonnegative().optional() });
+
 export async function GET(request: Request) {
     try {
         const auth = await requireAuth(request);
+        const { seed } = homeQuerySchema.parse(
+            Object.fromEntries(new URL(request.url).searchParams)
+        );
 
-        return NextResponse.json(getHome(auth));
+        return NextResponse.json(getHome(auth, seed));
     } catch (error) {
         return toErrorResponse(error, request);
     }

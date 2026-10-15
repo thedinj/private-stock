@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Anchor, Box, Button, Center, Group, Loader, Stack, Text, Title } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
     HomeResponse,
@@ -243,6 +244,18 @@ const Invite: React.FC<{ library: LibrarySummary }> = ({ library }) => (
  * is where you go when you expected to find things, and the admin screen, which is where they
  * get turned on. Here there is a sentence and a door.
  */
+/**
+ * The seed that names this visit to the Room, for its shuffled shelves (`homeService`'s `dealt`).
+ *
+ * One per visit, so every refetch while the page is open -- coming back to it, a live update --
+ * is dealt the same hand instead of swapping the row under somebody reading it. A visit is new
+ * when there is nothing cached to show: coming back while the last hand is still on screen keeps
+ * it, and coming back after the cache has let it go is a fresh page anyway, with a fresh hand.
+ */
+let roomSeed = 0;
+
+const newRoomSeed = (): number => Math.floor(Math.random() * 1_000_000);
+
 const RoomEmpty: React.FC = () => (
     <Center mih={320}>
         <Stack gap="xs" align="center" maw={440} ta="center">
@@ -280,6 +293,15 @@ export const LibraryRoom: React.FC = () => {
      */
     useLiveUpdates({ autoApply: true });
 
+    const queryClient = useQueryClient();
+    const [seed] = useState(() => {
+        if (queryClient.getQueryData(queryKeys.home()) === undefined) {
+            roomSeed = newRoomSeed();
+        }
+
+        return roomSeed;
+    });
+
     const {
         data: home,
         isLoading: homeLoading,
@@ -288,7 +310,7 @@ export const LibraryRoom: React.FC = () => {
         refetch: refetchHome,
     } = useQuery({
         queryKey: queryKeys.home(),
-        queryFn: () => api<HomeResponse>("/api/home"),
+        queryFn: () => api<HomeResponse>(`/api/home?seed=${seed}`),
     });
 
     const { data: libraries } = useLibraries();

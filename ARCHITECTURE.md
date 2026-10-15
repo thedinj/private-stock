@@ -10603,7 +10603,9 @@ grid page names its partial index with `INDEXED BY` (43 pages → 1), so a renam
 rather than a quiet slowdown. A fair shuffle must read its whole matching set, so shuffled shelves
 draw a fresh dozen per visit from a sample of twenty shelves' worth, refreshed every ten minutes —
 up to ten minutes of filter staleness, never of visibility, since every draw is re-checked.
-Replica totals: ~4,000 pages → ~1,150 just after a restart, ~500 on later visits.
+"Per visit" is literal: the Room sends a seed it keeps while its cached page is showing, and the
+hand dealt for it is held for an hour, so a refetch (returning to the page, a live update) re-reads
+the same items instead of swapping the row for another under somebody reading it. Replica totals: ~4,000 pages → ~1,150 just after a restart, ~500 on later visits.
 
 **The worker's first minutes belong to the site.** Every deploy restarts both processes, and the
 worker did all of its heavy reading at boot — a scan, the watchers' walk, the stage sweep, an
