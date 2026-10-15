@@ -150,7 +150,17 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                 "calc(var(--mantine-spacing-sm) + var(--ps-safe-bottom))",
                         }}
                     >
-                        <AppShell.Section grow component={ScrollArea}>
+                        {/* The scrollbar overlays the content by default, and in a rail this
+                            narrow it landed on the counts and the recent searches' close
+                            buttons. `present` reserves a gutter for it only while the list
+                            actually overflows, so a short list keeps its full width. */}
+                        <AppShell.Section
+                            grow
+                            component={ScrollArea}
+                            scrollbars="y"
+                            scrollbarSize={8}
+                            offsetScrollbars="present"
+                        >
                             <Suspense
                                 fallback={
                                     <Stack gap={6} p="xs">
