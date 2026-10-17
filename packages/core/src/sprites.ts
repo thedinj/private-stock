@@ -322,3 +322,88 @@ export const cueAt = (cues: SpriteCue[], atMs: number): SpriteCue | null => {
     // thumbnail is the right answer rather than nothing.
     return atMs >= cues[cues.length - 1].endMs ? cues[cues.length - 1] : cues[0];
 };
+
+/** One packet of a video's stream: when its frame is shown, and whether it is a keyframe. */
+export interface VideoPacket {
+    /** From the start of the file, as `-ss` counts: the container's start time taken off. */
+    ptsMs: number;
+    key: boolean;
+}
+
+/**
+ * How far either side of a tile's nominal moment its picture can be: what to list the packets
+ * of, before asking which of them the tile shows.
+ *
+ * Back one interval, for the keyframe at or before the moment that the seeking path reads; on
+ * past the half interval that the `fps` paths reach, for the frame just short of it.
+ */
+export const tileReadWindow = (
+    atMs: number,
+    intervalMs: number
+): { fromMs: number; toMs: number } => ({
+    fromMs: Math.max(0, atMs - intervalMs),
+    toMs: atMs + intervalMs / 2 + 500,
+});
+
+/**
+ * The frames a tile at `atMs` may be (§9 "What a tile shows"), earliest first and each once.
+ *
+ * A tile's moment is `index × interval`, and its picture is seldom that frame. Measured against
+ * ffmpeg 6.1 with a frame-numbered fixture: `fps=1/N` rounds each frame's time to the nearest
+ * slot and keeps the *last* frame of each, so a tile shows what was on screen just short of
+ * `atMs + N/2` -- half an interval late, up to fifteen seconds on a long video.
+ *
+ * - **full decode**: the last frame before `atMs + N/2`
+ * - **keyframes only**: the last keyframe before it
+ * - **seeking** (`SEEK_CODECS`): the keyframe at or before `atMs`
+ * - and the frame at `atMs` itself, which the tile would be if it were what its time says
+ *
+ * Which path made a sprite is not recorded, so all four are offered, and what the tile looks
+ * like decides between them.
+ */
+export const tileCandidates = (
+    atMs: number,
+    intervalMs: number,
+    packets: readonly VideoPacket[]
+): VideoPacket[] => {
+    const late = atMs + intervalMs / 2;
+    const pick = (
+        matching: (packet: VideoPacket) => boolean,
+        better: (packet: VideoPacket, than: VideoPacket) => boolean
+    ): VideoPacket | undefined =>
+        packets
+            .filter(matching)
+            .reduce<VideoPacket | undefined>(
+                (best, packet) => (!best || better(packet, best) ? packet : best),
+                undefined
+            );
+    const later = (packet: VideoPacket, than: VideoPacket): boolean => packet.ptsMs > than.ptsMs;
+    const earlier = (packet: VideoPacket, than: VideoPacket): boolean => packet.ptsMs < than.ptsMs;
+
+    // Half a millisecond's slack: the times come from decimal strings, and a frame exactly at
+    // a moment must count as at it. A frame exactly at `late` rounds into the next slot.
+    const found = [
+        pick((packet) => packet.ptsMs < late - 0.5, later),
+        pick((packet) => packet.key && packet.ptsMs < late - 0.5, later),
+        pick((packet) => packet.key && packet.ptsMs <= atMs + 0.5, later),
+        pick((packet) => packet.ptsMs >= atMs - 0.5, earlier),
+    ].filter((packet): packet is VideoPacket => packet !== undefined);
+    const distinct = new Map(found.map((packet) => [Math.round(packet.ptsMs * 1000), packet]));
+
+    return [...distinct.values()].sort((left, right) => left.ptsMs - right.ptsMs);
+};
+
+/** How unlike two greyscale pictures of one size are: the mean difference of their pixels. */
+export const pictureDistance = (left: Uint8Array, right: Uint8Array): number => {
+    if (left.length !== right.length || left.length === 0) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    let sum = 0;
+
+    for (let index = 0; index < left.length; index += 1) {
+        sum += Math.abs(left[index] - right[index]);
+    }
+
+    return sum / left.length;
+};

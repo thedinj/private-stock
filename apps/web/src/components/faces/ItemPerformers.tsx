@@ -18,7 +18,7 @@ import type { FaceReviewFace, ItemPeople, MediaTag, MentionField } from "@privat
 import { SectionLabel } from "@/components/media/SectionLabel";
 import { FacetBox } from "@/components/TagEditor";
 import type { ItemMoment } from "@/components/tags/ItemTagChip";
-import { useDecideItemPeople, useItemPeople } from "@/lib/api/faces";
+import { useDecideItemPeople, useItemPeople, useSeekToFace } from "@/lib/api/faces";
 import { formatTimecode } from "@/lib/timecode";
 
 import { FaceCropView } from "./FaceCropView";
@@ -58,7 +58,7 @@ const FaceOnCard: React.FC<{
     mediaId: string;
     tagId: string;
     person: Person;
-    onSeek: (atMs: number) => void;
+    onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, tagId, person, onSeek }) => {
     const decide = useDecideItemPeople(mediaId);
     const { face } = person.card;
@@ -98,7 +98,7 @@ const FaceOnCard: React.FC<{
             </Menu.Target>
             <Menu.Dropdown>
                 {face.kind === "video" && face.atMs !== null && (
-                    <Menu.Item onClick={() => onSeek(face.atMs!)}>Go to this moment</Menu.Item>
+                    <Menu.Item onClick={() => onSeek(face)}>Go to this moment</Menu.Item>
                 )}
                 {!confirmed && (
                     <Menu.Item disabled={decide.isPending} onClick={() => send("is")}>
@@ -135,15 +135,12 @@ const Maybe: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const SuggestedCard: React.FC<{
     mediaId: string;
     person: Person;
-    onSeek: (atMs: number) => void;
+    onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, person, onSeek }) => {
     const decide = useDecideItemPeople(mediaId);
     const { card, performer } = person;
     const busy = (action: string): boolean =>
         decide.isPending && decide.variables?.action === action;
-    const seek = (face: FaceReviewFace): void => {
-        if (face.kind === "video" && face.atMs !== null) onSeek(face.atMs);
-    };
 
     if (!performer) return null;
 
@@ -151,7 +148,7 @@ const SuggestedCard: React.FC<{
         <Maybe>
             <Group gap="sm" wrap="nowrap" align="flex-start">
                 {/* The face, and beside it who it may be: compared at a glance. */}
-                <UnstyledButton aria-label="Go to this face" onClick={() => seek(card.face)}>
+                <UnstyledButton aria-label="Go to this face" onClick={() => onSeek(card.face)}>
                     <FaceCropView crop={card.face.crop} size={72} />
                 </UnstyledButton>
                 <PerformerPicture url={performer.pictureUrl} width={58} />
@@ -163,7 +160,7 @@ const SuggestedCard: React.FC<{
                         <LookButton
                             face={card.face}
                             others={card.others}
-                            onPlay={seek}
+                            onPlay={onSeek}
                             compare={{ tagId: performer.id, name: performer.name }}
                         />
                     </Group>
@@ -267,14 +264,11 @@ const NamedCard: React.FC<{ mediaId: string; named: ItemPeople["named"][number] 
 const UnknownRow: React.FC<{
     mediaId: string;
     person: Person;
-    onSeek: (atMs: number) => void;
+    onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, person, onSeek }) => {
     const decide = useDecideItemPeople(mediaId);
     const [naming, setNaming] = useState(false);
     const { card } = person;
-    const seek = (face: FaceReviewFace): void => {
-        if (face.kind === "video" && face.atMs !== null) onSeek(face.atMs);
-    };
 
     return (
         <Paper withBorder radius="md" p="xs">
@@ -288,8 +282,8 @@ const UnknownRow: React.FC<{
                         look="plain"
                         caption={card.kind === "image" ? "Photo" : `${card.moments} moments`}
                         label="Go to this face"
-                        onPress={() => seek(card.face)}
-                        onPlay={seek}
+                        onPress={() => onSeek(card.face)}
+                        onPlay={onSeek}
                     />
                 </Box>
                 <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
@@ -338,7 +332,7 @@ const UnknownRow: React.FC<{
 const Unknown: React.FC<{
     mediaId: string;
     people: Person[];
-    onSeek: (atMs: number) => void;
+    onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, people, onSeek }) => {
     const [open, setOpen] = useState(false);
 
@@ -388,6 +382,7 @@ export const ItemPerformers: React.FC<{
     onSeek: (atMs: number) => void;
 }> = ({ mediaId, values, faces, moment, onSeek }) => {
     const { data } = useItemPeople(mediaId, faces);
+    const seekFace = useSeekToFace(onSeek);
     const people = data?.people ?? [];
     // On a tagged performer's card: their face, confirmed or awaiting a yes — the most seen.
     const onCard = (tagId: string) =>
@@ -424,7 +419,7 @@ export const ItemPerformers: React.FC<{
                             mediaId={mediaId}
                             tagId={tagId}
                             person={person}
-                            onSeek={onSeek}
+                            onSeek={seekFace}
                         />
                     ) : null;
                 }}
@@ -436,7 +431,7 @@ export const ItemPerformers: React.FC<{
                                 key={person.card.id}
                                 mediaId={mediaId}
                                 person={person}
-                                onSeek={onSeek}
+                                onSeek={seekFace}
                             />
                         ))}
                         {named.map((row) => (
@@ -445,7 +440,7 @@ export const ItemPerformers: React.FC<{
                     </Group>
                 )}
                 {unknown.length > 0 && (
-                    <Unknown mediaId={mediaId} people={unknown} onSeek={onSeek} />
+                    <Unknown mediaId={mediaId} people={unknown} onSeek={seekFace} />
                 )}
             </FacetBox>
         </Stack>

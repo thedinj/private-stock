@@ -3092,7 +3092,8 @@ TagPicture  tagId → Tag (cascade), source ('user' | 'auto'), relPath, smallRel
 - **One picture dialogue on the tag's page** (2026-10-09). The ⋯ menu's "Choose a picture…" and
   the inset's menu open the same dialogue (`TagPicturePicker`), with every way to a picture in
   it: their confirmed faces (a library performer, to an administrator — every moment, largest
-  first, the box starting around the face pressed), their items' frames, and keeping the
+  first, the box starting around the face pressed, on the frame it was really seen in, with the
+  other frames it may be offered beside it: §9 "What a tile shows"), their items' frames, and keeping the
   stand-in. Choosing used to start from three places — those two and a "Choose their picture"
   mode of "Their face" — each with some of the sources. On an item's page the tag's menu still
   frames the moment the player is at; that is a different question, asked where the player is.
@@ -4436,7 +4437,7 @@ least able to explain why.
     N seconds through `fps` otherwise decodes every frame to keep a hundred of them, and that
     decode is the whole cost of the job — reading the file and encoding the sheet are each
     under a second. With `-skip_frame nokey` the decoder skips everything but keyframes and
-    `fps` takes the nearest one per tile: on a 10-minute 1080p file held to two threads,
+    `fps` keeps one of them per tile (which one: "What a tile shows", below): on a 10-minute 1080p file held to two threads,
     roughly what the NAS gives this job, 69s became 10s, and the keyframe path stays flat as
     cores are taken away where the full decode does not.
 
@@ -4444,8 +4445,7 @@ least able to explain why.
     flags over the first minute (~130ms, no decoding). Past that, consecutive tiles would show
     the same keyframe — a scrubber that holds still under a moving pointer — so long-GOP encodes
     (x264 allows ten seconds by default) and anything unmeasurable take the full decode:
-    slower, never wrong. Within it each tile is at most half a GOP from its nominal time,
-    below what a 200px thumbnail can show. Phone and screen recordings, keyframing every second
+    slower, never wrong. Phone and screen recordings, keyframing every second
     or two, nearly always qualify.
 
     **AV1 seeks instead** (2026-10-07). Its decoder here, libdav1d under ffmpeg 5.1, does not take
@@ -4458,6 +4458,40 @@ least able to explain why.
     neighbour, since every later tile's place on the sheet depends on the count. The tiles are
     written in a per-attempt `.sprite-tiles-XXXXXX` directory, removed afterwards and swept if
     abandoned, as a preview's parts are. Other codecs keep the one pass, which is faster for them.
+
+    **What a tile shows** (measured 2026-10-17). A tile's moment is `index × interval`, and its
+    picture is seldom that frame. `fps=1/N` rounds each frame's time to the nearest slot and
+    keeps the _last_ frame of each, so on both one-pass paths a tile shows what was on screen
+    just short of half an interval **later**: measured with a frame-numbered fixture, the tile at
+    10s of a 10s interval was the frame at 14.9s on the full decode and the keyframe at 14s on
+    the keyframe path. On a long video that is fifteen seconds. The seeking path's tile is the
+    keyframe at or before the moment on the image's ffmpeg 5.1; on 6.1 `-noaccurate_seek`
+    returns a frame or two short of the moment instead. Which path made a sheet is not recorded.
+
+    For the scrubber this is harmless, arguably right: the cue spans the interval, and the tile
+    is from within half an interval of its middle. It was not harmless for faces, which are found on tiles and record the
+    tile's moment (§5f): framing a picture from a face read the frame at that moment, a
+    different picture from the face pressed, with the face's box over where the face had been.
+
+    **The moment is found when it is needed, not corrected in the data** (decided 2026-10-17).
+    A face's `atMs` stays the tile's nominal moment. Where the exact frame matters,
+    `readTileMoments` lists the packets around it (headers only), takes the frames each path
+    could have kept (`tileCandidates`: the last frame and the last keyframe before half an
+    interval on, the keyframe at or before the moment, and the moment itself), reads each at the
+    tile's size, and keeps the one whose pixels are nearest the tile's. `/api/media/:id/moments`
+    serves that, under the frame ceiling, cached in memory by face. Two things ask: the picture
+    dialogue opened from a face, which frames the match and offers the other candidates beside
+    the tile to choose instead, and "Go to this moment" and the faces on an item's page, which
+    seek to the match and fall back to the nominal moment if it cannot be read. Links to an item
+    at a face's moment (History, a performer's faces) keep the nominal moment, which lands
+    within the interval.
+
+    _Rejected: re-rendering sprites and re-reading faces to record each tile's real time._ About
+    four days of the NAS to correct moments that matter for the handful of faces anybody frames
+    or goes to, and a resolver would still be needed for the sheets in between. _Rejected:
+    recording real times for new sprites only._ Two kinds of moment forever, and the old ones,
+    nearly all of them, would still need the resolver. _Not done yet: the automatic picture job_
+    (§6 "A tag's picture") still reads a face's frame at its nominal moment.
 
     **One filter graph for the whole file (`-reinit_filter 0`).** By default ffmpeg rebuilds
     the graph whenever a decoded frame's format changes, and the rebuild discards what `tile`

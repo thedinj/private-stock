@@ -1,17 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
+import {
+    Alert,
+    Box,
+    Button,
+    Group,
+    Loader,
+    Modal,
+    Stack,
+    Text,
+    UnstyledButton,
+} from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
 
 import {
     centredCrop,
     pictureAroundFace,
     tagPictureAspect,
+    type FaceCrop,
+    type FaceMoments,
     type PictureCrop,
 } from "@private-stock/core";
 
 import { ApiError } from "@/lib/api/client";
+import { faceMomentsQuery, matchedMoment } from "@/lib/api/faces";
 import { useSetTagPicture } from "@/lib/api/tags";
+import { spriteCropStyle } from "@/lib/spriteCrop";
+import { formatTimecode } from "@/lib/timecode";
 
 import classes from "./TagPictureDialog.module.scss";
 
@@ -25,6 +41,10 @@ import classes from "./TagPictureDialog.module.scss";
  *
  * Opened from a face, the box starts around that face, framed as the automatic picture would
  * be; from anywhere else, as large as the frame allows, centred.
+ *
+ * A video's face was found on a scrubber tile, and a tile is seldom the frame its time names (§9
+ * "What a tile shows"). So from one, the frames it may be are read first, the one most like the
+ * tile is framed, and the others are offered beside the tile to choose instead.
  */
 
 interface TagPictureDialogProps {
@@ -36,6 +56,11 @@ interface TagPictureDialogProps {
     atMs: number | null;
     /** A face to start the box around, as fractions of the frame. */
     face?: PictureCrop | null;
+    /**
+     * A video's face, as cut from the sprite tile it was found on: `atMs` is then the tile's
+     * moment, and the frame it really is is found before anything is framed.
+     */
+    faceTile?: FaceCrop | null;
     onDone?: (message: string) => void;
 }
 
@@ -54,6 +79,63 @@ interface Drag {
     width: number;
     height: number;
 }
+
+/** How wide the frames to choose between are drawn: half a tile. */
+const MOMENT_WIDTH = 100;
+
+/**
+ * The tile the face was found on, and the frames it may be: the one framed is marked, and any
+ * other is a press away. A strip that scrolls sideways, so a phone keeps the frame above it.
+ */
+const MomentChoices: React.FC<{
+    tile: FaceCrop;
+    moments: FaceMoments["moments"];
+    chosen: number;
+    onChoose: (atMs: number) => void;
+}> = ({ tile, moments, chosen, onChoose }) => {
+    const height = Math.round((MOMENT_WIDTH * tile.frame.height) / tile.frame.width);
+
+    return (
+        <Stack gap={6}>
+            <Text size="sm" c="dimmed">
+                Which moment? The one most like the thumbnail the face was found on is chosen.
+            </Text>
+            <Group gap="xs" wrap="nowrap" align="flex-start" className={classes.moments}>
+                <Stack gap={2} align="center" className={classes.tile}>
+                    <Box
+                        role="img"
+                        aria-label="The thumbnail the face was found on"
+                        style={{
+                            width: MOMENT_WIDTH,
+                            height,
+                            borderRadius: 4,
+                            ...spriteCropStyle(tile.url, tile.frame),
+                        }}
+                    />
+                    <Text size="xs" c="dimmed">
+                        Found on
+                    </Text>
+                </Stack>
+                {moments.map((moment) => (
+                    <UnstyledButton
+                        key={moment.atMs}
+                        className={classes.moment}
+                        data-chosen={moment.atMs === chosen || undefined}
+                        aria-pressed={moment.atMs === chosen}
+                        aria-label={`The frame at ${formatTimecode(moment.atMs)}`}
+                        onClick={() => onChoose(moment.atMs)}
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={moment.thumbUrl} alt="" width={MOMENT_WIDTH} height={height} />
+                        <Text size="xs" c="dimmed" ta="center">
+                            {formatTimecode(moment.atMs)}
+                        </Text>
+                    </UnstyledButton>
+                ))}
+            </Group>
+        </Stack>
+    );
+};
 
 /**
  * A preview of the crop at a given width: the frame scaled so the crop fills it, and moved so the
@@ -94,12 +176,33 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
     mediaId,
     atMs,
     face,
+    faceTile,
     onDone,
 }) => {
     const aspect = tagPictureAspect(tag.kind);
-    const src = `/api/media/${encodeURIComponent(mediaId)}/still${
-        atMs === null ? "" : `?at=${Math.max(0, Math.round(atMs))}`
-    }`;
+    const finding = Boolean(faceTile) && atMs !== null;
+    const moments = useQuery({
+        ...faceMomentsQuery(mediaId, atMs ?? 0),
+        enabled: opened && finding,
+    });
+    const [chosen, setChosen] = useState<number | null>(null);
+    // The moment framed: the one pressed, else the match, else -- nothing could be read -- the
+    // face's own. Undefined while the frames are still being read, so no still is asked for yet.
+    const moment = !finding
+        ? atMs
+        : chosen !== null
+          ? chosen
+          : moments.data
+            ? matchedMoment(moments.data, atMs!)
+            : moments.isError
+              ? atMs
+              : undefined;
+    const src =
+        moment === undefined
+            ? null
+            : `/api/media/${encodeURIComponent(mediaId)}/still${
+                  moment === null ? "" : `?at=${Math.max(0, Math.round(moment))}`
+              }`;
     const imageRef = useRef<HTMLImageElement>(null);
     const [frame, setFrame] = useState<{ width: number; height: number } | null>(null);
     const [crop, setCrop] = useState<PictureCrop | null>(null);
@@ -112,6 +215,11 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
         setCrop(null);
         setFailed(false);
     }, [src, opened]);
+
+    // Another face, or the dialogue again: the match decides afresh.
+    useEffect(() => {
+        setChosen(null);
+    }, [mediaId, atMs, opened]);
 
     const save = useSetTagPicture(tag.id, () => {
         onDone?.(`${tag.name} has a new picture`);
@@ -259,6 +367,10 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
                             <Alert color="oxblood" variant="light">
                                 This moment could not be read from the file.
                             </Alert>
+                        ) : !src ? (
+                            <Box className={classes.loading}>
+                                <Loader size="sm" color="brass" />
+                            </Box>
                         ) : (
                             <>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -303,7 +415,7 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
                         )}
                     </Box>
 
-                    {crop && (
+                    {crop && src && (
                         <Stack className={classes.previews} gap="md" align="center">
                             <CropPreview
                                 src={src}
@@ -323,6 +435,15 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
                     )}
                 </Box>
 
+                {faceTile && moments.data && typeof moment === "number" && (
+                    <MomentChoices
+                        tile={faceTile}
+                        moments={moments.data.moments}
+                        chosen={moment}
+                        onChoose={setChosen}
+                    />
+                )}
+
                 <Text size="sm" c="dimmed">
                     Drag the box to frame them, and its corner to size it. The picture is cut from
                     the file itself, so it is sharper than this preview.
@@ -340,9 +461,13 @@ export const TagPictureDialog: React.FC<TagPictureDialogProps> = ({
                     </Button>
                     <Button
                         color="brass"
-                        disabled={!crop}
+                        disabled={!crop || moment === undefined}
                         loading={save.isPending}
-                        onClick={() => crop && save.mutate({ mediaId, atMs, crop })}
+                        onClick={() =>
+                            crop &&
+                            moment !== undefined &&
+                            save.mutate({ mediaId, atMs: moment, crop })
+                        }
                     >
                         Use this picture
                     </Button>

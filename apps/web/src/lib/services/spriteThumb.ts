@@ -37,6 +37,14 @@ export interface SpriteThumb {
     };
 }
 
+export interface SpriteTileFile {
+    ordinal: number;
+    relPath: string;
+    generatedAt: string;
+    intervalMs: number;
+    rect: SpriteThumb["rect"];
+}
+
 const SPRITE: ArtifactKind = "sprite";
 
 /**
@@ -46,6 +54,21 @@ const SPRITE: ArtifactKind = "sprite";
  * stage runs, and an image never gets one. Callers fall back to the item's cover.
  */
 export const spriteThumbFor = (mediaId: string, atMs: number): SpriteThumb | null => {
+    const tile = spriteTileFile(mediaId, atMs);
+
+    return (
+        tile && {
+            url: artifactUrl(mediaId, `sprite-${tile.ordinal}`, tile.relPath, tile.generatedAt),
+            rect: tile.rect,
+        }
+    );
+};
+
+/**
+ * The tile nearest `atMs` as a file on disk: its sheet, the rectangle in it, and the interval
+ * the sheets were sampled at -- for reading the tile itself rather than drawing it.
+ */
+export const spriteTileFile = (mediaId: string, atMs: number): SpriteTileFile | null => {
     const sheets = artifactRepo
         .listForMedia(mediaId, [SPRITE])
         .sort((left, right) => left.ordinal - right.ordinal);
@@ -78,7 +101,10 @@ export const spriteThumbFor = (mediaId: string, atMs: number): SpriteThumb | nul
     const tileHeight = sheet.height && sheet.width ? Math.round(sheet.height / SPRITE_COLUMNS) : 0;
 
     return {
-        url: artifactUrl(mediaId, `sprite-${sheet.ordinal}`, sheet.relPath, sheet.generatedAt),
+        ordinal: sheet.ordinal,
+        relPath: sheet.relPath,
+        generatedAt: sheet.generatedAt,
+        intervalMs,
         rect: {
             x: (within % SPRITE_COLUMNS) * tileWidth,
             y: Math.floor(within / SPRITE_COLUMNS) * tileHeight,

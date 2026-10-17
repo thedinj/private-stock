@@ -60,7 +60,7 @@ const visibleTag = (tagId: string, auth: AuthContext): tagRepo.TagRow => {
 };
 
 /** The item and its original, if this viewer may see it. Missing rather than forbidden (§6). */
-const readableOriginal = (mediaId: string, auth: AuthContext) => {
+export const readableOriginal = (mediaId: string, auth: AuthContext) => {
     const row = mediaRepo.findDetail(mediaId, auth.userId, auth.accessibleRootIds);
 
     if (!row) {

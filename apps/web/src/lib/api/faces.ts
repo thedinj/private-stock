@@ -1,6 +1,13 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import {
+    queryOptions,
+    useInfiniteQuery,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query";
 
 import type {
     NoSingleFace,
@@ -13,6 +20,8 @@ import type {
     ConfirmedFacesPage,
     FaceComparison,
     FaceHistoryPage,
+    FaceMoments,
+    FaceReviewFace,
     NewPeopleDecision,
     NewPeoplePage,
     PerformerPeopleDecision,
@@ -24,7 +33,7 @@ import type {
     ReviewMedia,
 } from "@private-stock/core";
 
-import { api } from "@/lib/api/client";
+import { ApiError, api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { invalidateVocabulary } from "@/lib/api/tags";
 
@@ -322,4 +331,52 @@ export const useDecideNewPeople = () => {
             void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
         },
     });
+};
+
+/**
+ * The frames a video's face may really be, and the one its sprite tile looks like (§9 "What a
+ * tile shows"): stated once, for the picture dialogue to ask and the item page to fetch. Never
+ * stale: read from the file and its sheets, which nothing here changes. See docs/CACHE_KEYS.md.
+ */
+export const faceMomentsQuery = (mediaId: string, atMs: number) =>
+    queryOptions({
+        queryKey: queryKeys.faceMoments(mediaId, atMs),
+        queryFn: () =>
+            api<FaceMoments>(
+                `/api/media/${encodeURIComponent(mediaId)}/moments?at=${Math.max(0, Math.round(atMs))}`
+            ),
+        staleTime: Infinity,
+        // Only when the frame ceiling was full (§9): anything else will not read better twice.
+        retry: (failures, error) =>
+            failures < 2 && error instanceof ApiError && error.status === 429,
+        retryDelay: 2000,
+    });
+
+/** The face's real moment: the matched frame, or its own time when none could be told. */
+export const matchedMoment = (moments: FaceMoments | undefined, atMs: number): number =>
+    moments && moments.matched !== null ? moments.moments[moments.matched].atMs : atMs;
+
+/**
+ * Going to a video's face: to the frame it was really seen in, or to its own moment when that
+ * cannot be told -- a face is still worth going to on a guess. Asked when pressed, not before:
+ * most presses of a face's menu answer whether it is them, and each ask reads the file.
+ */
+export const useSeekToFace = (onSeek: (atMs: number) => void) => {
+    const queryClient = useQueryClient();
+
+    return useCallback(
+        (face: FaceReviewFace): void => {
+            if (face.kind !== "video" || face.atMs === null) {
+                return;
+            }
+
+            const atMs = face.atMs;
+
+            queryClient.fetchQuery(faceMomentsQuery(face.mediaId, atMs)).then(
+                (moments) => onSeek(matchedMoment(moments, atMs)),
+                () => onSeek(atMs)
+            );
+        },
+        [queryClient, onSeek]
+    );
 };

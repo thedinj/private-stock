@@ -11,8 +11,12 @@ import {
     formatVttTimestamp,
     parseSpriteVtt,
     parseVttTimestamp,
+    pictureDistance,
     spriteLayout,
     spriteTileAt,
+    tileCandidates,
+    tileReadWindow,
+    type VideoPacket,
 } from "./sprites.js";
 
 /**
@@ -274,5 +278,54 @@ describe("spriteTileAt", () => {
 
         expect(tileAt(-500)).toEqual({ sheet: 0, x: 0, y: 0 });
         expect([tileAt(999_999_999).x, tileAt(999_999_999).y]).toEqual([last.x, last.y]);
+    });
+});
+
+/** Ten frames a second for a minute, with a keyframe every `gopMs`. */
+const packetsOf = (gopMs: number): VideoPacket[] =>
+    Array.from({ length: 600 }, (_, index) => ({
+        ptsMs: index * 100,
+        key: (index * 100) % gopMs === 0,
+    }));
+
+/**
+ * What a tile shows (§9). The cases are the ones measured against ffmpeg with a frame-numbered
+ * fixture: a tile at 10s, sampled every 10s, showed frame 14.9s on the full decode and 14s on
+ * the keyframe path with a keyframe every second.
+ */
+describe("tileCandidates", () => {
+    const at = (packets: VideoPacket[]): number[] => packets.map((packet) => packet.ptsMs);
+
+    it("offers each path's frame: full, keyframes, seeking, and the moment itself", () => {
+        // A keyframe every second: the seeking path's keyframe is the moment's own frame.
+        expect(at(tileCandidates(10_000, 10_000, packetsOf(1_000)))).toEqual([
+            10_000, 14_000, 14_900,
+        ]);
+        // Every seven: each path lands somewhere else.
+        expect(at(tileCandidates(20_000, 10_000, packetsOf(7_000)))).toEqual([
+            14_000, 20_000, 21_000, 24_900,
+        ]);
+    });
+
+    it("leaves out a frame exactly half an interval on, which ffmpeg rounds into the next tile", () => {
+        expect(at(tileCandidates(10_000, 10_000, packetsOf(1_000)))).not.toContain(15_000);
+    });
+
+    it("offers what there is near the end of a file, and nothing with no packets", () => {
+        expect(at(tileCandidates(59_000, 10_000, packetsOf(1_000)))).toEqual([59_000, 59_900]);
+        expect(tileCandidates(10_000, 10_000, [])).toEqual([]);
+    });
+
+    it("lists far enough either side for every path", () => {
+        expect(tileReadWindow(30_000, 10_000)).toEqual({ fromMs: 20_000, toMs: 35_500 });
+        expect(tileReadWindow(2_000, 10_000).fromMs).toBe(0);
+    });
+});
+
+describe("pictureDistance", () => {
+    it("is the mean difference of the pixels, and unlike anything of another size", () => {
+        expect(pictureDistance(Uint8Array.of(10, 20), Uint8Array.of(10, 20))).toBe(0);
+        expect(pictureDistance(Uint8Array.of(0, 0), Uint8Array.of(10, 30))).toBe(20);
+        expect(pictureDistance(Uint8Array.of(0), Uint8Array.of(0, 0))).toBe(Infinity);
     });
 });

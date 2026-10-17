@@ -82,8 +82,8 @@ export interface RenderedSprites {
  * numbering rather than our renaming them afterwards. The filter chain is the one from §9:
  * sample at a fixed rate, scale to a thumbnail, and pack into a 10x10 grid.
  *
- * With `-skip_frame nokey` the decoder discards everything but keyframes, and `fps` takes the
- * nearest one for each tile. Measured on a 10-minute 1080p file limited to two threads —
+ * With `-skip_frame nokey` the decoder discards everything but keyframes, and `fps` keeps the
+ * last one before half an interval on for each tile (§9 "What a tile shows"). Measured on a 10-minute 1080p file limited to two threads —
  * roughly what the NAS gives this job — that is 69s down to 10s, and unlike the full decode
  * the keyframe path does not slow down as cores are taken away.
  */
@@ -385,9 +385,9 @@ const sheetOutput = (outputDir: string): string[] => [
  *
  * On that path a tile can only be a keyframe, so keyframes further apart than the sampling
  * interval would repeat a picture across consecutive tiles — a scrubber that holds still
- * while the pointer moves. At or under the interval every tile gets a distinct frame, at most
- * half a GOP from its nominal time, which at 2–30s intervals is finer than a thumbnail under
- * a moving pointer can show.
+ * while the pointer moves. At or under the interval every tile gets a distinct frame within
+ * half an interval of its cue's middle, which at 2–30s intervals is finer than a thumbnail
+ * under a moving pointer can show (§9 "What a tile shows" says which frame).
  *
  * Phone and screen recordings place keyframes every second or two and pass easily. The files
  * that fail are long-GOP encodes — x264's default allows ten seconds — and those take the full

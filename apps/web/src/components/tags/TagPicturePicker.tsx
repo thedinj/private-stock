@@ -200,6 +200,7 @@ export const TagPicturePicker: React.FC<TagPicturePickerProps> = ({
                 mediaId={face.mediaId}
                 atMs={face.atMs}
                 face={face.box}
+                faceTile={face.kind === "video" ? face.crop : null}
                 onDone={onDone}
             />
         );

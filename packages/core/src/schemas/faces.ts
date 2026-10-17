@@ -57,6 +57,24 @@ export const confirmedFacesPageSchema = z.object({
 });
 export type ConfirmedFacesPage = z.infer<typeof confirmedFacesPageSchema>;
 
+/**
+ * The frames a face's moment may really be (§9 "What a tile shows"): a face is found on a sprite
+ * tile, and a tile's picture is seldom the frame its time names. Asked of a video's face by its
+ * `atMs`.
+ */
+export const faceMomentsQuerySchema = z.object({
+    at: z.coerce.number().int().min(0),
+});
+export type FaceMomentsQuery = z.infer<typeof faceMomentsQuerySchema>;
+
+export const faceMomentsSchema = z.object({
+    /** Earliest first: each frame's time, for `?at=` on the still, and a thumbnail of it. */
+    moments: z.array(z.object({ atMs: z.number().int(), thumbUrl: z.string() })),
+    /** The one that looks most like the tile the face was found on; null with no tile to ask. */
+    matched: z.number().int().nullable(),
+});
+export type FaceMoments = z.infer<typeof faceMomentsSchema>;
+
 /** "No single face", said of a performer, or taken back (§5f). */
 export const noSingleFaceSchema = z.object({ noSingleFace: z.boolean() });
 export type NoSingleFace = z.infer<typeof noSingleFaceSchema>;

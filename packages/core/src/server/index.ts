@@ -376,6 +376,8 @@ export {
 
 export { encodeLookText, stopTextEncoder } from "./textEncoder.js";
 
+export { readTileMoments } from "./tileMoments.js";
+
 export {
     cachedReader,
     loadTuneCache,

@@ -278,6 +278,13 @@ export const queryKeys = {
         ],
     },
 
+    /**
+     * The frames a video's face may really be, and the one its sprite tile looks like (§9 "What a
+     * tile shows"). Its own root, reached by nothing: it is read from the file and the sheets,
+     * which no mutation here changes.
+     */
+    faceMoments: (mediaId: string, atMs: number) => ["faceMoments", mediaId, atMs],
+
     faceReview: {
         /**
          * Suggestions' performers, with how many each (§5f "Suggestions"). Asked for again whenever
