@@ -806,6 +806,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     scrubbingRef.current = scrubbing;
 
     /**
+     * The latest place asked for while the element was still seeking, or null (`seekTo`).
+     *
+     * Read by `onTime` too: until it is applied, the element's own position is a stale target
+     * and drawing it would snap the handle back for the length of one seek.
+     */
+    const pendingSeekRef = useRef<number | null>(null);
+
+    /**
      * Whether the bar has been left alone long enough to go (§14).
      *
      * Fullscreen only — in the page the bar sits under the picture and covers nothing. What
@@ -864,7 +872,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 positionRef.current = video.currentTime * 1000;
             }
 
-            if (!scrubbingRef.current) {
+            if (!scrubbingRef.current && pendingSeekRef.current === null) {
                 setPositionMs(video.currentTime * 1000);
             }
 
@@ -978,13 +986,50 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         video.muted = mutedProp;
     }, [mutedProp, videoEl, mediaId]);
 
+    /**
+     * Seek, with at most one seek in flight.
+     *
+     * A seek that lands outside what is buffered is a new range request, and a mouse dragging
+     * the scrubber asks for one per `pointermove`. Each later target replaces the last while the
+     * element is busy, and only the newest is applied when it finishes -- so a drag costs one
+     * request per seek the NAS can actually answer, rather than one per pixel (§9).
+     */
     const seekTo = useCallback((ms: number) => {
         const video = videoRef.current;
         if (!video) return;
 
-        video.currentTime = ms / 1000;
         setPositionMs(ms);
+
+        if (video.seeking) {
+            pendingSeekRef.current = ms;
+
+            return;
+        }
+
+        video.currentTime = ms / 1000;
     }, []);
+
+    useEffect(() => {
+        const video = videoEl;
+        if (!video) return;
+
+        const onSeeked = () => {
+            const pending = pendingSeekRef.current;
+
+            if (pending === null) return;
+
+            pendingSeekRef.current = null;
+            video.currentTime = pending / 1000;
+        };
+
+        video.addEventListener("seeked", onSeeked);
+
+        return () => {
+            video.removeEventListener("seeked", onSeeked);
+            // A target meant for the element being left is not one for the next.
+            pendingSeekRef.current = null;
+        };
+    }, [videoEl]);
 
     if (seekRef) {
         seekRef.current = seekTo;

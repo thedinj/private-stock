@@ -79,6 +79,13 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
     const [cues, setCues] = useState<SpriteCue[]>([]);
     const [hoverMs, setHoverMs] = useState<number | null>(null);
     const [scrubbing, setScrubbing] = useState(false);
+    /**
+     * Where a touch drag is, while the video stays where it was (§9 "Scrubbing a touch drag").
+     *
+     * Null when no finger is dragging. While it is set it is what the handle and the played bar
+     * show, because the element is not being told about the drag until it ends.
+     */
+    const [dragMs, setDragMs] = useState<number | null>(null);
 
     /**
      * Fetch and parse the track once.
@@ -134,6 +141,14 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
      * `setPointerCapture` is what makes a drag that leaves the bar keep working — without it,
      * dragging below the scrubber silently stops seeking, which feels like the control has
      * broken.
+     *
+     * **A finger seeks once, when it lifts.** Seeking on every move was 60 to 120 seeks a
+     * second on a phone, and each one landing outside what was buffered is a new range
+     * request. A mobile browser does not abandon the last one fast enough to keep up, so a
+     * long drag left dozens of streams queued against the NAS and the whole session waiting
+     * behind them. The filmstrip is what a touch drag shows instead, and the handle follows the
+     * finger. A mouse still seeks live -- frame-accurate dragging is how an in point is found --
+     * and the player keeps that to one seek in flight at a time (`seekTo` in `VideoPlayer`).
      */
     const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (!onSeek) {
@@ -145,7 +160,12 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
         const next = positionFromEvent(event.clientX);
         setHoverMs(next);
         setScrub(true);
-        onSeek(next);
+
+        if (event.pointerType === "mouse") {
+            onSeek(next);
+        } else {
+            setDragMs(next);
+        }
     };
 
     const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -156,14 +176,25 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
         const next = positionFromEvent(event.clientX);
         setHoverMs(next);
 
-        if (scrubbing) {
+        if (!scrubbing) {
+            return;
+        }
+
+        if (dragMs === null) {
             onSeek(next);
+        } else {
+            setDragMs(next);
         }
     };
 
     const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+
+        if (dragMs !== null) {
+            onSeek?.(dragMs);
+            setDragMs(null);
         }
 
         setScrub(false);
@@ -176,6 +207,9 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
 
     const percent = (ms: number): number =>
         durationMs > 0 ? Math.min(100, Math.max(0, (ms / durationMs) * 100)) : 0;
+
+    // A touch drag shows where the finger is; the playhead catches up when it lifts.
+    const shownMs = dragMs ?? positionMs;
 
     // Keep the thumbnail inside the track rather than letting it hang off either end.
     const previewLeft = hoverMs === null ? 0 : percent(hoverMs);
@@ -213,8 +247,8 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
                 aria-label={onSeek ? "Seek" : "Progress"}
                 aria-valuemin={0}
                 aria-valuemax={Math.round(durationMs / 1000)}
-                aria-valuenow={Math.round(positionMs / 1000)}
-                aria-valuetext={formatTime(positionMs)}
+                aria-valuenow={Math.round(shownMs / 1000)}
+                aria-valuetext={formatTime(shownMs)}
                 // Absent rather than inert when there is nothing to seek: the cursor and the
                 // hover filmstrip both follow from these, and a bar that lights up under the
                 // pointer is a bar that claims to be draggable.
@@ -229,7 +263,7 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
                 }}
             >
                 <Box className={classes.buffered} style={{ width: `${percent(bufferedMs)}%` }} />
-                <Box className={classes.played} style={{ width: `${percent(positionMs)}%` }} />
+                <Box className={classes.played} style={{ width: `${percent(shownMs)}%` }} />
                 {/*
                  * The pending selection, over the played bar and under the handle: it is the
                  * thing being decided, so it has to be legible against both.
@@ -243,7 +277,7 @@ export const SpriteScrubber: React.FC<SpriteScrubberProps> = ({
                         }}
                     />
                 )}
-                <Box className={classes.handle} style={{ left: `${percent(positionMs)}%` }} />
+                <Box className={classes.handle} style={{ left: `${percent(shownMs)}%` }} />
             </Box>
 
             {/*

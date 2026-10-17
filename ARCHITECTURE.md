@@ -4408,6 +4408,16 @@ least able to explain why.
 - **Scrubber sprites** — `fps=1/N, scale=200:-1, tile=10x10` WebP sheets plus a WebVTT
   thumbnail track; the scrubber positions a background sprite from the VTT.
 
+    **Scrubbing a touch drag** (2026-10-17). A finger dragging the scrubber seeks once, when it
+    lifts; until then the handle follows the finger and the filmstrip is the preview. The bar
+    used to seek on every `pointermove`, which on a phone is 60–120 seeks a second, and each
+    one outside the buffered range is a new range request against `/stream`. A mobile browser
+    did not abandon them as fast as it made them, so a long drag left dozens of streams queued
+    and the whole session -- pages, ratings, the next item -- waiting behind them on the one
+    disk (§20). A mouse still seeks live, because frame-accurate dragging is how an in point is
+    found (§14d), but the player keeps one seek in flight and applies only the newest target
+    when it lands: a drag costs a request per seek the NAS can answer, not one per pixel.
+
     **The interval is derived from a target tile count (100), not fixed.** A fixed ten seconds
     gives a 30-second clip three thumbnails and a three-hour film a thousand; targeting a count
     makes scrubbing feel the same at either length and bounds the disk cost per video, which is
@@ -7892,8 +7902,8 @@ Three things that are genuinely different on a phone, not just narrower:
   connection, and hover previews are off by default on metered connections.
 
 Touch targets stay at least 44 px, the scrubber gets a larger hit area than its visual
-height, and the sprite scrubber degrades to a plain seek bar on coarse pointers where hover
-previews have no meaning.
+height. On a touch drag the filmstrip is the preview and the video seeks once, when the finger
+lifts (§9 "Scrubbing a touch drag").
 
 **Look — "wine cellar"**: one Mantine theme file is the single source. Custom `oak` and
 `oxblood` color scales, `brass` as `primaryColor`, a high-contrast serif for headings against
