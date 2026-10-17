@@ -10985,8 +10985,14 @@ Reshuffle, or choosing Shuffle. A seedless query falls back to a fixed seed, so 
 way in — Shuffle from the sort menu, the room's "see all", a saved filter stored without one —
 used to show the same order on every visit; the library page now replaces a seedless shuffle
 address with a seeded one before rendering, so the seedless address never becomes a history
-entry. A filter saved without a seed means "a shuffle", so the seed dealt on arrival does not
-mark it as edited.
+entry.
+
+**A saved filter keeps no seed.** It used to save the one on screen, and since the library deals a
+seed before anything can be saved, every shuffled filter was pinned to one order: Reshuffle only
+changed the address, so the next time the filter was opened it showed the old set again. A saved
+shuffle now means "a shuffle" — `queryParams` drops the seed, so neither saving nor comparing sees
+it, and a seed stored by an older save is ignored on opening. Each visit to the filter is dealt a
+new order; the remembered Library link is what returns you to the one you left.
 
 **The prime is fixed, not sized to the library.** It was the smallest prime above `max(rowid)`,
 and primes are a few apart at this size, so nearly every scan that added items moved it — the

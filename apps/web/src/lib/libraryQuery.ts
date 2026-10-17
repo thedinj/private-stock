@@ -448,6 +448,10 @@ const queryParams = (view: LibraryView): URLSearchParams => {
     });
 
     params.delete("filter");
+    // Nor the seed: a saved shuffle is "a shuffle", dealt afresh each time it is opened. Kept,
+    // it froze the order the view had when it was saved, and every link to the view replayed
+    // it -- Reshuffle changed only the address, so the next visit was the old set again.
+    params.delete("seed");
 
     return params;
 };
@@ -793,7 +797,8 @@ export const savedQueryToParams = (query: SavedQuery): URLSearchParams => {
 
     if (query.orientation) params.set("orientation", query.orientation);
     if (query.animated) params.set("animated", query.animated);
-    if (query.seed !== undefined) params.set("seed", String(query.seed));
+    // `query.seed` is not copied: filters saved before the seed was dropped still carry one,
+    // and opening them should deal a new shuffle like any other (`queryParams`).
 
     return params;
 };
@@ -812,10 +817,6 @@ export const matchesSavedQuery = (view: LibraryView, query: SavedQuery): boolean
         ...DEFAULT_VIEW,
         ...paramsToViewFields(savedQueryToParams(query)),
     });
-
-    // A shuffle saved without a seed means "a shuffle", not one in particular -- and the
-    // library deals a seed on arrival, so without this, opening it would read as an edit.
-    if (query.seed === undefined) current.delete("seed");
 
     current.sort();
     saved.sort();

@@ -496,13 +496,22 @@ describe("saved filters", () => {
         expect(matchesSavedQuery({ ...saved, filterId: "f1" }, query)).toBe(true);
     });
 
-    it("does not count the seed dealt on arrival as editing a seedless shuffle", () => {
-        const saved = view({ sort: "random" });
-        const pinned = view({ sort: "random", seed: 7 });
+    it("saves a shuffle as a shuffle, not the seed it was showing", () => {
+        const shuffled = view({ sort: "random", seed: 7 });
+        const query = viewToSavedQuery(shuffled);
 
-        expect(matchesSavedQuery({ ...saved, seed: 42 }, viewToSavedQuery(saved))).toBe(true);
-        // A shuffle saved with its seed is that shuffle, and another one is a change.
-        expect(matchesSavedQuery({ ...pinned, seed: 42 }, viewToSavedQuery(pinned))).toBe(false);
+        expect(query).not.toHaveProperty("seed");
+        // Neither the seed dealt on arrival nor a reshuffle is an edit to the filter.
+        expect(matchesSavedQuery({ ...shuffled, seed: 42 }, query)).toBe(true);
+    });
+
+    it("deals a new shuffle for a filter saved with a seed before seeds were dropped", () => {
+        const query = { ...viewToSavedQuery(view({ sort: "random" })), seed: 7 };
+        const opened = openSavedFilter(view(), "f1", query);
+
+        expect(opened.seed).toBeNull();
+        expect(needsShuffleSeed(opened)).toBe(true);
+        expect(matchesSavedQuery({ ...opened, seed: 42 }, query)).toBe(true);
     });
 
     it("does count a changed predicate or sort as editing the filter", () => {
