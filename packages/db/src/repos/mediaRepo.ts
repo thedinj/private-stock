@@ -5,6 +5,7 @@ import {
     groupsReadUserMedia,
     mediaKinds,
     naturalDirection,
+    PLAYBACK_RULES,
     searchTerms,
     rowidShuffleParams,
     rulesIn,
@@ -793,6 +794,52 @@ const groupSourceSql = (
 };
 
 /**
+ * "A browser cannot play the original" as SQL, for the library's `playback` filter (§8).
+ *
+ * `assessPlayback` is the verdict and this is a translation of it, built from the same lists
+ * (`PLAYBACK_RULES`) so that widening one widens the other. Its edges -- a container named in a
+ * comma list, MKV told from WebM by the file's name, an unknown profile or pixel format counting
+ * as playable -- are where the two could drift, and `playbackFilter.test.ts` asks both about each.
+ * The lists are fixed words, never input, so they are written into the statement as literals.
+ */
+const playbackBlockedSql = (): string => {
+    const norm = (column: string) => `nullif(lower(trim(m."${column}")), '')`;
+    const list = (values: Iterable<string>) =>
+        [...values].map((value) => `'${value.replace(/'/g, "''")}'`).join(", ");
+    // ffprobe's comma list, spaces dropped and commas at both ends, so a name is `,name,`.
+    const containers = `(',' || replace(lower(m."container"), ' ', '') || ',')`;
+    const named = (name: string) => `instr(${containers}, ',${name},') > 0`;
+    const webmFile = `EXISTS (
+        SELECT 1 FROM "MediaFileLink" pl
+          JOIN "MediaFile" pf ON pf."id" = pl."fileId"
+         WHERE pl."mediaId" = m."id" AND pl."role" = 'original'
+           AND lower(trim(pf."relPath")) LIKE '%.webm'
+    )`;
+    const container = `CASE
+        WHEN ${norm("container")} IS NULL THEN 0
+        WHEN ${named(PLAYBACK_RULES.matroskaFamily)} THEN ${webmFile}
+        ELSE ${[...PLAYBACK_RULES.containers].map(named).join(" OR ")}
+    END`;
+    const optional = (column: string, values: Iterable<string>) =>
+        `(${norm(column)} IS NULL OR ${norm(column)} IN (${list(values)}))`;
+    const video = `coalesce(${norm("codec")} IN (${list(PLAYBACK_RULES.videoCodecs)}), 0)`;
+    const profile = `(coalesce(${norm("codec")}, '') <> 'h264' OR ${optional(
+        "videoProfile",
+        PLAYBACK_RULES.h264Profiles
+    )})`;
+    const playable = [
+        container,
+        video,
+        profile,
+        optional("pixFmt", PLAYBACK_RULES.pixFmts),
+        optional("audioCodec", PLAYBACK_RULES.audioCodecs),
+    ];
+
+    return `(m."kind" = 'video' AND m."probedAt" IS NOT NULL
+        AND NOT (${playable.map((condition) => `(${condition})`).join(" AND ")}))`;
+};
+
+/**
  * Whose personal overlay the rating predicates should read.
  *
  * `overlayUserId` is deliberately a parameter rather than a field on `MediaQuery`: the query
@@ -883,6 +930,10 @@ const buildFilters = (
     if (query.rootId) {
         where.push(`m."listRootId" = :rootId`);
         params.rootId = query.rootId;
+    }
+
+    if (query.playback === "blocked") {
+        where.push(playbackBlockedSql());
     }
 
     /**

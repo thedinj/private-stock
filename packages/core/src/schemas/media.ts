@@ -199,6 +199,14 @@ export const mediaQuerySchema = z.object({
      * Dad's filter, which is exactly what §6 says about the equivalent request for ratings.
      */
     watched: z.enum(["yes", "no"]).optional(),
+    /**
+     * Only videos whose original `assessPlayback` says a browser cannot play (§8).
+     *
+     * Not in the filter panel: an admin reaches it from Processing › Transcoding, to try those
+     * files on real devices. The verdict is about the original, so an item with a finished
+     * rendition still matches.
+     */
+    playback: z.enum(["blocked"]).optional(),
     minRating: z.coerce.number().int().min(1).max(5).optional(),
     /**
      * The top of a rating band, so "three stars or less" is askable (§14e).
@@ -910,6 +918,11 @@ export const libraryStatsSchema = z.object({
     rootsTotal: z.number(),
     rootsEnabled: z.number(),
     everScanned: z.boolean(),
+    /**
+     * Whether the filter panel offers "Won't play in a browser" (§8). Here because it is global
+     * and the same for everyone, and every viewer already polls this.
+     */
+    playbackCheck: z.boolean(),
 });
 export type LibraryStats = z.infer<typeof libraryStatsSchema>;
 

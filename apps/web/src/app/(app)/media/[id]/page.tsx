@@ -192,7 +192,17 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      */
     const [playerFailed, setPlayerFailed] = useState(false);
 
-    useEffect(() => setPlayerFailed(false), [id]);
+    /**
+     * The original asked for anyway, though `assessPlayback` says a browser will refuse it (§8).
+     * The verdict is one answer for every device and some devices do better, so the viewer can
+     * find out; a refusal lands in `playerFailed` like any other. Per arrival, like that flag.
+     */
+    const [tryingOriginal, setTryingOriginal] = useState(false);
+
+    useEffect(() => {
+        setPlayerFailed(false);
+        setTryingOriginal(false);
+    }, [id]);
 
     /** Filled by the player, so a frame can send the playhead back to where it was taken. */
     const seekRef = useRef<((ms: number) => void) | null>(null);
@@ -456,7 +466,12 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * show would sit in front of for the rest of the evening. `playerFailed` is the case
      * `directPlay` cannot see: a file that claimed it could play and whose bytes have gone.
      */
-    const mode = data && stageMode(data) === "player" && !playerFailed ? "player" : "still";
+    const mode =
+        data &&
+        (stageMode(data) === "player" || (tryingOriginal && data.kind === "video")) &&
+        !playerFailed
+            ? "player"
+            : "still";
 
     /**
      * Why nothing is being warmed, when nothing is, for the admin's warming overlay (§8b,
@@ -959,6 +974,11 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 mediaId={data.id}
                 source={data.playbackSource}
                 blockers={data.playbackBlockers}
+                trial={!tryingOriginal ? "idle" : playerFailed ? "refused" : "trying"}
+                onTryOriginal={() => {
+                    setPlayerFailed(false);
+                    setTryingOriginal(true);
+                }}
             />
 
             <Box className={classes.stage} ref={stageRef}>

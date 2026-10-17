@@ -65,6 +65,20 @@ const PLAYABLE_PIX_FMTS = new Set([
 /** Audio codecs with broad support. */
 const PLAYABLE_AUDIO_CODECS = new Set(["aac", "mp3", "opus", "vorbis", "flac", "alac"]);
 
+/**
+ * The lists the verdict is made from, for the one place that has to ask it in SQL: the
+ * library's `playback` filter (`mediaRepo`). Built from these rather than copied, and a test
+ * holds the two answers to each other.
+ */
+export const PLAYBACK_RULES = {
+    containers: PLAYABLE_CONTAINERS,
+    matroskaFamily: MATROSKA_FAMILY,
+    videoCodecs: PLAYABLE_VIDEO_CODECS,
+    h264Profiles: PLAYABLE_H264_PROFILES,
+    pixFmts: PLAYABLE_PIX_FMTS,
+    audioCodecs: PLAYABLE_AUDIO_CODECS,
+} as const;
+
 export interface PlaybackInput {
     kind: "image" | "video";
     container: string | null;

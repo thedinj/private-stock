@@ -72,6 +72,8 @@ vi.mock("./mediaService", () => ({
     listMedia: (query: { rootId?: string }) => ({ items: [{ id: `cover-${query.rootId}` }] }),
 }));
 
+vi.mock("./settingsService", () => ({ playbackCheckEnabled: () => false }));
+
 /**
  * No `mediaRepo` and no `jobRepo.queueSummary` here, on purpose: the polled summary must reach
  * neither (§20), and a call to either would throw rather than quietly cost a thousand pages.
@@ -457,6 +459,7 @@ describe("the polled summary", () => {
             rootsTotal: 2,
             rootsEnabled: 1,
             everScanned: false,
+            playbackCheck: false,
         });
     });
 

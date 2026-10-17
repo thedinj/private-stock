@@ -148,6 +148,14 @@ export const activeFilters = (
         });
     }
 
+    if (view.playback) {
+        filters.push({
+            id: "playback",
+            label: "Won't play in a browser",
+            clear: (current) => ({ ...current, playback: null, page: 0 }),
+        });
+    }
+
     /**
      * One chip for a rating band, not two.
      *

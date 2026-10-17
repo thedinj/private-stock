@@ -38,6 +38,8 @@ export const SETTING_KEYS = {
     ocrTestSet: "ocr.testSet",
     /** Faces tagging by themselves (§5f "Tagging by itself"). Saved from Review › Faces. */
     faceAutoTag: "faces.autoTag",
+    /** The library's "Won't play in a browser" filter, shown only while this is on (§8). */
+    playbackCheck: "playback.check",
 } as const;
 
 /**
@@ -138,6 +140,15 @@ export const adminSettingsSchema = z.object({
      * up.
      */
     homeLayout: homeLayoutSchema,
+    /**
+     * Whether the library offers a filter for the videos a browser is said not to play (§8).
+     *
+     * Off by default because it is a test bench rather than a way of browsing: it exists to try
+     * those files on real devices, and nobody looking for something to watch needs it. The
+     * default is the service's, not a `.default()` here: under `.partial()` a default would fill
+     * in a patch that never mentioned it, and saving any other card would switch this off.
+     */
+    playbackCheck: z.boolean(),
 });
 export type AdminSettings = z.infer<typeof adminSettingsSchema>;
 

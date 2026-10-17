@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Stack, Tabs } from "@mantine/core";
 
 import { FailedJobsCard } from "@/components/admin/FailedJobsCard";
+import { PlaybackCheckCard } from "@/components/admin/PlaybackCheckCard";
 import { ProcessingProgress, useProcessingStatus } from "@/components/admin/ProcessingProgress";
 import { QuietHoursCard } from "@/components/admin/QuietHoursCard";
 import { StagesCard } from "@/components/admin/StagesCard";
@@ -92,6 +93,7 @@ const ProcessingTabs: React.FC = () => {
                     <Stack gap="lg" maw={860}>
                         <TranscodingCard />
                         <TranscodeQueueCard />
+                        <PlaybackCheckCard />
                     </Stack>
                 </Tabs.Panel>
             </Tabs>

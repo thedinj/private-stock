@@ -17,6 +17,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { countMedia, listMedia } from "./mediaService";
 import { forgetKeptOrders } from "./keptOrders";
 import { clearProcessingCache } from "./pipelineService";
+import { playbackCheckEnabled } from "./settingsService";
 
 /**
  * Libraries (§12b).
@@ -384,6 +385,7 @@ export const libraryStats = (): LibraryStats => {
         rootsTotal: roots.length,
         rootsEnabled: roots.filter((root) => root.enabled === 1).length,
         everScanned: roots.some((root) => root.lastScanAt !== null),
+        playbackCheck: playbackCheckEnabled(),
     };
 
     statsCache = { at: now, stats };

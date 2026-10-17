@@ -55,7 +55,7 @@ describe("parseView", () => {
         const parsed = parseView(
             new URLSearchParams(
                 "search=rain&kind=video&sort=title&tags=a,b&favorite=1&unrated=1" +
-                    "&watched=no&minRating=3&view=gallery&notTags=c&mentions=e&lookText=neon" +
+                    "&watched=no&playback=blocked&minRating=3&view=gallery&notTags=c&mentions=e&lookText=neon" +
                     `&groups=${encodeURIComponent(
                         JSON.stringify([
                             { match: "any", rules: [{ t: "unrated" }, { t: "tag", id: "d" }] },
@@ -86,6 +86,7 @@ describe("parseView", () => {
             favorite: true,
             unrated: true,
             watched: "no",
+            playback: "blocked",
             minRating: 3,
             // The measurement filters and the two flags beside them are absent from this URL,
             // so they parse to their unset values. Listed rather than omitted: this assertion

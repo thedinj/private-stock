@@ -4162,6 +4162,25 @@ explicit "try this one again" still works and only the automatic path is silence
 > e.g. excluding rows whose probed columns `assessPlayback` would certainly pass — so the
 > TypeScript verdict still decides. A `todo` test in `mediaRepo.test.ts` names it in every run.
 
+### Checking the verdict on real devices
+
+`assessPlayback` gives one answer for every device, and devices differ: HEVC decodes in hardware
+on most recent phones and GPUs, and Chrome opens more containers than it advertises. Measured on
+the NAS (2026-10-17): 7,902 of 8,107 videos play directly; the other 205 are mostly HEVC in
+MP4/MOV (~100) and H.264 in MPEG-TS (~81). Before building anything to convert those, the
+question is which of them the household's own devices already play. That decides between
+deciding per device, repackaging in the browser, handing off to an external player, and
+transcoding on demand.
+
+Two pieces answer it. An admin switch, **Processing › Transcoding › Playback check**
+(`playback.check`, off by default), makes the filter panel offer "Won't play in a browser"
+(`playback=blocked` on the library query). It is off by default because it is a test bench, not
+a way of browsing. And the notice above an unplayable item offers **Try the original**, which
+mounts the player on the original anyway; a refusal lands in the same `playerFailed` path as any
+other. The filter is the one place the verdict is asked in SQL (`playbackBlockedSql`). It is
+built from the same lists (`PLAYBACK_RULES`), and `playbackFilter.test.ts` asks both
+implementations about each edge case, so they cannot drift silently.
+
 ## 8b. Opening the next item
 
 Pressing next used to do four things in series, and only the last of them was video:

@@ -54,6 +54,13 @@ const read = <S extends z.ZodTypeAny>(key: string, schema: S, fallback: z.infer<
     return parsed.success ? parsed.data : fallback;
 };
 
+/**
+ * Whether the library shows its "Won't play in a browser" filter (§8). Read by every viewer's
+ * filter panel, so it is its own small read rather than the whole of the admin settings.
+ */
+export const playbackCheckEnabled = (): boolean =>
+    read(SETTING_KEYS.playbackCheck, z.boolean(), false);
+
 export const loadAdminSettings = (): AdminSettings => ({
     scan: {
         intervalMinutes: settingRepo.get(SETTING_KEYS.scanInterval, 60 * 24),
@@ -80,6 +87,7 @@ export const loadAdminSettings = (): AdminSettings => ({
     stagePolicy: read(SETTING_KEYS.stagePolicy, stagePolicySchema, {}),
     homeLayout: read(SETTING_KEYS.homeLayout, homeLayoutSchema, DEFAULT_HOME_LAYOUT),
     pause: read(SETTING_KEYS.pause, processingPauseSchema, processingPauseSchema.parse({})),
+    playbackCheck: playbackCheckEnabled(),
 });
 
 /**
@@ -207,6 +215,10 @@ export const saveAdminSettings = (patch: AdminSettingsPatch, scopes: string[]): 
 
     if (validated.homeLayout) {
         settingRepo.set(SETTING_KEYS.homeLayout, homeLayoutSchema.parse(validated.homeLayout));
+    }
+
+    if (validated.playbackCheck !== undefined) {
+        settingRepo.set(SETTING_KEYS.playbackCheck, validated.playbackCheck);
     }
 
     // The policy, the quiet hours and the pause are all on the processing view.

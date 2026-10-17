@@ -25,6 +25,7 @@ import {
 } from "@private-stock/core";
 
 import { facetParams, useFilterNames, useLibraryFacets, useTagNames } from "@/lib/api/facets";
+import { useLibraryStats } from "@/lib/api/libraries";
 import { describeGroup } from "@/lib/filterWords";
 import {
     MEASURES,
@@ -258,7 +259,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             (measure) => view.measures[measure].min !== null || view.measures[measure].max !== null
         ).length +
         (view.orientation ? 1 : 0) +
-        (view.animated ? 1 : 0);
+        (view.animated ? 1 : 0) +
+        (view.playback ? 1 : 0);
 
     const { data, isLoading } = useLibraryFacets(view);
     const { data: tagNames } = useTagNames(view);
@@ -277,6 +279,10 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         facets.find((facet) => facet.values.some((value) => value.tagId === tagId))?.kind;
 
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    const { data: stats } = useLibraryStats();
+    // Offered only while an administrator has the playback check on (§8) -- and still shown
+    // while it is set, so a view that arrived with it can always be cleared from here.
+    const offerPlayback = stats?.playbackCheck === true || view.playback !== null;
     const names = useFilterNames(view);
     const advancedCount = advancedGroups(view).length;
 
@@ -617,6 +623,25 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                         {group.rows.map((row) => renderRow(row))}
                     </Stack>
                 ))}
+
+                {offerPlayback && (
+                    <Switch
+                        pt={8}
+                        label="Won't play in a browser"
+                        description="Videos the app expects a browser to refuse"
+                        color="brass"
+                        checked={view.playback !== null}
+                        onChange={(event) =>
+                            onChange({
+                                ...view,
+                                playback: event.currentTarget.checked ? "blocked" : null,
+                                // Only videos can match, so it narrows the kind as the
+                                // video-only rows above do.
+                                kind: event.currentTarget.checked ? "video" : view.kind,
+                            })
+                        }
+                    />
+                )}
             </Stack>
 
             {sections.map((section) => (
