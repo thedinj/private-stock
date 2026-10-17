@@ -8626,6 +8626,22 @@ already know uses — and the cursor goes with it. What holds it open is everyth
 viewer is still using it: a paused video, a scrub in progress, the pointer resting on the bar,
 an open menu.
 
+### The screen stays on while something is being watched
+
+A browser keeps the screen awake by itself for a video playing with sound, and for nothing else.
+A muted film or a slideshow of photographs let a phone dim and lock part way through.
+`useScreenWakeLock` asks for a screen wake lock while the player is playing (`VideoPlayer`) and
+while a show's clock is running (`useStillDwell`, so the item page and the tasting both get it).
+That covers every place something is watched rather than browsed.
+
+- **It needs a secure page.** Over plain `http://` the API does not exist, and the hook does
+  nothing there instead of failing.
+- **The browser drops the lock whenever the tab is hidden**, so it is asked for again when the
+  tab comes back.
+- **It is released three seconds late.** Each item holds its own lock, and handing the screen
+  from one item to the next would otherwise leave an instant with none, in which a phone whose
+  timeout had already run out would dim.
+
 ### Playlists
 
 Hand-ordered lists, built by picking items and dragging them. The API — CRUD plus item

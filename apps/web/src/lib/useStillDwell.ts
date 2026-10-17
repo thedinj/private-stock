@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { remainingAfterPause } from "./stageDwell";
+import { useScreenWakeLock } from "./useScreenWakeLock";
 
 /**
  * The clock that ends a thing with no end (§14b).
@@ -105,6 +106,9 @@ export const useStillDwell = (input: {
     }, []);
 
     const running = dwellMs !== null && begun && !paused && !hidden && !held;
+
+    // A show is somebody watching, and nothing else would stop the screen dimming under it.
+    useScreenWakeLock(running);
 
     useEffect(() => {
         if (dwellMs === null || !begun) {

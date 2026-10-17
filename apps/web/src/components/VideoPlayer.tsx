@@ -16,6 +16,7 @@ import { usePlayerFullscreen } from "@/lib/usePlayerFullscreen";
 import { mayWarmNextItem } from "@/lib/videoWarming";
 import { openingTarget, rememberPosition, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
+import { useScreenWakeLock } from "@/lib/useScreenWakeLock";
 import { PLAY_REFUSED_EVENT, useWarmReport, videoProbe } from "@/lib/useWarmReport";
 import type { WarmGate, WarmSource } from "@/lib/warmMonitor";
 
@@ -680,6 +681,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      */
     const [playing, setPlaying] = useState(false);
     const [positionMs, setPositionMs] = useState(0);
+
+    // The browser keeps the screen on for a film with sound and not for a muted one (§14b).
+    useScreenWakeLock(playing);
 
     /**
      * Holding the last frame of the span that just ended, until the next one can be seen (§14d).
