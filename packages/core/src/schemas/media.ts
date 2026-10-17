@@ -1077,3 +1077,27 @@ export const processingStatusSchema = z.object({
 });
 export type ProcessingStatus = z.infer<typeof processingStatusSchema>;
 export type StageProgressView = z.infer<typeof stageProgressSchema>;
+
+/**
+ * The playback check's test set (§8): the videos `assessPlayback` expects a browser to refuse,
+ * grouped by what kind of file they are, with the same few samples of each for every device --
+ * so a phone and a computer are tried on identical files and their answers compare.
+ */
+export const playbackCheckSchema = z.object({
+    total: z.number(),
+    groups: z.array(
+        z.object({
+            kind: z.string(),
+            count: z.number(),
+            samples: z.array(
+                z.object({
+                    id: z.string(),
+                    title: z.string(),
+                    durationMs: z.number().nullable(),
+                    hasAudio: z.boolean(),
+                })
+            ),
+        })
+    ),
+});
+export type PlaybackCheck = z.infer<typeof playbackCheckSchema>;

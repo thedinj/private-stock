@@ -61,6 +61,7 @@ export type {
     CreateMediaInput,
     MediaBasicRow,
     TranscodeCandidateRow,
+    PlaybackBlockedRow,
 } from "./mediaRepo.js";
 export type { ScanRow, ScanCounts } from "./scanRepo.js";
 export type {

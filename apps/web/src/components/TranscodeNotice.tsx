@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Group, Progress, Stack, Text } from "@mantine/core";
+import { Alert, Group, Progress, Stack, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 
 import type { MediaDetail } from "@private-stock/core";
@@ -26,21 +26,9 @@ interface TranscodeNoticeProps {
     mediaId: string;
     source: MediaDetail["playbackSource"];
     blockers: string[];
-    /**
-     * Whether the original is being tried anyway, and how that went (§8). `assessPlayback`
-     * answers once for every device, and the one in somebody's hand may do better than it says.
-     */
-    trial: "idle" | "trying" | "refused";
-    onTryOriginal: () => void;
 }
 
-export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({
-    mediaId,
-    source,
-    blockers,
-    trial,
-    onTryOriginal,
-}) => {
+export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({ mediaId, source, blockers }) => {
     const { data } = useQuery({
         queryKey: queryKeys.media.transcode(mediaId),
         queryFn: () => api<TranscodeStatus>(`/api/media/${mediaId}/transcode`),
@@ -59,35 +47,6 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({
 
     const reason = blockers.length > 0 ? blockers.join(", and ") : "this file is not web-playable";
 
-    if (trial === "trying") {
-        return (
-            <Alert color="brass" variant="light" title="Trying the original">
-                <Text size="sm">
-                    Expected not to play because {reason}. If you get both picture and sound, this
-                    device can play it as it is.
-                </Text>
-            </Alert>
-        );
-    }
-
-    if (trial === "refused") {
-        return (
-            <Alert color="oxblood" variant="light" title="This browser refused the original">
-                <Text size="sm">As expected: {reason}.</Text>
-            </Alert>
-        );
-    }
-
-    // Offered whatever the conversion is doing: the original is right here, and finding out
-    // costs a click rather than a wait.
-    const tryButton = (
-        <Group>
-            <Button size="xs" variant="light" color="brass" onClick={onTryOriginal}>
-                Try the original
-            </Button>
-        </Group>
-    );
-
     if (data?.state === "failed") {
         return (
             <Alert color="oxblood" variant="light" title="This file could not be converted">
@@ -104,7 +63,6 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({
                         The original file is untouched. An administrator can retry it from
                         Processing › Activity.
                     </Text>
-                    {tryButton}
                 </Stack>
             </Alert>
         );
@@ -148,7 +106,6 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({
                 <Text size="xs" c="dimmed">
                     The original is never modified — the converted copy is written alongside it.
                 </Text>
-                {tryButton}
             </Stack>
         </Alert>
     );

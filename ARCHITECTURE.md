@@ -4172,14 +4172,28 @@ question is which of them the household's own devices already play. That decides
 deciding per device, repackaging in the browser, handing off to an external player, and
 transcoding on demand.
 
-Two pieces answer it. An admin switch, **Processing › Transcoding › Playback check**
-(`playback.check`, off by default), makes the filter panel offer "Won't play in a browser"
-(`playback=blocked` on the library query). It is off by default because it is a test bench, not
-a way of browsing. And the notice above an unplayable item offers **Try the original**, which
-mounts the player on the original anyway; a refusal lands in the same `playerFailed` path as any
-other. The filter is the one place the verdict is asked in SQL (`playbackBlockedSql`). It is
-built from the same lists (`PLAYBACK_RULES`), and `playbackFilter.test.ts` asks both
-implementations about each edge case, so they cannot drift silently.
+**The item page plays every video**, including one the verdict expects to be refused. A
+refusal falls back to the cover with the notice saying why (`playerFailed`), which is also what
+keeps a rolling show moving. Trying costs one failed request; not trying costs every device that
+could have played the file. A refusal is either an error or **no picture**: a browser that can
+decode the sound but not the video track (HEVC without a decoder) plays the one and drops the
+other, so a `loadedmetadata` with `videoWidth` 0 counts as refused too. The verdict still decides
+what the worker converts, what is warmed as the next item, and what a show or a reel counts as
+playable.
+
+**Processing › Transcoding › Playback check** asks each device directly. Its page
+(`/admin/playback-check`) groups the flagged videos by kind (`describePlaybackKind`: "HEVC in
+MP4", "H.264 in MPEG-TS"), takes the same two samples of each for every device, and tries them in
+one small muted player, one at a time because phones have few decoders. It records a picture
+(decoded frames), sound (`webkitAudioDecodedByteCount`; Chrome decodes a muted element's audio
+because that audio is its clock) and whether playback kept going. Opening it on a device is the
+whole test, and its summary is plain text for comparing devices. The card's switch
+(`playback.check`, off by default) adds "Won't play in a browser" to the filter panel
+(`playback=blocked`) for looking at the files themselves. It is off by default because it is a
+test bench, not a way of browsing. That filter is the one place the verdict is asked in SQL
+(`playbackBlockedSql`). It is built from the same lists (`PLAYBACK_RULES`), and
+`playbackFilter.test.ts` asks both implementations about each edge case, so they cannot drift
+silently.
 
 ## 8b. Opening the next item
 

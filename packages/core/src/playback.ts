@@ -228,3 +228,63 @@ export const describeBlocker = (blocker: PlaybackBlocker): string => {
             return "the audio codec is not supported by browsers";
     }
 };
+
+const extensionOf = (relPath: string | null): string => normalise(relPath)?.split(".").pop() ?? "";
+
+const containerName = (container: string | null, relPath: string | null): string => {
+    const names = (normalise(container) ?? "").split(",").map((name) => name.trim());
+
+    if (names.includes(MATROSKA_FAMILY)) {
+        return extensionOf(relPath) === "webm" ? "WebM" : "MKV";
+    }
+    if (names.includes("mpegts")) return "MPEG-TS";
+    if (names.includes("mov") || names.includes("mp4")) {
+        return extensionOf(relPath) === "mov" ? "MOV" : "MP4";
+    }
+    if (names.includes("asf")) return "ASF";
+
+    return names[0] ? names[0].toUpperCase() : "an unknown container";
+};
+
+const VIDEO_NAMES: Record<string, string> = {
+    h264: "H.264",
+    hevc: "HEVC",
+    prores: "ProRes",
+    wmv3: "WMV",
+    mpeg4: "MPEG-4 Part 2",
+    mpeg2video: "MPEG-2",
+};
+
+const videoName = (input: PlaybackInput): string => {
+    const codec = normalise(input.codec);
+    const name = codec ? (VIDEO_NAMES[codec] ?? codec.toUpperCase()) : "unknown video";
+    const profile = input.videoProfile?.trim();
+
+    // The profile is what blocks a 10-bit H.264, so it is what names it.
+    if (!profilePlayable(input.codec, input.videoProfile) && profile) {
+        return `${name} ${profile}`;
+    }
+    if (normalise(input.pixFmt)?.includes("10")) {
+        return `${name} 10-bit`;
+    }
+
+    return name;
+};
+
+const audioName = (audioCodec: string): string =>
+    audioCodec.startsWith("pcm_") ? "PCM" : audioCodec.toUpperCase();
+
+/**
+ * What kind of file this is, in the words a person testing playback compares devices by (§8):
+ * "HEVC in MP4", "H.264 in MPEG-TS", "H.264 in MOV, PCM sound".
+ *
+ * Built from what can differ between browsers -- the codec and its bit depth, the container,
+ * and the sound only when it is the problem -- so two files with the same name should play on
+ * the same devices.
+ */
+export const describePlaybackKind = (input: PlaybackInput): string => {
+    const base = `${videoName(input)} in ${containerName(input.container, input.relPath ?? null)}`;
+    const audio = normalise(input.audioCodec);
+
+    return audio && !audioCodecPlayable(audio) ? `${base}, ${audioName(audio)} sound` : base;
+};

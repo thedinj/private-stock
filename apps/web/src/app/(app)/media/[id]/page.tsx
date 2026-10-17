@@ -192,17 +192,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      */
     const [playerFailed, setPlayerFailed] = useState(false);
 
-    /**
-     * The original asked for anyway, though `assessPlayback` says a browser will refuse it (§8).
-     * The verdict is one answer for every device and some devices do better, so the viewer can
-     * find out; a refusal lands in `playerFailed` like any other. Per arrival, like that flag.
-     */
-    const [tryingOriginal, setTryingOriginal] = useState(false);
-
-    useEffect(() => {
-        setPlayerFailed(false);
-        setTryingOriginal(false);
-    }, [id]);
+    useEffect(() => setPlayerFailed(false), [id]);
 
     /** Filled by the player, so a frame can send the playhead back to where it was taken. */
     const seekRef = useRef<((ms: number) => void) | null>(null);
@@ -460,18 +450,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     /**
      * Which stage this item gets, and for how long (§14b).
      *
-     * Not `data.kind`. A photograph and a video awaiting a rendition are the same object here —
-     * neither ends by itself — and the second used to mount a player, ask for an original this
-     * browser cannot decode, get an error and remove itself, leaving an empty stage that a rolling
-     * show would sit in front of for the rest of the evening. `playerFailed` is the case
-     * `directPlay` cannot see: a file that claimed it could play and whose bytes have gone.
+     * Every video is offered to the player, including one `assessPlayback` expects this browser
+     * to refuse (§8): that verdict is one answer for every device, and the one in somebody's hand
+     * often does better -- HEVC decodes on most recent phones and GPUs. A refusal is
+     * `playerFailed`, and the stage falls back to the cover with the notice saying why, which is
+     * also what keeps a rolling show moving: it used to mount a player for such a file, get an
+     * error and leave an empty stage, and the fallback is what lets trying be safe.
      */
-    const mode =
-        data &&
-        (stageMode(data) === "player" || (tryingOriginal && data.kind === "video")) &&
-        !playerFailed
-            ? "player"
-            : "still";
+    const mode = data?.kind === "video" && !playerFailed ? "player" : "still";
 
     /**
      * Why nothing is being warmed, when nothing is, for the admin's warming overlay (§8b,
@@ -969,17 +955,15 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             </Group>
 
             {/* Above the player, not below it: the explanation has to arrive before the
-                viewer has decided the app is broken. */}
-            <TranscodeNotice
-                mediaId={data.id}
-                source={data.playbackSource}
-                blockers={data.playbackBlockers}
-                trial={!tryingOriginal ? "idle" : playerFailed ? "refused" : "trying"}
-                onTryOriginal={() => {
-                    setPlayerFailed(false);
-                    setTryingOriginal(true);
-                }}
-            />
+                viewer has decided the app is broken. Only once this browser has refused the
+                original -- until then it is being played, and may well play. */}
+            {playerFailed && (
+                <TranscodeNotice
+                    mediaId={data.id}
+                    source={data.playbackSource}
+                    blockers={data.playbackBlockers}
+                />
+            )}
 
             <Box className={classes.stage} ref={stageRef}>
                 {/* The morph's other end: a tile's frame grows into this box (§14, "Motion"). */}

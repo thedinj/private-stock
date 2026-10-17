@@ -385,6 +385,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      */
     const reportedRef = useRef<string | null>(null);
 
+    const reportUnplayable = () => {
+        if (reportedRef.current === mediaId) {
+            return;
+        }
+
+        reportedRef.current = mediaId;
+        onUnplayable?.();
+    };
+
     /**
      * The whole screen, and keeping it across the next item (§14b).
      *
@@ -1680,15 +1689,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                            and nothing after it. */
                         preload={live && !bare ? "metadata" : "auto"}
                         onClick={live && !bare ? togglePlay : undefined}
-                        onError={
+                        onError={live ? reportUnplayable : undefined}
+                        /* A refusal that raises no error: a browser that can decode the sound
+                           but not the picture -- HEVC without a decoder for it -- plays the
+                           one and drops the other, and the film is a black frame with a
+                           soundtrack. No picture at all is the one sign of it (§8). */
+                        onLoadedMetadata={
                             live
-                                ? () => {
-                                      if (reportedRef.current === mediaId) {
-                                          return;
+                                ? (event) => {
+                                      if (event.currentTarget.videoWidth === 0) {
+                                          reportUnplayable();
                                       }
-
-                                      reportedRef.current = mediaId;
-                                      onUnplayable?.();
                                   }
                                 : undefined
                         }

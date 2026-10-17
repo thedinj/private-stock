@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { assessPlayback, describeBlocker, type PlaybackInput } from "./playback.js";
+import {
+    assessPlayback,
+    describeBlocker,
+    describePlaybackKind,
+    type PlaybackInput,
+} from "./playback.js";
 
 /**
  * This verdict decides whether a NAS spends minutes of CPU on a file, or serves it for free.
@@ -206,5 +211,39 @@ describe("describeBlocker", () => {
         for (const blocker of result.blockers) {
             expect(describeBlocker(blocker).length).toBeGreaterThan(10);
         }
+    });
+});
+
+describe("describePlaybackKind", () => {
+    const kind = (overrides: Partial<PlaybackInput>) => describePlaybackKind(video(overrides));
+
+    it("names the cases the library holds", () => {
+        expect(kind({ codec: "hevc", videoProfile: "Main", relPath: "a.mp4" })).toBe("HEVC in MP4");
+        expect(
+            kind({
+                codec: "hevc",
+                videoProfile: "Main 10",
+                pixFmt: "yuv420p10le",
+                container: "mov,mp4,m4a,3gp,3g2,mj2",
+                relPath: "IMG_1.MOV",
+            })
+        ).toBe("HEVC 10-bit in MOV");
+        expect(kind({ container: "mpegts", relPath: "show.mpg", audioCodec: "mp3" })).toBe(
+            "H.264 in MPEG-TS"
+        );
+        expect(kind({ container: "matroska,webm", relPath: "film.mkv" })).toBe("H.264 in MKV");
+        expect(kind({ audioCodec: "pcm_s16le", relPath: "cam.mov" })).toBe(
+            "H.264 in MOV, PCM sound"
+        );
+    });
+
+    it("names a 10-bit H.264 by the profile that blocks it", () => {
+        expect(kind({ videoProfile: "High 10", pixFmt: "yuv420p10le" })).toBe(
+            "H.264 High 10 in MP4"
+        );
+    });
+
+    it("leaves playable sound out of the name", () => {
+        expect(kind({ codec: "hevc", audioCodec: "aac" })).toBe("HEVC in MP4");
     });
 });

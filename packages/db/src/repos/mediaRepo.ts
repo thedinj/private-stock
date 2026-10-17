@@ -839,6 +839,48 @@ const playbackBlockedSql = (): string => {
         AND NOT (${playable.map((condition) => `(${condition})`).join(" AND ")}))`;
 };
 
+export interface PlaybackBlockedRow {
+    id: string;
+    title: string | null;
+    relPath: string;
+    durationMs: number | null;
+    container: string | null;
+    codec: string | null;
+    videoProfile: string | null;
+    pixFmt: string | null;
+    audioCodec: string | null;
+    probedAt: string | null;
+}
+
+/**
+ * Every listable video a browser is said not to play, in the given roots, for the playback
+ * check (§8). Ordered by id so each device that asks is given the same samples.
+ */
+export const listPlaybackBlocked = (rootIds: string[], limit = 5_000): PlaybackBlockedRow[] => {
+    if (rootIds.length === 0) {
+        return [];
+    }
+
+    const roots = Object.fromEntries(rootIds.map((id, i) => [`root${i}`, id]));
+
+    return db
+        .prepare(
+            `SELECT m."id", m."title", f."relPath", m."durationMs", m."container", m."codec",
+                    m."videoProfile", m."pixFmt", m."audioCodec", m."probedAt"
+               FROM "Media" m
+               JOIN "MediaFileLink" fl ON fl."mediaId" = m."id" AND fl."role" = 'original'
+               JOIN "MediaFile" f ON f."id" = fl."fileId"
+              WHERE m."listable" = 1
+                AND m."listRootId" IN (${Object.keys(roots)
+                    .map((key) => `:${key}`)
+                    .join(", ")})
+                AND ${playbackBlockedSql()}
+              ORDER BY m."id"
+              LIMIT :limit`
+        )
+        .all({ ...roots, limit }) as PlaybackBlockedRow[];
+};
+
 /**
  * Whose personal overlay the rating predicates should read.
  *

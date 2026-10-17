@@ -48,6 +48,8 @@ export const queryKeys = {
         failedJobs: (kind: string) => ["admin", "processing", "failed", kind],
         /** The transcode queue's depth (§8), under `processing()` for the same reason. */
         transcodeQueue: () => ["admin", "processing", "transcode"],
+        /** The playback check's test set (§8): unplayable videos by kind, with samples. */
+        playbackCheck: () => ["admin", "playbackCheck"],
         /**
          * Files the probe cannot read (§10g), one cache per tab under one prefix.
          *
