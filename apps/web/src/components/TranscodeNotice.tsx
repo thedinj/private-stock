@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { MediaDetail } from "@private-stock/core";
 
+import { OpenElsewhere } from "@/components/media/OpenElsewhere";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 
@@ -14,6 +15,9 @@ import { queryKeys } from "@/lib/api/queryKeys";
  * The alternative is a black rectangle, which is indistinguishable from a broken app. A file
  * that needs a rendition is a normal situation with a known cause and a finite wait, and
  * saying so is the difference between "this is working on it" and "this does not work".
+ *
+ * Shown once this browser has refused the file (§8): every video is tried first. Whatever the
+ * cause, it offers the original to a player outside the browser.
  */
 
 interface TranscodeStatus {
@@ -42,7 +46,20 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({ mediaId, sourc
     });
 
     if (source !== "pending") {
-        return null;
+        // Expected to play, and this browser refused it anyway: a device that differs from the
+        // ones the verdict was measured on, or an MPEG-TS file whose keyframes are not read yet.
+        return (
+            <Alert color="oxblood" variant="light" title="This browser could not play this file">
+                <Stack gap={8}>
+                    <Text size="sm">
+                        {source === "segments"
+                            ? "It is still being prepared — its keyframes have not been read yet. Try again in a few minutes."
+                            : "It plays on the devices this library was checked with, but not here."}
+                    </Text>
+                    <OpenElsewhere mediaId={mediaId} />
+                </Stack>
+            </Alert>
+        );
     }
 
     const reason = blockers.length > 0 ? blockers.join(", and ") : "this file is not web-playable";
@@ -63,6 +80,7 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({ mediaId, sourc
                         The original file is untouched. An administrator can retry it from
                         Processing › Activity.
                     </Text>
+                    <OpenElsewhere mediaId={mediaId} />
                 </Stack>
             </Alert>
         );
@@ -106,6 +124,7 @@ export const TranscodeNotice: React.FC<TranscodeNoticeProps> = ({ mediaId, sourc
                 <Text size="xs" c="dimmed">
                     The original is never modified — the converted copy is written alongside it.
                 </Text>
+                <OpenElsewhere mediaId={mediaId} />
             </Stack>
         </Alert>
     );

@@ -124,6 +124,7 @@ export const dataPaths = (config: Config) => ({
     embed: path.join(config.dataDir, "embed"),
     faces: path.join(config.dataDir, "faces"),
     tileprints: path.join(config.dataDir, "tileprints"),
+    segments: path.join(config.dataDir, "segments"),
     tags: path.join(config.dataDir, "tags"),
 });
 
@@ -187,6 +188,8 @@ export const DATA_DIR_KIND: Record<DataDirName, "derived" | "irreplaceable"> = {
     faces: "derived",
     /** Colour grids read from the sprite sheets (§10h). Minutes to rebuild, from /data alone. */
     tileprints: "derived",
+    /** Where MPEG-TS files' keyframes are (§8). One read of each file to rebuild. */
+    segments: "derived",
     /**
      * Tags' pictures (§6 "A tag's picture"). Some are chosen by hand and nothing regenerates
      * those, so the directory is kept whole; the automatic ones beside them are a few hundred

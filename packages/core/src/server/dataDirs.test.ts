@@ -74,6 +74,7 @@ describe("derivedDataDirs", () => {
                 paths.embed,
                 paths.faces,
                 paths.tileprints,
+                paths.segments,
             ])
         );
     });
@@ -117,6 +118,7 @@ describe("resetDataDirs", () => {
                 paths.embed,
                 paths.faces,
                 paths.tileprints,
+                paths.segments,
                 paths.captures,
             ])
         );

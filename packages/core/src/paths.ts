@@ -65,6 +65,14 @@ export const FACE_ANCHORS_REL_PATH = "faces/anchors.bin";
 export const tilePrintRelPath = (mediaId: string): string =>
     `tileprints/${fanout(mediaId)}/${mediaId}.tp`;
 
+/**
+ * Where an MPEG-TS file's keyframes are (§8, "Playing an MPEG-TS file without copying it"): the
+ * index its playlist of byte ranges is built from. One small file per item, sharded like the
+ * tile prints.
+ */
+export const segmentIndexRelPath = (mediaId: string): string =>
+    `segments/${fanout(mediaId)}/${mediaId}.json`;
+
 /** The append-only log of every item's representatives (§5e). */
 export const REPRESENTATIVES_LOG_REL_PATH = "embed/reps.log";
 

@@ -47,6 +47,9 @@ export const CONCURRENCY: Record<string, number> = {
     phash: 2,
     // A sheet decode per hundred tiles, from /data. One slot keeps it behind the work people see.
     tileprint: 1,
+    // One whole MPEG-TS file read per job (§8). I/O, and one at a time for the reason the
+    // trash's copies are: two reads from the same disks halve each other.
+    segments: 1,
     // I/O bound rather than CPU bound, and on a network share the bottleneck is the share
     // itself — more concurrency would slow the same total work down.
     filehash: 2,

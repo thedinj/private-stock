@@ -253,6 +253,24 @@ export const STAGES: StageDefinition[] = [
         describe: "The perceptual fingerprint, for near-duplicate detection",
     },
     /**
+     * Where an MPEG-TS file's keyframes are, so it plays as a playlist of byte ranges of
+     * itself (§8, "Playing an MPEG-TS file without copying it").
+     *
+     * Every video is offered it and all but the MPEG-TS ones answer `skipped` without reading
+     * anything. For those it is one read of the whole file -- I/O rather than a core -- and
+     * ahead of the previews, because until it has run the file does not play at all.
+     */
+    {
+        name: "segments",
+        version: 1,
+        mode: "automatic",
+        appliesTo: "video",
+        priority: 110,
+        maxAttempts: 3,
+        needsProbe: true,
+        describe: "Where an MPEG-TS file's keyframes are, so it plays without being converted",
+    },
+    /**
      * The colour of each filmstrip tile, for duplicates the perceptual hash cannot line up
      * (§10h).
      *

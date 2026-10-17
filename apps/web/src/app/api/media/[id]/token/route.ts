@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { mediaTokenRequestSchema } from "@private-stock/core";
+
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { issueMediaToken } from "@/lib/services/mediaTokenService";
@@ -24,8 +26,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     try {
         const auth = await requireAuth(request);
         const { id } = await context.params;
+        // A body is optional: a TV's link, the original case, asks for nothing.
+        const body = mediaTokenRequestSchema.parse(await request.json().catch(() => ({})));
 
-        return NextResponse.json(issueMediaToken(id, auth));
+        return NextResponse.json(issueMediaToken(id, auth, body));
     } catch (error) {
         return toErrorResponse(error, request);
     }

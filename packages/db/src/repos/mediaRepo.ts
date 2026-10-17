@@ -164,18 +164,14 @@ export interface TranscodeCandidateRow {
 }
 
 /**
- * Probed videos with no finished web-safe rendition.
+ * Probed videos a browser cannot play that have no finished web-safe rendition (§8).
  *
- * Deliberately *not* filtered by playability here. Whether a browser can play a file is
- * decided by `assessPlayback` in @private-stock/core, and expressing that in SQL would mean a
- * second implementation of it that silently drifts from the first. This returns the
- * candidates and the columns needed to judge them; the caller judges.
- *
- * **KNOWN ISSUE (not fixed — ARCHITECTURE.md §8, "Deciding what needs transcoding at all").**
- * `LIMIT` with no `ORDER BY` and no cursor, filtered for playability only afterwards: when the
- * first `limit` rows are all directly playable, which in most libraries they are, every caller
- * gets nothing to do and the videos that do need a rendition are never reached. Harmless while
- * transcoding is off; fix it before switching transcoding on or touching this query.
+ * Filtered for playability **in SQL**, by `playbackBlockedSql`. It used to return any probed
+ * video and leave the verdict to the caller, which with a `LIMIT` meant the first 500 rows --
+ * nearly all of them playable in any library -- were fetched, discarded, and fetched again five
+ * minutes later, and the files that needed a rendition were never reached. The SQL translation
+ * is held to `assessPlayback` by `playbackFilter.test.ts`, and the callers still ask the verdict
+ * of what comes back, so the TypeScript keeps the last word.
  */
 export const listTranscodeCandidates = (profile: string, limit = 500): TranscodeCandidateRow[] =>
     db
@@ -186,12 +182,12 @@ export const listTranscodeCandidates = (profile: string, limit = 500): Transcode
                FROM "Media" m
                JOIN "MediaFileLink" fl ON fl."mediaId" = m."id" AND fl."role" = 'original'
                JOIN "MediaFile" f ON f."id" = fl."fileId" AND f."state" = 'active'
-              WHERE m."kind" = 'video'
-                AND m."probedAt" IS NOT NULL
+              WHERE ${playbackBlockedSql()}
                 AND NOT EXISTS (
                     SELECT 1 FROM "Variant" v
                      WHERE v."mediaId" = m."id" AND v."profile" = :profile AND v."ready" = 1
                 )
+              ORDER BY m."id"
               LIMIT :limit`
         )
         .all({ profile, limit }) as TranscodeCandidateRow[];
@@ -798,8 +794,9 @@ const groupSourceSql = (
  *
  * `assessPlayback` is the verdict and this is a translation of it, built from the same lists
  * (`PLAYBACK_RULES`) so that widening one widens the other. Its edges -- a container named in a
- * comma list, MKV told from WebM by the file's name, an unknown profile or pixel format counting
- * as playable -- are where the two could drift, and `playbackFilter.test.ts` asks both about each.
+ * comma list, MPEG-TS playing only with the streams its segments carry, an unknown profile or
+ * pixel format counting as playable -- are where the two could drift, and
+ * `playbackFilter.test.ts` asks both about each.
  * The lists are fixed words, never input, so they are written into the statement as literals.
  */
 const playbackBlockedSql = (): string => {
@@ -809,19 +806,19 @@ const playbackBlockedSql = (): string => {
     // ffprobe's comma list, spaces dropped and commas at both ends, so a name is `,name,`.
     const containers = `(',' || replace(lower(m."container"), ' ', '') || ',')`;
     const named = (name: string) => `instr(${containers}, ',${name},') > 0`;
-    const webmFile = `EXISTS (
-        SELECT 1 FROM "MediaFileLink" pl
-          JOIN "MediaFile" pf ON pf."id" = pl."fileId"
-         WHERE pl."mediaId" = m."id" AND pl."role" = 'original'
-           AND lower(trim(pf."relPath")) LIKE '%.webm'
-    )`;
-    const container = `CASE
-        WHEN ${norm("container")} IS NULL THEN 0
-        WHEN ${named(PLAYBACK_RULES.matroskaFamily)} THEN ${webmFile}
-        ELSE ${[...PLAYBACK_RULES.containers].map(named).join(" OR ")}
-    END`;
+    const anyNamed = (names: Iterable<string>) => [...names].map(named).join(" OR ");
     const optional = (column: string, values: Iterable<string>) =>
         `(${norm(column)} IS NULL OR ${norm(column)} IN (${list(values)}))`;
+    // Segments carry only some streams, so an MPEG-TS file plays only when they are what it holds.
+    const segmentable = `(coalesce(${norm("codec")} IN (${list(
+        PLAYBACK_RULES.segmentedVideoCodecs
+    )}), 0) AND ${optional("audioCodec", PLAYBACK_RULES.segmentedAudioCodecs)})`;
+    const container = `CASE
+        WHEN ${norm("container")} IS NULL THEN 0
+        WHEN ${anyNamed(PLAYBACK_RULES.containers)} THEN 1
+        WHEN ${anyNamed(PLAYBACK_RULES.segmentedContainers)} THEN ${segmentable}
+        ELSE 0
+    END`;
     const video = `coalesce(${norm("codec")} IN (${list(PLAYBACK_RULES.videoCodecs)}), 0)`;
     const profile = `(coalesce(${norm("codec")}, '') <> 'h264' OR ${optional(
         "videoProfile",

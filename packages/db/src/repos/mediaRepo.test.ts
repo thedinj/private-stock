@@ -1807,18 +1807,6 @@ describe("resolving text matches", () => {
 });
 
 /**
- * Known and deliberately unfixed while transcoding is off (ARCHITECTURE.md §8). A `todo` rather
- * than a comment so it is printed by every test run, which is where somebody changing the
- * transcode path will see it.
- */
-describe("listTranscodeCandidates", () => {
-    it.todo(
-        "reaches videos that need a rendition even when the first batch is all direct-play " +
-            "(today: LIMIT with no ORDER BY or cursor, filtered afterwards in TypeScript)"
-    );
-});
-
-/**
  * A title is the file's name, derived once; after a rename it went on saying the old name for
  * good (§12b). It follows the file now — unless it says something else, which was a choice.
  */

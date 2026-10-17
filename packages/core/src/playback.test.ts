@@ -41,39 +41,55 @@ describe("assessPlayback", () => {
         );
     });
 
-    describe("telling MKV from WebM", () => {
-        // They share one demuxer, so ffprobe reports "matroska,webm" for both. Matching that
-        // against the playable set finds "webm" and declares every MKV in the library
-        // playable — the file is then served, the browser refuses it, and nothing ever queues
-        // a rendition. Only the extension separates the two.
-        const matroska = (relPath: string) =>
-            assessPlayback(video({ container: "matroska,webm", relPath }));
-
-        it("treats a .webm file as playable", () => {
-            expect(matroska("clips/holiday.webm").directPlay).toBe(true);
+    describe("what the household's devices showed (§8)", () => {
+        // The playback check tried these in Chrome on a Pixel and on a Windows PC, and both
+        // played them. They were refused here before it.
+        it("plays MKV, whatever the extension says", () => {
+            for (const relPath of ["films/feature.mkv", "FILMS/FEATURE.MKV", "clips/a.webm"]) {
+                expect(
+                    assessPlayback(video({ container: "matroska,webm", relPath })).directPlay
+                ).toBe(true);
+            }
         });
 
-        it("treats a .mkv file as needing a remux", () => {
-            const result = matroska("films/feature.mkv");
-
-            expect(result.directPlay).toBe(false);
-            expect(result.blockers).toEqual(["container"]);
-            expect(result.remuxOnly).toBe(true);
+        it("plays HEVC, 8-bit and 10-bit", () => {
+            expect(assessPlayback(video({ codec: "hevc", videoProfile: "Main" })).directPlay).toBe(
+                true
+            );
+            expect(
+                assessPlayback(
+                    video({ codec: "hevc", videoProfile: "Main 10", pixFmt: "yuv420p10le" })
+                ).directPlay
+            ).toBe(true);
         });
 
-        it("is not fooled by a .webm elsewhere in the path", () => {
-            expect(matroska("webm/feature.mkv").directPlay).toBe(false);
+        it("plays 16-bit PCM sound", () => {
+            expect(assessPlayback(video({ audioCodec: "pcm_s16le" })).directPlay).toBe(true);
         });
 
-        it("assumes MKV when no path is given, which is the safe default", () => {
-            // One unnecessary remux is cheap; a file that never plays and never gets queued
-            // is not.
-            expect(assessPlayback(video({ container: "matroska,webm" })).directPlay).toBe(false);
+        it("plays its originals as they are, not as segments", () => {
+            expect(assessPlayback(video({ codec: "hevc" })).via).toBe("file");
+        });
+    });
+
+    describe("MPEG-TS, as a playlist of byte ranges", () => {
+        const ts = (overrides: Partial<PlaybackInput> = {}) =>
+            assessPlayback(
+                video({ container: "mpegts", relPath: "show.mpg", audioCodec: "mp3", ...overrides })
+            );
+
+        it("plays H.264 with MP3 or AAC sound as segments", () => {
+            for (const audioCodec of ["mp3", "aac", null]) {
+                const result = ts({ audioCodec });
+
+                expect(result.directPlay).toBe(true);
+                expect(result.via).toBe("segments");
+            }
         });
 
-        it("ignores case, since a library is full of .MKV", () => {
-            expect(matroska("FILMS/FEATURE.MKV").directPlay).toBe(false);
-            expect(matroska("CLIPS/HOLIDAY.WEBM").directPlay).toBe(true);
+        it("refuses streams the segments cannot carry", () => {
+            expect(ts({ codec: "hevc" }).blockers).toEqual(["container"]);
+            expect(ts({ audioCodec: "mp2" }).blockers).toEqual(["container", "audioCodec"]);
         });
     });
 
@@ -115,10 +131,10 @@ describe("assessPlayback", () => {
         ).toBe(true);
     });
 
-    it("identifies an MKV of good streams as a remux rather than a re-encode", () => {
+    it("identifies a file of good streams in the wrong container as a remux", () => {
         // Seconds of I/O instead of minutes of CPU — on a NAS, the difference between
         // watchable now and watchable this evening.
-        const result = assessPlayback(video({ container: "matroska" }));
+        const result = assessPlayback(video({ container: "avi" }));
 
         expect(result.directPlay).toBe(false);
         expect(result.blockers).toEqual(["container"]);
@@ -126,14 +142,16 @@ describe("assessPlayback", () => {
     });
 
     it("does not call it a remux when a stream also needs re-encoding", () => {
-        const result = assessPlayback(video({ container: "matroska", codec: "hevc" }));
+        const result = assessPlayback(video({ container: "avi", codec: "mpeg4" }));
 
         expect(result.remuxOnly).toBe(false);
         expect(result.blockers).toEqual(["container", "videoCodec"]);
     });
 
-    it("rejects HEVC, which plays in Safari and nowhere else", () => {
-        expect(assessPlayback(video({ codec: "hevc" })).blockers).toContain("videoCodec");
+    it("rejects video no browser decodes", () => {
+        for (const codec of ["prores", "mpeg4", "wmv3"]) {
+            expect(assessPlayback(video({ codec })).blockers).toContain("videoCodec");
+        }
     });
 
     it("rejects unsupported audio even when the video is fine", () => {
@@ -172,7 +190,7 @@ describe("assessPlayback", () => {
     it("reports every blocker, not just the first", () => {
         const result = assessPlayback(
             video({
-                container: "matroska",
+                container: "avi",
                 codec: "h264",
                 videoProfile: "High 10",
                 pixFmt: "yuv420p10le",
@@ -201,8 +219,8 @@ describe("describeBlocker", () => {
     it("explains every blocker the assessment can produce", () => {
         const result = assessPlayback(
             video({
-                container: "matroska",
-                codec: "hevc",
+                container: "avi",
+                codec: "prores",
                 pixFmt: "yuv444p",
                 audioCodec: "dts",
             })
@@ -232,7 +250,7 @@ describe("describePlaybackKind", () => {
             "H.264 in MPEG-TS"
         );
         expect(kind({ container: "matroska,webm", relPath: "film.mkv" })).toBe("H.264 in MKV");
-        expect(kind({ audioCodec: "pcm_s16le", relPath: "cam.mov" })).toBe(
+        expect(kind({ audioCodec: "pcm_s24le", relPath: "cam.mov" })).toBe(
             "H.264 in MOV, PCM sound"
         );
     });

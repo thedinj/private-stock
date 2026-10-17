@@ -251,6 +251,18 @@ export const mediaTokenClaimsSchema = z.object({
 });
 export type MediaTokenClaims = z.infer<typeof mediaTokenClaimsSchema>;
 
+/**
+ * What `POST /api/media/:id/token` is asked for.
+ *
+ * `original`: a link to the stored file itself, for a player outside the browser (§8, "Open in
+ * another app"). VLC plays what no browser does, so it is not refused for a file that has no
+ * playable version yet the way a link for a TV is.
+ */
+export const mediaTokenRequestSchema = z.object({
+    original: z.boolean().default(false),
+});
+export type MediaTokenRequest = z.infer<typeof mediaTokenRequestSchema>;
+
 /** What `POST /api/media/:id/token` hands back. */
 export const mediaTokenSchema = z.object({
     token: z.string(),

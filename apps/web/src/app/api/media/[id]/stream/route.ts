@@ -6,6 +6,7 @@ import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { toWebStream } from "@/lib/fileStream";
 import { fileEtag, isNotModified, lastModified, rangeStillValid } from "@/lib/httpValidators";
 import { resolveMediaFile, type ResolvedFile } from "@/lib/services/mediaService";
+import { segmentPlaylist } from "@/lib/services/segmentService";
 import { traceStream } from "@/lib/streamTrace";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -36,6 +37,12 @@ export const fetchCache = "force-no-store";
  * `If-Range`. One URL serves more than one file over an item's life — see `httpValidators.ts`
  * — and the validators are what let a browser notice, rather than splice ranges of two files
  * together or re-download a whole one once its cached copy expires.
+ *
+ * **For an MPEG-TS file it answers with a playlist instead** (§8, "Playing an MPEG-TS file without
+ * copying it"): HLS whose segments are byte ranges of the original, at `?raw=1` on this same
+ * route. This address is "what this browser should play", which was already more than one file
+ * -- the original or a rendition -- and the player keeps not knowing which. `?raw=1` is the
+ * stored file's bytes whatever else exists, which is also what a player outside the browser wants.
  */
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -44,6 +51,10 @@ const CONTENT_TYPES: Record<string, string> = {
     mov: "video/quicktime",
     webm: "video/webm",
     mkv: "video/x-matroska",
+    ts: "video/mp2t",
+    m2ts: "video/mp2t",
+    mpg: "video/mpeg",
+    mpeg: "video/mpeg",
     avi: "video/x-msvideo",
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
@@ -56,6 +67,45 @@ const contentTypeFor = (relPath: string): string => {
     const ext = relPath.slice(relPath.lastIndexOf(".") + 1).toLowerCase();
 
     return CONTENT_TYPES[ext] ?? "application/octet-stream";
+};
+
+const PLAYLIST_TYPE = "application/vnd.apple.mpegurl";
+
+/**
+ * The playlist for a file that plays as segments, or null to serve its bytes.
+ *
+ * Its segments are this route again with `raw=1`, relative so they resolve against wherever the
+ * playlist was fetched from; a signed token rides along, since a device holding one has nothing
+ * else to authenticate the segments with (§12d).
+ */
+const playlistFor = (
+    request: Request,
+    mediaId: string,
+    file: ResolvedFile,
+    via: MediaAuthVia
+): Response | null => {
+    if (!file.segments) {
+        return null;
+    }
+
+    const token = via === "token" ? new URL(request.url).searchParams.get("t") : null;
+    const playlist = segmentPlaylist(
+        mediaId,
+        file,
+        token ? `stream?raw=1&t=${encodeURIComponent(token)}` : "stream?raw=1"
+    );
+
+    return playlist === null
+        ? null
+        : new Response(request.method === "HEAD" ? null : playlist, {
+              status: 200,
+              headers: {
+                  ...corsHeadersFor(via),
+                  "Content-Type": PLAYLIST_TYPE,
+                  // Small, and rebuilt if the index is: revalidated rather than kept.
+                  "Cache-Control": "private, no-cache",
+              },
+          });
 };
 
 /** The headers a 200, a 206, a 304 and a HEAD all share. */
@@ -84,7 +134,16 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         const { id } = await context.params;
         const { auth, via } = await requireMediaAuth(request, id);
 
-        const file = resolveMediaFile(id, auth, { requireCastReady: via === "token" });
+        const file = resolveMediaFile(id, auth, {
+            requireCastReady: via === "token",
+            original: new URL(request.url).searchParams.get("raw") === "1",
+        });
+        const playlist = playlistFor(request, id, file, via);
+
+        if (playlist) {
+            return playlist;
+        }
+
         const etag = fileEtag(file);
         const baseHeaders = headersFor(file, etag, via);
         const traceFor = (range: { start: number; end: number } | null) =>
@@ -166,7 +225,16 @@ export async function HEAD(request: Request, context: { params: Promise<{ id: st
     try {
         const { id } = await context.params;
         const { auth, via } = await requireMediaAuth(request, id);
-        const file = resolveMediaFile(id, auth, { requireCastReady: via === "token" });
+        const file = resolveMediaFile(id, auth, {
+            requireCastReady: via === "token",
+            original: new URL(request.url).searchParams.get("raw") === "1",
+        });
+        const playlist = playlistFor(request, id, file, via);
+
+        if (playlist) {
+            return playlist;
+        }
+
         const etag = fileEtag(file);
         const headers = headersFor(file, etag, via);
 

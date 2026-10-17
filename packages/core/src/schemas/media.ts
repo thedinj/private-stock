@@ -757,11 +757,12 @@ export const mediaDetailSchema = mediaListItemSchema.extend({
     /**
      * What the player will receive, and why (§8).
      *
-     * "original" is direct play. "variant" means a web-safe rendition exists and is served
+     * "original" is direct play. "segments" is direct play too, as a playlist of byte ranges of
+     * the original (MPEG-TS, §8). "variant" means a web-safe rendition exists and is served
      * instead. "pending" means the original cannot be played and the rendition is still being
      * produced — the one state the UI has to explain rather than simply render.
      */
-    playbackSource: z.enum(["original", "variant", "pending", "unavailable"]),
+    playbackSource: z.enum(["original", "segments", "variant", "pending", "unavailable"]),
     /** Plain-language reasons the original cannot be played. Empty for direct play. */
     playbackBlockers: z.array(z.string()),
     /**

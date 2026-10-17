@@ -61,8 +61,13 @@ describe("toListItem directPlay", () => {
 
     it("is false for a video that needs a rendition it does not have", () => {
         expect(
-            toListItem(row({ relPath: "films/a.mkv", container: "matroska,webm", codec: "hevc" }))
-                .directPlay
+            toListItem(
+                row({
+                    relPath: "films/a.mov",
+                    container: "mov,mp4,m4a,3gp,3g2,mj2",
+                    codec: "prores",
+                })
+            ).directPlay
         ).toBe(false);
     });
 
@@ -70,9 +75,9 @@ describe("toListItem directPlay", () => {
         expect(
             toListItem(
                 row({
-                    relPath: "films/a.mkv",
-                    container: "matroska,webm",
-                    codec: "hevc",
+                    relPath: "films/a.mov",
+                    container: "mov,mp4,m4a,3gp,3g2,mj2",
+                    codec: "prores",
                     websafePath: "variants/m1.mp4",
                 })
             ).directPlay

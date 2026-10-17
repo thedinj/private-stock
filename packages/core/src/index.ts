@@ -16,6 +16,7 @@ export * from "./tilePrint.js";
 export * from "./playback.js";
 export * from "./rateLimit.js";
 export * from "./search.js";
+export * from "./segments.js";
 export * from "./searchVariants.js";
 export * from "./shuffle.js";
 export * from "./sourceErrors.js";

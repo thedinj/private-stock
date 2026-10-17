@@ -1,4 +1,4 @@
-import { type MediaToken } from "@private-stock/core";
+import { type MediaToken, type MediaTokenRequest } from "@private-stock/core";
 
 import { MEDIA_TOKEN_TTL_SECONDS, signMediaToken } from "../auth/tokens";
 import type { AuthContext } from "../auth/withAuth";
@@ -21,14 +21,24 @@ import { resolveMediaFile } from "./mediaService";
  * gone black. The check at serve time is still the one that decides — a rendition can be
  * deleted to reclaim space between minting and playing.
  */
-export const issueMediaToken = (mediaId: string, auth: AuthContext): MediaToken => {
-    resolveMediaFile(mediaId, auth, { requireCastReady: true });
+export const issueMediaToken = (
+    mediaId: string,
+    auth: AuthContext,
+    request: MediaTokenRequest = { original: false }
+): MediaToken => {
+    resolveMediaFile(
+        mediaId,
+        auth,
+        request.original ? { original: true } : { requireCastReady: true }
+    );
 
     const token = signMediaToken(auth.userId, mediaId, auth.tokenEpoch);
+    const path = `/api/media/${encodeURIComponent(mediaId)}/stream?t=${encodeURIComponent(token)}`;
 
     return {
         token,
-        path: `/api/media/${encodeURIComponent(mediaId)}/stream?t=${encodeURIComponent(token)}`,
+        // The stored file's bytes, not a playlist or a rendition: what an outside player wants.
+        path: request.original ? `${path}&raw=1` : path,
         expiresAt: new Date(Date.now() + MEDIA_TOKEN_TTL_SECONDS * 1000).toISOString(),
     };
 };

@@ -30,7 +30,7 @@ beforeEach(() => {
     db = sharedDb as unknown as Database.Database;
     initializeDatabase(db);
     db.exec(`
-        DELETE FROM "UserMedia"; DELETE FROM "MediaFileLink"; DELETE FROM "MediaFile";
+        DELETE FROM "UserMedia"; DELETE FROM "Variant"; DELETE FROM "MediaFileLink"; DELETE FROM "MediaFile";
         DELETE FROM "Media"; DELETE FROM "MediaRoot"; DELETE FROM "User";
     `);
     db.prepare(
@@ -74,6 +74,14 @@ const CASES: Record<string, Partial<Case>> = {
     emptyProfile: { videoProfile: "" },
     hevcNoProfile: { codec: "hevc", videoProfile: null },
     pcmAudio: { container: "mov,mp4,m4a,3gp,3g2,mj2", relPath: "cam.mov", audioCodec: "pcm_s16le" },
+    pcm24Audio: { relPath: "cam.mov", audioCodec: "pcm_s24le" },
+    mpegTsAac: { container: "mpegts", relPath: "show.ts" },
+    mpegTsSilent: { container: "mpegts", relPath: "show.ts", audioCodec: null },
+    mpegTsHevc: { container: "mpegts", relPath: "show.ts", codec: "hevc" },
+    mpegTsMp2: { container: "mpegts", relPath: "show.ts", audioCodec: "mp2" },
+    mpegTsHigh10: { container: "mpegts", relPath: "show.ts", videoProfile: "High 10" },
+    avi: { container: "avi", relPath: "old.avi" },
+    mp2Audio: { audioCodec: "mp2" },
     silent: { audioCodec: null },
     noContainer: { container: null },
     emptyContainer: { container: "" },
@@ -145,10 +153,41 @@ describe("playback filter", () => {
 
         const ids = blocked();
 
-        expect(ids).toEqual(expect.arrayContaining(["hevcInMp4", "mpegTs", "mkv", "pcmAudio"]));
-        expect(ids).not.toContain("plain");
-        expect(ids).not.toContain("webm");
+        // What no browser of the household's played (§8), and nothing that did.
+        expect(ids).toEqual(
+            expect.arrayContaining(["prores", "avi", "mp2Audio", "mpegTsHevc", "mpegTsMp2"])
+        );
+        for (const plays of ["plain", "webm", "hevcInMp4", "mkv", "pcmAudio", "mpegTs"]) {
+            expect(ids).not.toContain(plays);
+        }
         // Unprobed is "not known yet", which the verdict treats as playable.
         expect(ids).not.toContain("unprobedHevc");
+    });
+});
+
+/**
+ * The transcode sweep's candidates (§8). They were the first 500 probed videos, filtered for
+ * playability afterwards -- so a library whose first 500 all played queued nothing, for ever.
+ */
+describe("listTranscodeCandidates", () => {
+    it("reaches the one video that needs a rendition behind hundreds that play", () => {
+        for (let i = 0; i < 600; i += 1) {
+            given(`a${String(i).padStart(4, "0")}`, base);
+        }
+        given("zzz-prores", { ...base, ...CASES.prores, relPath: "edit.mov" });
+
+        const ids = mediaRepo.listTranscodeCandidates("websafe", 500).map((row) => row.id);
+
+        expect(ids).toEqual(["zzz-prores"]);
+    });
+
+    it("leaves out a video that already has its rendition", () => {
+        given("done", { ...base, ...CASES.prores, relPath: "edit.mov" });
+        db.prepare(
+            `INSERT INTO "Variant" ("id", "mediaId", "profile", "relPath", "ready", "updatedAt")
+             VALUES ('v1', 'done', 'websafe', 'variants/do/done/websafe.mp4', 1, CURRENT_TIMESTAMP)`
+        ).run();
+
+        expect(mediaRepo.listTranscodeCandidates("websafe")).toEqual([]);
     });
 });

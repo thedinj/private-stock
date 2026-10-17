@@ -13,28 +13,49 @@
  */
 
 /**
- * Containers a browser can demux.
+ * What this verdict is measured against: the household's own devices (§8, "Checking the
+ * verdict on real devices").
  *
- * MKV is absent on purpose. It is the most common container in a downloaded library and no
- * browser supports it, whatever is inside — which is why remuxing rather than re-encoding is
- * usually enough to make such a file playable.
+ * It began as "what every mainstream browser plays", and that refused HEVC and MKV outright.
+ * The playback check on 2026-10-17 tried samples of every flagged kind in Chrome on a Pixel and
+ * on a Windows PC, and both played HEVC (8- and 10-bit, in MP4, MOV and MKV), H.264 in MKV, and
+ * MOV with PCM sound. Those are playable here now. A device that disagrees is not stranded:
+ * the item page plays every video and falls back to the cover and a notice on a refusal, and
+ * the check page finds out which device it is.
  */
-const PLAYABLE_CONTAINERS = new Set(["mp4", "mov", "m4v", "webm", "isom", "mp42", "qt"]);
 
 /**
- * ffprobe cannot tell MKV and WebM apart, and neither can this without help.
+ * Containers a browser opens.
  *
- * They share one demuxer, so `format_name` is the literal string "matroska,webm" for both.
- * Matching that list against the playable set finds "webm" and declares every MKV in the
- * library directly playable — which is wrong for almost all of them, and fails silently: the
- * file is served, the browser refuses it, and nothing ever queues a rendition.
- *
- * The file extension is the only signal that separates the two, so it decides this case.
+ * MKV is here because Chrome plays it although it does not advertise it -- `canPlayType` says
+ * no, and the file plays. It used to be refused, with the extension separating it from WebM
+ * (ffprobe names the two `"matroska,webm"` alike); both now play, so the name no longer matters.
  */
+const PLAYABLE_CONTAINERS = new Set([
+    "mp4",
+    "mov",
+    "m4v",
+    "webm",
+    "isom",
+    "mp42",
+    "qt",
+    "matroska",
+]);
+
+/** The matroska demuxer's name, which it shares with WebM. Used to name a file's kind. */
 const MATROSKA_FAMILY = "matroska";
 
-/** Video codecs with broad browser support. */
-const PLAYABLE_VIDEO_CODECS = new Set(["h264", "vp8", "vp9", "av1"]);
+/**
+ * Containers no browser opens but which play as a playlist of byte ranges of the file
+ * (`segments.ts`): MPEG-TS, once the `segments` stage has found its keyframes. Only with what
+ * Chrome's HLS carries -- H.264 video, AAC or MP3 sound.
+ */
+const SEGMENTED_CONTAINERS = new Set(["mpegts"]);
+const SEGMENTED_VIDEO_CODECS = new Set(["h264"]);
+const SEGMENTED_AUDIO_CODECS = new Set(["aac", "mp3"]);
+
+/** Video codecs that play. HEVC by measurement, as above. */
+const PLAYABLE_VIDEO_CODECS = new Set(["h264", "hevc", "vp8", "vp9", "av1"]);
 
 /**
  * H.264 profiles a browser will decode.
@@ -62,8 +83,19 @@ const PLAYABLE_PIX_FMTS = new Set([
     "yuv420p10le", // VP9/AV1 10-bit is fine; the H.264 profile check catches 10-bit H.264.
 ]);
 
-/** Audio codecs with broad support. */
-const PLAYABLE_AUDIO_CODECS = new Set(["aac", "mp3", "opus", "vorbis", "flac", "alac"]);
+/**
+ * Audio codecs that play. 16-bit PCM by measurement (camera MOVs); the other PCM layouts were
+ * only ever seen beside ProRes, which does not play anyway, so they stay unclaimed.
+ */
+const PLAYABLE_AUDIO_CODECS = new Set([
+    "aac",
+    "mp3",
+    "opus",
+    "vorbis",
+    "flac",
+    "alac",
+    "pcm_s16le",
+]);
 
 /**
  * The lists the verdict is made from, for the one place that has to ask it in SQL: the
@@ -72,7 +104,9 @@ const PLAYABLE_AUDIO_CODECS = new Set(["aac", "mp3", "opus", "vorbis", "flac", "
  */
 export const PLAYBACK_RULES = {
     containers: PLAYABLE_CONTAINERS,
-    matroskaFamily: MATROSKA_FAMILY,
+    segmentedContainers: SEGMENTED_CONTAINERS,
+    segmentedVideoCodecs: SEGMENTED_VIDEO_CODECS,
+    segmentedAudioCodecs: SEGMENTED_AUDIO_CODECS,
     videoCodecs: PLAYABLE_VIDEO_CODECS,
     h264Profiles: PLAYABLE_H264_PROFILES,
     pixFmts: PLAYABLE_PIX_FMTS,
@@ -88,13 +122,7 @@ export interface PlaybackInput {
     audioCodec: string | null;
     /** Null when the file has not been probed yet. */
     probedAt: string | null;
-    /**
-     * The file's path or name, used only to tell MKV from WebM.
-     *
-     * Omitted means "assume MKV" for a matroska-family file, which is the safe default: the
-     * cost of being wrong is one unnecessary remux, whereas the other way round is a file
-     * that never plays and never gets queued for anything.
-     */
+    /** The file's path or name, used only to name its kind (`describePlaybackKind`). */
     relPath?: string | null;
 }
 
@@ -102,8 +130,13 @@ export type PlaybackBlocker =
     "container" | "videoCodec" | "videoProfile" | "pixelFormat" | "audioCodec";
 
 export interface PlaybackAssessment {
-    /** Whether the original can be streamed to a browser as-is. */
+    /** Whether the original can be played in a browser without converting it. */
     directPlay: boolean;
+    /**
+     * How: the file's bytes as they are, or a playlist of byte ranges of them (`segments.ts`).
+     * Only meaningful when `directPlay` is true.
+     */
+    via: "file" | "segments";
     /** Why not, most significant first. Empty when `directPlay` is true. */
     blockers: PlaybackBlocker[];
     /**
@@ -127,21 +160,21 @@ const normalise = (value: string | null): string | null => value?.trim().toLower
  * Any one match is enough: ffprobe is naming the demuxer family it recognised, not claiming
  * the file is all of them.
  */
-const containerPlayable = (container: string | null, relPath: string | null): boolean => {
-    const value = normalise(container);
+const containerNames = (container: string | null): string[] =>
+    (normalise(container) ?? "").split(",").map((name) => name.trim());
 
-    if (!value) {
-        return false;
-    }
+const containerPlayable = (container: string | null): boolean =>
+    containerNames(container).some((name) => PLAYABLE_CONTAINERS.has(name));
 
-    const names = value.split(",").map((name) => name.trim());
+/** A container that plays as segments, holding streams the segments can carry. */
+const segmentable = (input: PlaybackInput): boolean => {
+    const audio = normalise(input.audioCodec);
 
-    // The matroska demuxer claims both names. Only a genuine .webm file is playable.
-    if (names.includes(MATROSKA_FAMILY)) {
-        return normalise(relPath)?.endsWith(".webm") ?? false;
-    }
-
-    return names.some((name) => PLAYABLE_CONTAINERS.has(name));
+    return (
+        containerNames(input.container).some((name) => SEGMENTED_CONTAINERS.has(name)) &&
+        SEGMENTED_VIDEO_CODECS.has(normalise(input.codec) ?? "") &&
+        (audio === null || SEGMENTED_AUDIO_CODECS.has(audio))
+    );
 };
 
 const videoCodecPlayable = (codec: string | null): boolean => {
@@ -186,19 +219,20 @@ const audioCodecPlayable = (audioCodec: string | null): boolean => {
 
 export const assessPlayback = (input: PlaybackInput): PlaybackAssessment => {
     if (input.kind === "image") {
-        return { directPlay: true, blockers: [], remuxOnly: false, probed: true };
+        return { directPlay: true, via: "file", blockers: [], remuxOnly: false, probed: true };
     }
 
     if (!input.probedAt) {
         // Not yet probed. Optimistic on purpose: the player finds out in a second, whereas
         // queuing a transcode for every file the moment it is scanned would saturate the NAS
         // before anything had been looked at.
-        return { directPlay: true, blockers: [], remuxOnly: false, probed: false };
+        return { directPlay: true, via: "file", blockers: [], remuxOnly: false, probed: false };
     }
 
     const blockers: PlaybackBlocker[] = [];
+    const segments = !containerPlayable(input.container) && segmentable(input);
 
-    if (!containerPlayable(input.container, input.relPath ?? null)) blockers.push("container");
+    if (!containerPlayable(input.container) && !segments) blockers.push("container");
     if (!videoCodecPlayable(input.codec)) blockers.push("videoCodec");
     if (!profilePlayable(input.codec, input.videoProfile)) blockers.push("videoProfile");
     if (!pixFmtPlayable(input.pixFmt)) blockers.push("pixelFormat");
@@ -206,6 +240,7 @@ export const assessPlayback = (input: PlaybackInput): PlaybackAssessment => {
 
     return {
         directPlay: blockers.length === 0,
+        via: segments ? "segments" : "file",
         blockers,
         // The common and happy case: an MKV holding perfectly good H.264 and AAC.
         remuxOnly: blockers.length === 1 && blockers[0] === "container",

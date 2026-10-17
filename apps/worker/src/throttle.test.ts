@@ -244,9 +244,9 @@ describe("cpuSlots and the shared budget", () => {
         // none outside the window, where only requested passes run; `faceAnchors`,
         // `tagPictures` and `tagLookPictures` one each at both (`faceGroups`, gone with face
         // groups, was one more); `metadata` two at both, outside the budget like `probe`;
-        // `tileprint` one at both.
-        expect(sum(false)).toBe(34);
-        expect(sum(true)).toBe(30);
+        // `tileprint` one at both; `segments` one at both.
+        expect(sum(false)).toBe(35);
+        expect(sum(true)).toBe(31);
     });
 
     it("leaves a core for the web process, and halves that inside the window", () => {

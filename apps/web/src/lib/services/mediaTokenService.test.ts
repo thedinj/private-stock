@@ -67,6 +67,14 @@ describe("issuing a token", () => {
         expect(resolveMediaFile).toHaveBeenCalledWith("media-1", AUTH, { requireCastReady: true });
     });
 
+    it("links an outside player to the original, which it may play when no browser can", () => {
+        const { path } = issueMediaToken("media-1", AUTH, { original: true });
+
+        // Not the cast check: VLC plays what a TV and a browser do not (§8).
+        expect(resolveMediaFile).toHaveBeenCalledWith("media-1", AUTH, { original: true });
+        expect(path).toMatch(/\/stream\?t=[^&]+&raw=1$/);
+    });
+
     it("signs nothing when the item cannot be resolved", () => {
         resolveMediaFile.mockImplementation(() => {
             throw new NotFoundError("Media not found");

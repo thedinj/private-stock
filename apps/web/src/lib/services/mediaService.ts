@@ -380,8 +380,8 @@ export const countMediaOffThread = (
  *
  * The verdict itself lives in `@private-stock/core` so the worker and the web app cannot
  * disagree about it - the worker uses it to decide what to enqueue, and this uses it to
- * decide what to serve. All that happens here is choosing between the original and a
- * finished rendition.
+ * decide what to serve. All that happens here is choosing between the original, a playlist of
+ * byte ranges of it (`segments`, for MPEG-TS), and a finished rendition.
  */
 export const resolvePlaybackPlan = (
     row: PlaybackRow
@@ -399,7 +399,11 @@ export const resolvePlaybackPlan = (
     });
 
     if (assessment.directPlay) {
-        return { source: "original", blockers: [], directPlay: true };
+        return {
+            source: assessment.via === "segments" ? "segments" : "original",
+            blockers: [],
+            directPlay: true,
+        };
     }
 
     const blockers = assessment.blockers.map(describeBlocker);
@@ -579,6 +583,11 @@ export interface ResolvedFile {
     container: string | null;
     /** Whether these bytes are the web-safe rendition rather than the original. */
     isVariant: boolean;
+    /**
+     * Whether a browser should be given a playlist of byte ranges of this file instead of the
+     * file (§8, MPEG-TS). The stream route answers with one when the keyframe index is ready.
+     */
+    segments: boolean;
 }
 
 /**
@@ -608,6 +617,14 @@ export interface ResolveFileOptions {
      * unplayable and no rendition is ready yet.
      */
     requireCastReady?: boolean;
+    /**
+     * The original's bytes, whatever else this item could be served as.
+     *
+     * For two callers that want exactly the stored file: a playlist's segments, which are byte
+     * ranges *of* it (§8), and a player outside the browser -- VLC plays what no browser does,
+     * so the cast check above does not apply to it.
+     */
+    original?: boolean;
 }
 
 export const resolveMediaFile = (
@@ -621,7 +638,9 @@ export const resolveMediaFile = (
         throw new NotFoundError("Media not found");
     }
 
-    if (options.requireCastReady && resolvePlaybackPlan(row).source === "pending") {
+    const plan = resolvePlaybackPlan(row);
+
+    if (options.requireCastReady && !options.original && plan.source === "pending") {
         throw new ConflictError("This item has no playable version yet");
     }
 
@@ -632,7 +651,7 @@ export const resolveMediaFile = (
      * knowing a variant exists, and a client that could name its own source would be a way
      * to ask for arbitrary paths under the data directory.
      */
-    if (resolvePlaybackPlan(row).source === "variant") {
+    if (!options.original && plan.source === "variant") {
         const variant = variantRepo.findOne(mediaId, WEBSAFE_PROFILE);
 
         if (variant?.ready) {
@@ -653,6 +672,7 @@ export const resolveMediaFile = (
                         kind: row.kind,
                         container: "mp4",
                         isVariant: true,
+                        segments: false,
                     };
 
                     /**
@@ -712,5 +732,6 @@ export const resolveMediaFile = (
         kind: row.kind,
         container: row.container,
         isVariant: false,
+        segments: !options.original && plan.source === "segments",
     };
 };

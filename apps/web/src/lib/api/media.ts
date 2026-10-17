@@ -1,6 +1,6 @@
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, useMutation } from "@tanstack/react-query";
 
-import type { MediaDetail } from "@private-stock/core";
+import type { MediaDetail, MediaToken } from "@private-stock/core";
 
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
@@ -18,4 +18,19 @@ export const mediaDetailQuery = (mediaId: string) =>
     queryOptions({
         queryKey: queryKeys.media.detail(mediaId),
         queryFn: () => api<MediaDetail>(`/api/media/${encodeURIComponent(mediaId)}`),
+    });
+
+/**
+ * A link to an item's original for a player outside the browser (§8, "Open in another app").
+ *
+ * A mutation, not a query: it mints a credential, which is never cached, prefetched or shared.
+ * Nothing is invalidated by it.
+ */
+export const useOriginalLink = (mediaId: string) =>
+    useMutation({
+        mutationFn: () =>
+            api<MediaToken>(`/api/media/${encodeURIComponent(mediaId)}/token`, {
+                method: "POST",
+                body: JSON.stringify({ original: true }),
+            }),
     });

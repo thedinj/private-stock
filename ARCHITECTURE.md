@@ -51,7 +51,7 @@ New, and only where genuinely needed:
 | `ffmpeg` / `ffprobe` binaries | probe, covers, sprites, previews, transcode; reel rendering is designed and not built (§14d). `ffmpeg-static` in dev; distro build in the image |
 | `sharp`                       | image decode/resize/AVIF+WebP, and the pixel source for pHash                                                                                   |
 | `@tanstack/react-virtual`     | Mantine has no virtualized grid; 200k rows needs one                                                                                            |
-| `hls.js`                      | playback of transcoded streams where the browser lacks native HLS                                                                               |
+| `hls.js`                      | not wired in: MPEG-TS playlists (§8) play natively in Chrome; this is for a browser without native HLS, should one be used                      |
 
 ### No Fastify
 
@@ -4032,14 +4032,18 @@ change; the validators make what follows it a 304 rather than a re-download, whi
 for stills, which go through this route at full resolution. The pure logic is
 `lib/httpValidators.ts`.
 
-**Otherwise transcode**, two mechanisms:
+**MPEG-TS plays as a playlist of byte ranges of itself**, which is still direct play: nothing is
+converted or copied. See "Playing an MPEG-TS file without copying it" below.
 
-- _Background web-safe variant_ — a low-priority job writes an H.264/AAC MP4 into
-  `/data/variants`. Once ready, playback is direct play again. This is the preferred path.
-- _On-demand HLS_ — while that is pending: ffmpeg writes fMP4 segments into a session
-  directory, the player consumes a rolling playlist, and seeking past the buffered window
-  restarts ffmpeg at the nearest keyframe. Segments cache per `(media, profile)`, so a
-  second viewer of the same file is free.
+**Otherwise transcode**, by a _background web-safe variant_: a low-priority job writes an
+H.264/AAC MP4 into `/data/variants`, and once it is ready playback is direct play again. On the
+NAS this now applies to six files out of eight thousand (2026-10-17): what no browser in the
+household plays, after the playback check moved HEVC, MKV and MPEG-TS out of it.
+
+_On-demand HLS_ (ffmpeg writing segments into a session directory as somebody watches) was the
+second mechanism in this section and is **shelved, not built**. It was the answer to a library
+whose unplayable files were common, and measured on the household's own devices they are not;
+`hlsDir` is reserved for it should that change.
 
 **Transcoding itself is opt-in, and off until an admin switches it on.** It is the one feature
 here that spends a resource the operator cannot cheaply get back: hours of NAS CPU, and a
@@ -4105,18 +4109,20 @@ backend to use is runtime.
 
 The verdict lives in `packages/core/src/playback.ts` because both processes need it and two
 implementations would drift: the worker uses it to decide what to enqueue, the web app to
-decide what to serve. Two traps it exists to avoid, both of which fail silently:
+decide what to serve. **It is measured against the household's devices**, not against "every
+mainstream browser" (see "Checking the verdict on real devices"): HEVC, MKV and 16-bit PCM sound
+are playable because Chrome on the Pixel and on the Windows PC played them. A trap it still
+exists to avoid, which fails silently:
 
 - **`codec = h264` is not sufficient.** High 10 and High 4:2:2 are common in anime encodes and
   camera output, play fine in VLC, and no browser decodes them. Checking the codec alone
   produces a library that mysteriously half-works.
-- **ffprobe cannot tell MKV from WebM.** They share a demuxer, so `format_name` is the literal
-  string `"matroska,webm"` for both. Matching that list against a set containing `webm` marks
-  every MKV in the library directly playable - the file is served, the browser refuses it, and
-  nothing ever queues a rendition. The file extension is the only thing that separates them,
-  so it decides that case.
 
-**Remux before re-encode.** An MKV of perfectly good H.264 and AAC needs only a container
+It used to separate MKV from WebM by the file's extension, because ffprobe names both
+`"matroska,webm"` and only WebM was thought to play. Chrome plays both, so the distinction went.
+
+**Remux before re-encode.** A file of perfectly good H.264 and AAC in the wrong container (an
+AVI, now that MKV plays) needs only a container
 change: seconds of I/O rather than minutes of CPU, and on a NAS that is the difference between
 watchable now and watchable this evening. The assessment reports this as `remuxOnly` so the
 job knows before it starts rather than discovering it inside.
@@ -4149,18 +4155,16 @@ backfill selects on "no ready rendition", which a permanently failing file satis
 kind was cancelled _or_ failed, and a later job for the same item overrides either — so an
 explicit "try this one again" still works and only the automatic path is silenced.
 
-> **Known issue — read before re-enabling or changing transcoding (found 2026-10-03, not fixed).**
-> `mediaRepo.listTranscodeCandidates` returns at most 500 probed videos without a ready
-> rendition, with **no `ORDER BY` and no cursor**, and both callers (the worker's
-> `backfillTranscodes` and `POST /api/admin/transcode`) drop the directly playable ones
-> _afterwards_, in TypeScript — deliberately, so `assessPlayback` stays the only verdict. Most
-> of a library plays directly, so the 500 can be entirely direct-play files: the sweep queues
-> nothing, the same 500 come back five minutes later, and every video past them that genuinely
-> needs a rendition is never reached. It does not bite today only because transcoding is
-> switched off on the NAS. The fix is a keyset cursor over the candidates (remembered between
-> sweeps, like the stage sweep's change mark) or a SQL pre-filter that can only _over_-select —
-> e.g. excluding rows whose probed columns `assessPlayback` would certainly pass — so the
-> TypeScript verdict still decides. A `todo` test in `mediaRepo.test.ts` names it in every run.
+**The candidates are chosen in SQL, by the verdict's own translation (fixed 2026-10-17).**
+`mediaRepo.listTranscodeCandidates` used to return at most 500 probed videos without a ready
+rendition, with no `ORDER BY`, and both callers (the worker's `backfillTranscodes` and
+`POST /api/admin/transcode`) dropped the playable ones afterwards in TypeScript. Most of a library
+plays, so the 500 could be entirely playable files: the sweep queued nothing, the same 500 came
+back five minutes later, and the files that needed a rendition were never reached. It now filters
+with `playbackBlockedSql`, the SQL form of the verdict that the library's playback filter already
+used and that `playbackFilter.test.ts` holds to `assessPlayback` case by case. It is ordered by
+id, and a test puts the one file that needs work behind 600 that do not. The callers still ask
+`assessPlayback` of what comes back, so the TypeScript keeps the last word.
 
 ### Checking the verdict on real devices
 
@@ -4171,6 +4175,15 @@ MP4/MOV (~100) and H.264 in MPEG-TS (~81). Before building anything to convert t
 question is which of them the household's own devices already play. That decides between
 deciding per device, repackaging in the browser, handing off to an external player, and
 transcoding on demand.
+
+**What it found (2026-10-17), identically in Chrome 155 on a Pixel 10 Pro and on a Windows PC:**
+every HEVC sample played (8- and 10-bit, MP4, MOV, MKV), as did H.264 in MKV and MOV with 16-bit
+PCM sound, 118 files in all. Every MPEG-TS sample was refused (81). Six odd files did not play:
+ProRes and MPEG-4 Part 2 gave sound with no picture, MP2 sound gave a picture with no sound,
+and AVI and WMV were refused. The verdict now says exactly that. MPEG-TS plays as segments
+(below), and the six are what background transcoding converts, kept by a copy in `/data` rather
+than by replacing the original. Replacing originals was asked about and not chosen: it would
+break the rule that deletion is the only write to a media library.
 
 **The item page plays every video**, including one the verdict expects to be refused. A
 refusal falls back to the cover with the notice saying why (`playerFailed`), which is also what
@@ -4194,6 +4207,44 @@ test bench, not a way of browsing. That filter is the one place the verdict is a
 (`playbackBlockedSql`). It is built from the same lists (`PLAYBACK_RULES`), and
 `playbackFilter.test.ts` asks both implementations about each edge case, so they cannot drift
 silently.
+
+### Playing an MPEG-TS file without copying it
+
+No browser opens `.ts`/`.mpg` files, and nothing can seek in one without knowing where its
+keyframes are, because the container has no index. HLS solves exactly this, and a playlist may
+name **byte ranges of a single file** as its segments. ffmpeg writes that layout itself with
+`-hls_flags single_file`. So:
+
+- The `segments` stage (automatic, video, priority 110, ahead of the previews because until it
+  runs the file does not play) reads each MPEG-TS file once with ffprobe's packet listing and
+  writes its keyframes, `[ms, byte offset]` pairs, to `/data/segments/<xx>/<id>.json`, stamped
+  with the file's size and mtime. Every other video answers `skipped` without reading anything.
+  The files are swept like the tile prints: kept while the stage records them done, and a
+  missing one clears that record so the stage runs again.
+- `/api/media/:id/stream` answers an MPEG-TS item with the playlist (`buildSegmentPlaylist`):
+  keyframes grouped into segments of four seconds or more, the first from byte 0 so it carries
+  the stream's tables, the last to the end of the file. The segments are `stream?raw=1`. This
+  address was already "what this browser should play", an original or a rendition, and the
+  player keeps not knowing which, so **the player did not change**. Chrome plays HLS natively,
+  which is both of the household's devices.
+- An index that describes different bytes (the file was replaced in place) is ignored, and the
+  original is served, which the browser refuses and the item page explains.
+
+`mpegts.js`, which repackages TS in the browser, was the first idea, and it was dropped because
+its seek gives up without a keyframe index. Before this was built it was proved on a generated
+clip in Chrome: picture, sound, and seeking to unbuffered points, both natively and through
+hls.js. `segments.integration.test.ts` keeps that proof: ffmpeg decodes every frame of a real
+clip through the playlist without an error.
+
+### Open in another app
+
+When a browser refuses a file, the notice offers it to a player that will play it: **Open in
+another app** on Android, where an `intent:` link offers every installed video player, and
+**Copy stream link** elsewhere, for VLC's "Open Network Stream" (VLC on Windows registers no
+link type to hand it to). The link is a signed media token (§12d) for the original's bytes
+(`POST /api/media/:id/token` with `{ original: true }` → `…/stream?t=…&raw=1`). It is not refused
+for a file with no playable version, unlike a link for a TV, because VLC plays what neither a
+browser nor a TV does. It lasts the token's day.
 
 ## 8b. Opening the next item
 

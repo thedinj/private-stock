@@ -343,6 +343,8 @@ export const MediaDetailsDrawer: React.FC<MediaDetailsDrawerProps> = ({
         switch (detail.playbackSource) {
             case "original":
                 return "Plays as it came — no rendition was needed.";
+            case "segments":
+                return "Plays as it came, read in pieces — browsers cannot open this container whole.";
             case "variant":
                 return "Played from a web-safe rendition; the original is untouched.";
             case "pending":
