@@ -8,6 +8,7 @@ import {
     vectorFileRelPath,
     faceFileRelPath,
     FACE_ANCHORS_REL_PATH,
+    tilePrintRelPath,
 } from "@private-stock/core";
 import { dataPaths, loadConfig } from "@private-stock/core/server";
 import { db } from "@private-stock/db";
@@ -340,6 +341,7 @@ export interface OrphanSweepResult {
     trash: number;
     embed: number;
     faces: number;
+    tileprints: number;
     tags: number;
     /** Rows dropped because the file they name is gone, so the stage runs again. */
     reclaimed: number;
@@ -636,6 +638,12 @@ export const runOrphanSweep = async (): Promise<void> => {
         relPathOf: faceFileRelPath,
         keep: [FACE_ANCHORS_REL_PATH],
     });
+    const tilePrintFiles = await sweepStageFiles(config.dataDir, {
+        stage: "tileprint",
+        dir: paths.tileprints,
+        relPathOf: tilePrintRelPath,
+        keep: [],
+    });
 
     /**
      * Tags' pictures (§6 "A tag's picture"), and the `tagPictures` job's scratch frames. An
@@ -689,11 +697,13 @@ export const runOrphanSweep = async (): Promise<void> => {
         trash: trash.removed,
         embed: vectorFiles.removed,
         faces: faceFiles.removed,
+        tileprints: tilePrintFiles.removed,
         tags: tagPictures.removed,
         reclaimed:
             picturesReclaimed +
             vectorFiles.reclaimed +
             faceFiles.reclaimed +
+            tilePrintFiles.reclaimed +
             reclaimMissingRows(config.dataDir, artifacts, variants, {
                 onDisk: new Set([...art.onDisk, ...captures.onDisk, ...variantFiles.onDisk]),
                 prefixes: new Set(["art", "captures", "variants"]),
@@ -709,6 +719,7 @@ export const runOrphanSweep = async (): Promise<void> => {
         result.trash +
         result.embed +
         result.faces +
+        result.tileprints +
         result.tags;
 
     if (total > 0) {
@@ -716,7 +727,8 @@ export const runOrphanSweep = async (): Promise<void> => {
             `Removed ${total} orphaned file(s): ${result.art} artifact(s), ` +
                 `${result.captures} capture(s), ${result.variants} variant(s), ` +
                 `${result.trash} in the trash, ${result.embed} vectors file(s), ` +
-                `${result.faces} faces file(s), ${result.tags} tag picture file(s)`
+                `${result.faces} faces file(s), ${result.tileprints} tile prints file(s), ` +
+                `${result.tags} tag picture file(s)`
         );
     }
 

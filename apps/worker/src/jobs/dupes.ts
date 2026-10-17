@@ -1,12 +1,24 @@
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
+
 import {
+    alignTilePrints,
+    assertSafeRelativePath,
     clusterPairs,
     compareVideos,
+    decodeTilePrints,
     dupeSettingsSchema,
+    durationsComparable,
     hammingDistance,
+    prepareTilePrints,
+    tilePrintRelPath,
+    tilesMatch,
     type DupeSettings,
     type Pair,
+    type PreparedTilePrints,
     SETTING_KEYS,
 } from "@private-stock/core";
+import { loadConfig } from "@private-stock/core/server";
 import { db, dupeRepo, phashRepo, settingRepo } from "@private-stock/db";
 
 import { breathe } from "../eventLoop.js";
@@ -24,6 +36,37 @@ import { enqueue, type JobRow } from "../queue.js";
  * the queue's uniqueness constraint collapses those into one pending job, and it runs once
  * the burst has settled rather than once per file.
  */
+
+/**
+ * How long the clustering pass waits for more evidence before running.
+ *
+ * Two minutes is long enough to swallow a bulk import's worth of hashes into one
+ * pass, and short enough that someone who drops in a handful of files sees duplicate
+ * groups while they are still looking at them.
+ */
+const DUPE_SETTLE_MS = 2 * 60 * 1000;
+
+/**
+ * Ask for a clustering pass once the current burst of hashes and prints has settled.
+ *
+ * Not before the settle window is up, which is what makes the coalescing real. The queue's
+ * unique index collapses duplicate *pending* jobs, so this used to read as "one pass after the
+ * burst". It was not: each pass finished in about ten seconds, the next hash queued another
+ * immediately, and the pass ran again. Over one import that was **3,599 whole-library passes**
+ * -- the same comparison of the same library, over and over, for a handful of new rows each time.
+ *
+ * Deferring the job leaves it pending for the whole window, so every hash finishing in that
+ * window hits the unique index and adds nothing. The effect is a rate limit rather than a
+ * debounce, and deliberately so: pushing the deadline out on each hash would mean a library that
+ * is importing for ten hours has no duplicate detection at all until it stops.
+ */
+export const queueDupePass = (): void => {
+    enqueue(db, {
+        kind: "dupes",
+        priority: 200,
+        availableAt: new Date(Date.now() + DUPE_SETTLE_MS),
+    });
+};
 
 export const loadDupeSettings = (): DupeSettings => {
     const parsed = dupeSettingsSchema.safeParse(settingRepo.get(SETTING_KEYS.dupes, {}));
@@ -165,6 +208,106 @@ const videoPairs = async (settings: DupeSettings, seeds: string[]): Promise<Pair
 };
 
 /**
+ * Video pairs the perceptual hash missed because the copies start at different moments (§10h).
+ *
+ * The second leg, run on the pairs the first did not confirm. Candidates are every video close
+ * enough in length -- the only gate that does not depend on one sampled frame lining up by
+ * luck -- found by binary search into the list sorted by length. Each pair then costs a few
+ * hundred dot products, so the number of candidates hardly matters; what costs is reading each
+ * video's prints, which is done once per pass and kept.
+ *
+ * A confirmed pair joins the group at the frame threshold as its distance: the tiles say the
+ * videos are the same, not how many bits apart their pictures are, and the loosest distance the
+ * hash would have accepted is the honest stand-in.
+ */
+const tilePairs = async (
+    settings: DupeSettings,
+    seeds: string[],
+    found: Set<string>
+): Promise<Pair[]> => {
+    const videos = dupeRepo.tilePrintedVideos();
+
+    if (videos.length < 2) {
+        return [];
+    }
+
+    const byId = new Map(videos.map((video, index) => [video.mediaId, index]));
+    const { dataDir } = loadConfig();
+    const prints = new Map<string, PreparedTilePrints | null>();
+
+    const printsOf = async (mediaId: string): Promise<PreparedTilePrints | null> => {
+        if (!prints.has(mediaId)) {
+            try {
+                const bytes = await readFile(
+                    path.resolve(dataDir, assertSafeRelativePath(tilePrintRelPath(mediaId)))
+                );
+
+                prints.set(mediaId, prepareTilePrints(decodeTilePrints(new Uint8Array(bytes))));
+            } catch {
+                // Missing or unreadable: the orphan sweep reconciles the stage, and this pair
+                // waits for the next pass.
+                prints.set(mediaId, null);
+            }
+        }
+
+        return prints.get(mediaId)!;
+    };
+
+    const pairs: Pair[] = [];
+    let since = Date.now();
+
+    for (const seed of seeds) {
+        const at = byId.get(seed);
+
+        if (at === undefined) {
+            continue;
+        }
+
+        since = await breathe(since);
+
+        const mine = await printsOf(seed);
+
+        if (!mine) {
+            continue;
+        }
+
+        const { durationMs } = videos[at];
+
+        // Outwards from the seed in both directions until the lengths stop being comparable;
+        // the list is sorted, so nothing further out can be.
+        for (const step of [-1, 1]) {
+            for (let i = at + step; i >= 0 && i < videos.length; i += step) {
+                const other = videos[i];
+
+                if (!durationsComparable(durationMs, other.durationMs)) {
+                    break;
+                }
+
+                const key =
+                    seed < other.mediaId ? `${seed}|${other.mediaId}` : `${other.mediaId}|${seed}`;
+
+                if (found.has(key)) {
+                    continue;
+                }
+
+                found.add(key);
+
+                const theirs = await printsOf(other.mediaId);
+
+                if (
+                    theirs &&
+                    tilesMatch(alignTilePrints(mine, theirs), settings.minMatchingFrames)
+                ) {
+                    pairs.push({ a: seed, b: other.mediaId, distance: settings.frameDistance });
+                }
+            }
+        }
+    }
+
+    return pairs;
+};
+
+/**
  * How many items one pass seeds with.
  *
  * Bounded so a pass stays a few seconds whatever the library's size, and re-queued below
@@ -258,8 +401,9 @@ const CLUSTERED_WITH_KEY = "dupes.clusteredWith";
  *
  * 2: candidates are exact rather than an unordered `LIMIT 200` of almost every video, and a
  *    mark no longer survives the hashes arriving after it (§10b).
+ * 3: videos of similar length are also lined up by their tile prints (§10h).
  */
-const CANDIDATE_RECIPE = 2;
+const CANDIDATE_RECIPE = 3;
 
 /**
  * Start again when the thresholds change.
@@ -325,6 +469,11 @@ export const runDupes = async (_job: JobRow): Promise<void> => {
         ...(await imagePairs(settings, seeds)),
         ...(await videoPairs(settings, seeds)),
     ];
+    const found = new Set(
+        nearPairs.map((pair) => (pair.a < pair.b ? `${pair.a}|${pair.b}` : `${pair.b}|${pair.a}`))
+    );
+
+    nearPairs.push(...(await tilePairs(settings, seeds, found)));
 
     await mergeIntoGroups("near", nearPairs);
 

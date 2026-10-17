@@ -253,6 +253,26 @@ export const STAGES: StageDefinition[] = [
         describe: "The perceptual fingerprint, for near-duplicate detection",
     },
     /**
+     * The colour of each filmstrip tile, for duplicates the perceptual hash cannot line up
+     * (§10h).
+     *
+     * Automatic, unlike the other stages that read the sprite sheets: it is a third of a second
+     * per video, reads only /data, and duplicate detection is not a feature to opt into. Right
+     * behind `sprite`, which it requires.
+     */
+    {
+        name: "tileprint",
+        version: 1,
+        mode: "automatic",
+        appliesTo: "video",
+        priority: 145,
+        maxAttempts: 2,
+        needsProbe: true,
+        requires: { video: "sprite" },
+        describe:
+            "The colour of each filmstrip frame, for duplicates that start at different moments",
+    },
+    /**
      * Burned-in text (§5d).
      *
      * `optIn`, which is the whole reason `mode` has a middle value. This is by a wide margin

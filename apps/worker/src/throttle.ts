@@ -45,6 +45,8 @@ export const CONCURRENCY: Record<string, number> = {
     sprite: 1,
     preview: 1,
     phash: 2,
+    // A sheet decode per hundred tiles, from /data. One slot keeps it behind the work people see.
+    tileprint: 1,
     // I/O bound rather than CPU bound, and on a network share the bottleneck is the share
     // itself — more concurrency would slow the same total work down.
     filehash: 2,
@@ -144,6 +146,8 @@ export const CPU_BOUND: ReadonlySet<string> = new Set([
     // The OCR tuner reads frames the same way, to fill its cache (§5d).
     "ocrTune",
     "phash",
+    // Brief, but each sheet is an ffmpeg decode.
+    "tileprint",
     // The model saturates whatever threads it is given, the per-job cap included (§5e).
     "embed",
     // Detection and recognition both saturate the threads they are given (§5f).

@@ -4801,13 +4801,13 @@ from backups — losing it costs CPU, not data.
   Candidates come from a band index, then exact Hamming distance confirms. Scales to 200k
   rows in SQLite.
 - **Near-duplicate videos** — pHash over N sampled keyframes; a match needs a sufficient
-  fraction of frames to pair within threshold. Catches re-encodes and resolution changes.
-  **It does not yet catch a copy offset in time** — a clip cut from a longer file, or the same
-  video with a second and a half more lead-in. Frames are sampled at fixed fractions of each
-  file's own length, so an offset moves every sample point, and in moving footage a few
-  hundred milliseconds is already 12–30 bits. This section used to claim contained clips;
-  making it true needs offset-tolerant sampling (scene-anchored frames, or a short burst
-  around each point), which is undecided.
+  fraction of frames to pair within threshold. Catches re-encodes and resolution changes,
+  but not a copy offset in time: frames are sampled at fixed fractions of each file's own
+  length, so an offset moves every sample point, and in moving footage a few hundred
+  milliseconds is already 12–30 bits.
+- **Offset copies of similar length** — a second test over the sprite tiles, lined up over a
+  small shift (§10h). **Clips cut from longer files are still not caught**; this section used
+  to claim they were.
 - **Review UI** — a triage sheet of compact rows with resolution/length/size/bitrate on each
   copy, a "keep best" preselection that is ordered first and states its reason, and a page
   resolved in one press (§10c). Admin-only.
@@ -5711,6 +5711,77 @@ on timeouts during a first import, or on a share that dropped, says nothing abou
 rows carry "May be temporary" and a "Read again" control that asks for the probe; a file that
 reads leaves the list on its next load. That is what fixed the one good file the first review
 found here.
+
+## 10h. Offset copies: lined up by their sprite tiles
+
+**Built 2026-10-17**, after a user noticed two videos whose preview frames looked identical and
+which the duplicate review had never paired. One was the other with 1.5 s more lead-in. The
+perceptual hash compared frame 7 of one with a moment 0.8 s away in the other and found 24 bits
+between them; re-hashed 1.5 s later the same frame was 0 bits away. No threshold fixes that.
+
+### Why the sprite tiles
+
+The sprite sheet is cut on a whole-second grid from zero (§9), so two copies of similar length
+get the same interval, and an offset is a _constant_ shift of the tiles rather than one that
+drifts across the video as the hash's proportional samples do. The tiles also mostly land on
+the scene-cut keyframes both encodes share, because the keyframe path takes the last keyframe
+before each point. So the sequences line up over a shift of a tile or so — and they are already
+on `/data`, so reading them costs no decode of an original.
+
+### What is compared
+
+Measured on the live library on 2026-10-17, against 52 pairs the fixed hash pipeline confirms,
+474 random pairs of similar length, and 297 look-alikes (similar length and CLIP representatives
+≥ 0.97: same setting, same lighting, different video). Each candidate signal was scored as the
+fraction of the shorter video's non-flat tiles that matched at the best shift:
+
+| per-tile signal                           | weakest true pair | worst random | worst look-alike |
+| ----------------------------------------- | ----------------- | ------------ | ---------------- |
+| **4×4 RGB grid, correlation ≥ 0.85, ±1**  | **0.46**          | **0.19**     | **0.07**         |
+| colour histogram, intersection ≥ 0.80, ±1 | 0.60              | 0.38         | 0.38             |
+| CLIP cosine ≥ 0.95, ±1                    | 0.72              | 0.05         | 0.12             |
+| 64-bit pHash of the tile ≤ 12, ±1         | 0.07              | 0.01         | 0.01             |
+| mean-luma time series correlation         | 0.50              | 0.95         | 0.99             |
+
+The 4×4 colour grid is coarse enough to survive the shift and specific enough that nothing
+negative came near: the threshold is a 0.30 score, between 0.19 and 0.46. The tile pHash is the
+opposite failure — too fine to survive the jitter of a tile snapping to a different keyframe in
+each encode. CLIP separates well but is no better, costs a model, and is opt-in; as a _gate_ it
+is useless (millions of pairs pass a representative threshold). A tile matches if any of the
+three partners around its moment correlates, and shifts of −1, 0 and +1 are tried.
+
+### Which pairs are compared
+
+Every pair of videos whose lengths are within 1%, or 2 s for a short video. All 52 hash-confirmed
+pairs were within 0.96%, and it is the only gate that does not depend on one sampled frame
+lining up by luck: the offset pair above passed a "one hash frame within distance" gate only
+because its first sample is a static opener. On 8k videos it is ~214k pairs, which sounds like
+a lot and is not: a pair is a few hundred dot products, and a full pass is seconds. What costs
+is reading each video's prints, once per pass.
+
+It runs as the second leg of the clustering pass, on the seeds' pairs the hash did not confirm,
+and a confirmed pair joins the near-duplicate group like any other — at the frame threshold as
+its distance, since the tiles say the videos are the same and not how many bits apart.
+
+### The stage
+
+`tileprint`, automatic, behind `sprite` which it requires. ffmpeg shrinks each sheet so every
+tile becomes exactly 32×32, the print is the tile averaged into 4×4 cells of RGB, and a tile
+whose luma deviates by less than 6 is flat and recorded as such — a fade matches every other
+fade. One small file per video under `tileprints/` (~4 KB), not a BLOB. Writing it forgets the
+item's clustering mark (§10b), so a video printed after it was compared is compared again.
+
+The first pass over 8k videos was measured at about a third of a second each on the NAS, from
+/data alone. When it was built, about 115 offset pairs were waiting for it; the user checked
+the 20 strongest and all were duplicates.
+
+### Not yet
+
+- **Clips cut from longer files.** Their sprite intervals differ, and their lengths fail the
+  gate. Pairing tiles by time already handles the intervals; the gate would need another way in
+  (the hash-frame hits, which do surface them, are the obvious one).
+- **The thresholds are constants**, not settings. They came from one measurement, and an admin
+  has nothing to tune them against until the review queue says they are wrong.
 
 ## 11. Casting to TVs
 
@@ -7616,17 +7687,18 @@ database can produce again, or the only copy there is. The distinction is declar
 `DATA_DIR_KIND`, exhaustively over the directories `dataPaths` names — so adding a directory
 without deciding which it is fails to compile.
 
-| directory  | kind          | why                                                             |
-| ---------- | ------------- | --------------------------------------------------------------- |
-| `art`      | derived       | covers, posters, previews, sprites; excluded from backups (§13) |
-| `captures` | irreplaceable | stills somebody framed by hand; nothing regenerates one (§13)   |
-| `variants` | derived       | web-safe renditions; expensive, still only a copy               |
-| `hls`      | derived       | cached on-demand segments                                       |
-| `sidecars` | derived       | an export _of_ the database                                     |
-| `trash`    | irreplaceable | removed from a media root; no other copy exists (§10)           |
-| `backups`  | irreplaceable | the undo behind a migration that succeeded and was wrong        |
-| `embed`    | derived       | vectors and the representatives log, rebuilt by the stage (§5e) |
-| `database` | irreplaceable | the thing the rest is derived _from_                            |
+| directory    | kind          | why                                                             |
+| ------------ | ------------- | --------------------------------------------------------------- |
+| `art`        | derived       | covers, posters, previews, sprites; excluded from backups (§13) |
+| `captures`   | irreplaceable | stills somebody framed by hand; nothing regenerates one (§13)   |
+| `variants`   | derived       | web-safe renditions; expensive, still only a copy               |
+| `hls`        | derived       | cached on-demand segments                                       |
+| `sidecars`   | derived       | an export _of_ the database                                     |
+| `trash`      | irreplaceable | removed from a media root; no other copy exists (§10)           |
+| `backups`    | irreplaceable | the undo behind a migration that succeeded and was wrong        |
+| `embed`      | derived       | vectors and the representatives log, rebuilt by the stage (§5e) |
+| `tileprints` | derived       | a colour grid per sprite tile, rebuilt by the stage (§10h)      |
+| `database`   | irreplaceable | the thing the rest is derived _from_                            |
 
 Two directions of drift follow, and both were real.
 

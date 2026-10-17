@@ -50,6 +50,7 @@ import { loadTranscodeSettings, runTranscodeJob, transcodingEnabled } from "./jo
 import { runVariantPurge } from "./jobs/variantPurge.js";
 import { runDupes } from "./jobs/dupes.js";
 import { runEmbed } from "./jobs/embed.js";
+import { runTilePrint } from "./jobs/tilePrint.js";
 import { runFaceAnchors } from "./jobs/faceAnchors.js";
 import { runTagLookPictures } from "./jobs/tagLookPictures.js";
 import { runTagPictures } from "./jobs/tagPictures.js";
@@ -233,6 +234,7 @@ const handlers: Record<string, JobHandler> = {
     index: runIndex,
     metadata: runMetadata,
     phash: runPhash,
+    tileprint: runTilePrint,
     dupes: runDupes,
     embed: runEmbed,
     faces: runFaces,

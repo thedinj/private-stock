@@ -123,6 +123,7 @@ export const dataPaths = (config: Config) => ({
     ocrTune: path.join(config.dataDir, "ocr-tune"),
     embed: path.join(config.dataDir, "embed"),
     faces: path.join(config.dataDir, "faces"),
+    tileprints: path.join(config.dataDir, "tileprints"),
     tags: path.join(config.dataDir, "tags"),
 });
 
@@ -184,6 +185,8 @@ export const DATA_DIR_KIND: Record<DataDirName, "derived" | "irreplaceable"> = {
      * to the faces found again, so nothing here is the only copy of a decision.
      */
     faces: "derived",
+    /** Colour grids read from the sprite sheets (§10h). Minutes to rebuild, from /data alone. */
+    tileprints: "derived",
     /**
      * Tags' pictures (§6 "A tag's picture"). Some are chosen by hand and nothing regenerates
      * those, so the directory is kept whole; the automatic ones beside them are a few hundred

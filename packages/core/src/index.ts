@@ -12,6 +12,7 @@ export * from "./merge.js";
 export * from "./ranges.js";
 export * from "./dupes.js";
 export * from "./phash.js";
+export * from "./tilePrint.js";
 export * from "./playback.js";
 export * from "./rateLimit.js";
 export * from "./search.js";

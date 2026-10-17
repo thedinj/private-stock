@@ -410,6 +410,43 @@ export const seedsNeedingClustering = (limit = 500): string[] =>
             .all(limit) as { id: string }[]
     ).map((row) => row.id);
 
+/**
+ * An item whose evidence has just changed has not been compared with it (§10b).
+ *
+ * Clustering marks an item once it has seeded a pass, and an item qualifies as a seed on a
+ * content hash alone -- so one whose frames arrived after that pass had never been compared on
+ * its frames. A pair is only found when the later of the two seeds, and when both were marked
+ * before the later one's evidence existed, neither ever does: a video and its re-encode sat
+ * ungrouped for weeks this way, among ~700 others. Every write of a perceptual hash, a new
+ * content hash or a tile print forgets the mark, which makes "the later of the two seeds" true
+ * again.
+ */
+export const forgetClustered = (mediaId: string): void => {
+    db.prepare(`DELETE FROM "DupeClustered" WHERE "mediaId" = ?`).run(mediaId);
+};
+
+/**
+ * Every video with tile prints, and its length (§10h).
+ *
+ * The whole list rather than a window per seed: it is one row per video, sorted once per pass,
+ * and every seed's candidates are then a binary search into it. Only items whose original is
+ * still active, as for the seeds themselves.
+ */
+export const tilePrintedVideos = (): { mediaId: string; durationMs: number }[] =>
+    db
+        .prepare(
+            `SELECT m."id" AS "mediaId", m."durationMs"
+               FROM "MediaStage" s
+               JOIN "Media" m ON m."id" = s."mediaId"
+               JOIN "MediaFileLink" fl ON fl."mediaId" = m."id" AND fl."role" = 'original'
+               JOIN "MediaFile" f ON f."id" = fl."fileId"
+              WHERE s."stage" = 'tileprint' AND s."state" = 'done'
+                AND m."kind" = 'video' AND m."durationMs" > 0
+                AND f."state" = 'active'
+              ORDER BY m."durationMs"`
+        )
+        .all() as { mediaId: string; durationMs: number }[];
+
 /** Records that these items have been compared, so no later pass repeats the work. */
 export const markClustered = (mediaIds: string[]): void => {
     const insert = db.prepare(

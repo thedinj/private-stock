@@ -1,19 +1,12 @@
 import { phashFromLuma, type StageState } from "@private-stock/core";
-import { db, mediaRepo, phashRepo } from "@private-stock/db";
+import { mediaRepo, phashRepo } from "@private-stock/db";
 
 import { lumaFromImage, lumaFromVideo, sampleOffsets } from "../media/luma.js";
 import { resolveSource } from "../media/sourcePath.js";
 import { settledTwin } from "../media/twin.js";
-import { enqueue, type JobRow } from "../queue.js";
+import type { JobRow } from "../queue.js";
 
-/**
- * How long the clustering pass waits for more hashes before running.
- *
- * Two minutes is long enough to swallow a bulk import's worth of hashes into one
- * pass, and short enough that someone who drops in a handful of files sees duplicate
- * groups while they are still looking at them.
- */
-const DUPE_SETTLE_MS = 2 * 60 * 1000;
+import { queueDupePass } from "./dupes.js";
 
 /**
  * The `phash` job: the perceptual fingerprint of one item (§10).
@@ -160,24 +153,5 @@ export const runPhash = async (job: JobRow): Promise<StageState | void> => {
      * overlapping groups from half-written data. One coalescing job, at low priority, does
      * it once after the hashes have settled.
      */
-    enqueue(db, {
-        kind: "dupes",
-        priority: 200,
-        /**
-         * Not before the settle window is up, which is what makes the coalescing real.
-         *
-         * The queue's unique index collapses duplicate *pending* jobs, so this used to read
-         * as "one pass after the burst". It was not: each pass finished in about ten seconds,
-         * the next hash queued another immediately, and the pass ran again. Over one import
-         * that was **3,599 whole-library passes** -- the same comparison of the same library,
-         * over and over, for a handful of new rows each time.
-         *
-         * Deferring the job leaves it pending for the whole window, so every hash finishing
-         * in that window hits the unique index and adds nothing. The effect is a rate limit
-         * rather than a debounce, and deliberately so: pushing the deadline out on each hash
-         * would mean a library that is importing for ten hours has no duplicate detection at
-         * all until it stops.
-         */
-        availableAt: new Date(Date.now() + DUPE_SETTLE_MS),
-    });
+    queueDupePass();
 };

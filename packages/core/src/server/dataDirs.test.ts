@@ -73,6 +73,7 @@ describe("derivedDataDirs", () => {
                 paths.ocrTune,
                 paths.embed,
                 paths.faces,
+                paths.tileprints,
             ])
         );
     });
@@ -115,6 +116,7 @@ describe("resetDataDirs", () => {
                 paths.ocrTune,
                 paths.embed,
                 paths.faces,
+                paths.tileprints,
                 paths.captures,
             ])
         );

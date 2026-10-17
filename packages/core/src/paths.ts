@@ -58,6 +58,13 @@ export const faceFileRelPath = (mediaId: string): string =>
  */
 export const FACE_ANCHORS_REL_PATH = "faces/anchors.bin";
 
+/**
+ * A video's tile prints (§10h): a 4×4 colour grid per sprite tile, for duplicates offset in
+ * time. One small file per item, sharded like the vectors file.
+ */
+export const tilePrintRelPath = (mediaId: string): string =>
+    `tileprints/${fanout(mediaId)}/${mediaId}.tp`;
+
 /** The append-only log of every item's representatives (§5e). */
 export const REPRESENTATIVES_LOG_REL_PATH = "embed/reps.log";
 

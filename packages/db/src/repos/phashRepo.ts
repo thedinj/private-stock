@@ -4,6 +4,8 @@ import { PHASH_BANDS, hashBands } from "@private-stock/core";
 
 import { db } from "../db.js";
 
+import { forgetClustered } from "./dupeRepo.js";
+
 /**
  * Perceptual hashes and the candidate index (§10).
  *
@@ -37,20 +39,6 @@ const BANDS_ANY_EQUAL = BAND_COLUMNS.map((column) => `${column} = ?`).join(" OR 
  * of most of a library, into a filter that lets through little besides the real matches.
  */
 const SHARED_BAND_COUNT = BAND_COLUMNS.map((column) => `(${column} = ?)`).join(" + ");
-
-/**
- * An item whose hashes have just changed has not been compared with them (§10b).
- *
- * Clustering marks an item once it has seeded a pass, and an item qualifies as a seed on a
- * content hash alone -- so one whose frames arrived after that pass had never been compared on
- * its frames. A pair is only found when the later of the two seeds, and when both were marked
- * before the later one's hashes existed, neither ever does: a video and its re-encode sat
- * ungrouped for weeks this way, among ~700 others. Forgetting the mark on every write is what
- * makes "the later of the two seeds" true again.
- */
-const forgetClustered = (mediaId: string): void => {
-    db.prepare(`DELETE FROM "DupeClustered" WHERE "mediaId" = ?`).run(mediaId);
-};
 
 /**
  * Stores an image's hash.

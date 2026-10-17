@@ -526,3 +526,54 @@ describe("counting the queue", () => {
         expect(dupeRepo.pendingIdenticalCopies("image")).toHaveLength(2);
     });
 });
+
+describe("tilePrintedVideos", () => {
+    const givenVideo = (
+        id: string,
+        options: { durationMs: number; printed?: boolean; fileState?: string }
+    ): void => {
+        givenMedia(id);
+        db.prepare(`UPDATE "Media" SET "kind" = 'video', "durationMs" = ? WHERE "id" = ?`).run(
+            options.durationMs,
+            id
+        );
+        db.prepare(`UPDATE "MediaFile" SET "state" = ? WHERE "id" = ?`).run(
+            options.fileState ?? "active",
+            `f-${id}`
+        );
+
+        if (options.printed ?? true) {
+            db.prepare(
+                `INSERT INTO "MediaStage" ("mediaId", "stage", "state") VALUES (?, 'tileprint', 'done')`
+            ).run(id);
+        }
+    };
+
+    beforeEach(() => {
+        db.exec(`DELETE FROM "MediaStage"`);
+    });
+
+    it("lists printed videos with an active original, shortest first", () => {
+        givenVideo("long", { durationMs: 90_000 });
+        givenVideo("short", { durationMs: 30_000 });
+        givenVideo("unprinted", { durationMs: 40_000, printed: false });
+        givenVideo("gone", { durationMs: 50_000, fileState: "missing" });
+
+        expect(dupeRepo.tilePrintedVideos()).toEqual([
+            { mediaId: "short", durationMs: 30_000 },
+            { mediaId: "long", durationMs: 90_000 },
+        ]);
+    });
+});
+
+describe("forgetClustered", () => {
+    it("offers the item as a seed again, and leaves the others marked", () => {
+        givenMedia("m1", { imageHash: true });
+        givenMedia("m2", { imageHash: true });
+        dupeRepo.markClustered(["m1", "m2"]);
+
+        dupeRepo.forgetClustered("m1");
+
+        expect(dupeRepo.seedsNeedingClustering()).toEqual(["m1"]);
+    });
+});
