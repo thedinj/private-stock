@@ -3103,7 +3103,8 @@ TagPicture  tagId → Tag (cascade), source ('user' | 'auto'), relPath, smallRel
 
 **From faces, until somebody chooses** (§5f). For each library performer, the job takes the
 confirmed face that is largest in its frame and surest (at least 0.7 sure, and filling at least a
-fifth of the frame's height), reads that moment of the original at full size, and frames head
+fifth of the frame's height), reads the frame it was really seen in (§9 "What a tile shows") from
+the original at full size, and frames head
 and shoulders around it (`pictureAroundFace`): the face's centre 40% of the way down, kept inside
 the frame. Confirmed faces come first, because those are ones a person said are this performer.
 A face under 96 pixels tall in the original is passed over for the next, up to three.
@@ -4490,8 +4491,18 @@ least able to explain why.
     four days of the NAS to correct moments that matter for the handful of faces anybody frames
     or goes to, and a resolver would still be needed for the sheets in between. _Rejected:
     recording real times for new sprites only._ Two kinds of moment forever, and the old ones,
-    nearly all of them, would still need the resolver. _Not done yet: the automatic picture job_
-    (§6 "A tag's picture") still reads a face's frame at its nominal moment.
+    nearly all of them, would still need the resolver.
+
+    **The automatic pictures use it too** (§6 "A tag's picture"). A performer's is chosen by a
+    face and a source's or a keyword's by a look representative, and both are found on tiles.
+    `drawFromTile` cuts the picture from the frame the tile really shows (`seenAt`, falling back
+    to the tile's moment with no sheet to compare with), with the lowered priority background
+    work runs at. The row keeps both: `atMs` the frame it was cut from — where "the moment it
+    came from" leads — and `tileAtMs` the tile's moment, which is how the next run knows the
+    picture already shows what it would choose (`showsTile`). Pictures drawn before
+    `tileAtMs` existed have none, so each is drawn again once, from the right frame: one pass
+    over the performers, sources and keywords with a picture from a video, not a sweep of the
+    library.
 
     **One filter graph for the whole file (`-reinit_filter 0`).** By default ffmpeg rebuilds
     the graph whenever a decoded frame's format changes, and the rebuild discards what `tile`

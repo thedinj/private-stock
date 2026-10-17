@@ -22,7 +22,12 @@ import { loadConfig } from "@private-stock/core/server";
 import { tagPictureRepo } from "@private-stock/db";
 
 import { breathe } from "../eventLoop.js";
-import { drawAutoPicture, showsMoment, withdrawAutoPicture } from "../media/tagPicture.js";
+import {
+    drawAutoPicture,
+    drawFromTile,
+    showsTile,
+    withdrawAutoPicture,
+} from "../media/tagPicture.js";
 
 /**
  * The `tagLookPictures` job: a source's or a keyword's picture from how its items look, until
@@ -169,7 +174,7 @@ export const runTagLookPictures = async (): Promise<void> => {
                     best = { mediaId, atMs: entry.atMs, square: entry.square, score };
                 }
 
-                if (existing && showsMoment(existing, { mediaId, atMs: entry.atMs })) {
+                if (existing && showsTile(existing, { mediaId, atMs: entry.atMs })) {
                     shown = Math.max(shown, score);
                 }
             }
@@ -188,7 +193,7 @@ export const runTagLookPictures = async (): Promise<void> => {
         // tries again.
         if (
             original &&
-            (await drawAutoPicture(
+            (await drawFromTile(
                 { tagId, mediaId: best.mediaId, atMs: best.atMs, ...original },
                 (frame) => pictureAroundSquare(square, frame, aspect)
             ))

@@ -18,6 +18,8 @@ export interface TagPictureRow {
     smallRelPath: string;
     mediaId: string | null;
     atMs: number | null;
+    /** The sprite tile an automatic picture was chosen by, by its moment (§9 "What a tile shows"). */
+    tileAtMs: number | null;
     cropX: number;
     cropY: number;
     cropW: number;
@@ -27,7 +29,7 @@ export interface TagPictureRow {
 }
 
 const COLUMNS = `p."tagId", p."source", p."relPath", p."smallRelPath", p."mediaId", p."atMs",
-                 p."cropX", p."cropY", p."cropW", p."cropH", p."setByUserId", p."generatedAt"`;
+                 p."tileAtMs", p."cropX", p."cropY", p."cropW", p."cropH", p."setByUserId", p."generatedAt"`;
 
 export interface TagPictureInput {
     tagId: string;
@@ -36,6 +38,8 @@ export interface TagPictureInput {
     smallRelPath: string;
     mediaId: string | null;
     atMs: number | null;
+    /** The tile's moment, where `atMs` is the frame it really shows. */
+    tileAtMs?: number | null;
     crop: PictureCrop;
     setByUserId: string | null;
 }
@@ -44,12 +48,13 @@ export interface TagPictureInput {
 export const upsert = (input: TagPictureInput): TagPictureRow => {
     db.prepare(
         `INSERT INTO "TagPicture" ("tagId", "source", "relPath", "smallRelPath", "mediaId", "atMs",
-                                   "cropX", "cropY", "cropW", "cropH", "setByUserId")
+                                   "tileAtMs", "cropX", "cropY", "cropW", "cropH", "setByUserId")
          VALUES (@tagId, @source, @relPath, @smallRelPath, @mediaId, @atMs,
-                 @cropX, @cropY, @cropW, @cropH, @setByUserId)
+                 @tileAtMs, @cropX, @cropY, @cropW, @cropH, @setByUserId)
          ON CONFLICT ("tagId", "source") DO UPDATE SET
              "relPath" = excluded."relPath", "smallRelPath" = excluded."smallRelPath",
              "mediaId" = excluded."mediaId", "atMs" = excluded."atMs",
+             "tileAtMs" = excluded."tileAtMs",
              "cropX" = excluded."cropX", "cropY" = excluded."cropY",
              "cropW" = excluded."cropW", "cropH" = excluded."cropH",
              "setByUserId" = excluded."setByUserId",
@@ -64,6 +69,7 @@ export const upsert = (input: TagPictureInput): TagPictureRow => {
         smallRelPath: input.smallRelPath,
         mediaId: input.mediaId,
         atMs: input.atMs,
+        tileAtMs: input.tileAtMs ?? null,
         cropX: input.crop.x,
         cropY: input.crop.y,
         cropW: input.crop.w,

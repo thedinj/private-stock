@@ -10,7 +10,13 @@ import {
 import { db, faceRepo, tagPictureRepo } from "@private-stock/db";
 
 import { breathe } from "../eventLoop.js";
-import { drawAutoPicture, showsMoment, withdrawAutoPicture } from "../media/tagPicture.js";
+import {
+    drawAutoPicture,
+    drawFromTile,
+    showsMoment,
+    showsTile,
+    withdrawAutoPicture,
+} from "../media/tagPicture.js";
 import { enqueue } from "../queue.js";
 
 /**
@@ -18,8 +24,9 @@ import { enqueue } from "../queue.js";
  * "A tag's picture").
  *
  * One job for the library, coalescing. For each library performer it takes the largest, surest
- * face somebody confirmed as them, reads that moment from the original at full size, and frames
- * head and shoulders around it — the picture a person would have cut. A face too small in the
+ * face somebody confirmed as them, finds the frame it was really seen in (§9 "What a tile
+ * shows"), reads that from the original at full size, and frames head and shoulders around it —
+ * the picture a person would have cut. A face too small in the
  * original for a sharp portrait is passed over for the next.
  *
  * Without one, it falls back a tier at a time: a face one of their automatic tags rests on, then
@@ -88,13 +95,13 @@ export const runTagPictures = async (): Promise<void> => {
         for (const candidate of byTag.get(tagId) ?? []) {
             // Anything better ranked was tried before this and failed, or is new and was tried
             // just now; the picture already shows this one, so there is nothing to do.
-            if (existing && showsMoment(existing, candidate)) {
+            if (existing && showsTile(existing, candidate)) {
                 settled = true;
                 break;
             }
 
             if (
-                await drawAutoPicture(candidate, (frame) =>
+                await drawFromTile(candidate, (frame) =>
                     pictureAroundFace(
                         candidate,
                         frame,

@@ -31,6 +31,13 @@ import { FRAME_TIMEOUT_MS, resolveFfmpeg, resolveFfprobe } from "./ffmpeg.js";
 
 const execFileAsync = promisify(execFile);
 
+/** How ffprobe and ffmpeg are run: `execFile`, or the worker's, which lowers their priority. */
+export type RunProgram = (
+    file: string,
+    args: string[],
+    options: { timeout: number; maxBuffer: number }
+) => Promise<{ stdout: string | Buffer }>;
+
 export interface TileMomentsInput {
     /** The original, as an absolute path. */
     original: string;
@@ -43,6 +50,8 @@ export interface TileMomentsInput {
         sheetPath: string;
         rect: { x: number; y: number; width: number; height: number };
     } | null;
+    /** Background work passes its own, so these reads give way to requests (§7c). */
+    run?: RunProgram;
 }
 
 export interface TileMoments {
@@ -61,13 +70,13 @@ const packetsAnswer = z.object({
         .optional(),
 });
 
-const probe = async (args: string[]): Promise<unknown> => {
-    const { stdout } = await execFileAsync(await resolveFfprobe(), ["-v", "error", ...args], {
+const probe = async (run: RunProgram, args: string[]): Promise<unknown> => {
+    const { stdout } = await run(await resolveFfprobe(), ["-v", "error", ...args], {
         timeout: FRAME_TIMEOUT_MS,
         maxBuffer: 16 * 1024 * 1024,
     });
 
-    return JSON.parse(stdout);
+    return JSON.parse(stdout.toString());
 };
 
 /**
@@ -77,16 +86,17 @@ const probe = async (args: string[]): Promise<unknown> => {
  * the start time is read first and added, then taken off every packet.
  */
 const packetsBetween = async (
+    run: RunProgram,
     original: string,
     fromMs: number,
     toMs: number
 ): Promise<VideoPacket[]> => {
     const format = formatAnswer.parse(
-        await probe(["-show_entries", "format=start_time", "-of", "json", original])
+        await probe(run, ["-show_entries", "format=start_time", "-of", "json", original])
     );
     const startS = Number(format.format?.start_time ?? 0) || 0;
     const listed = packetsAnswer.parse(
-        await probe([
+        await probe(run, [
             "-select_streams",
             "v:0",
             "-read_intervals",
@@ -117,6 +127,7 @@ const scratch = (extension: string): string =>
  * the greyscale pixels at the tile's size to compare, and a WebP of the same to show.
  */
 const readFrame = async (
+    run: RunProgram,
     original: string,
     packet: VideoPacket,
     size: { width: number; height: number }
@@ -130,7 +141,7 @@ const readFrame = async (
         : ["-ss", (Math.max(0, packet.ptsMs - 0.5) / 1000).toFixed(4)];
 
     try {
-        await execFileAsync(
+        await run(
             await resolveFfmpeg(),
             [
                 "-v",
@@ -175,12 +186,15 @@ const readFrame = async (
 };
 
 /** The tile, in greyscale, cut from its sheet. */
-const readTile = async (tile: NonNullable<TileMomentsInput["tile"]>): Promise<Uint8Array> => {
+const readTile = async (
+    run: RunProgram,
+    tile: NonNullable<TileMomentsInput["tile"]>
+): Promise<Uint8Array> => {
     const greyPath = scratch("grey");
     const { x, y, width, height } = tile.rect;
 
     try {
-        await execFileAsync(
+        await run(
             await resolveFfmpeg(),
             [
                 "-v",
@@ -211,26 +225,27 @@ export const readTileMoments = async ({
     atMs,
     intervalMs,
     tile,
+    run = execFileAsync,
 }: TileMomentsInput): Promise<TileMoments> => {
     const { fromMs, toMs } = tileReadWindow(atMs, intervalMs);
-    let packets = await packetsBetween(original, fromMs, toMs);
+    let packets = await packetsBetween(run, original, fromMs, toMs);
 
     // The seeking path's keyframe can sit further back than an interval in a long-GOP file:
     // look once more, further back, before going without it.
     if (!packets.some((packet) => packet.key && packet.ptsMs <= atMs + 0.5)) {
-        packets = await packetsBetween(original, Math.max(0, atMs - 120_000), toMs);
+        packets = await packetsBetween(run, original, Math.max(0, atMs - 120_000), toMs);
     }
 
     const candidates = tileCandidates(atMs, intervalMs, packets);
     const size = tile
         ? { width: tile.rect.width, height: tile.rect.height }
         : { width: SPRITE_TILE_WIDTH, height: -2 };
-    const reference = tile ? await readTile(tile) : null;
+    const reference = tile ? await readTile(run, tile) : null;
     const frames: { grey: Uint8Array; thumb: Buffer }[] = [];
 
     // One at a time: each is a decode on the disks every request shares.
     for (const candidate of candidates) {
-        frames.push(await readFrame(original, candidate, size));
+        frames.push(await readFrame(run, original, candidate, size));
     }
 
     const distances = frames.map((frame) =>

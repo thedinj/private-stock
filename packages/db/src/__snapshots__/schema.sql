@@ -998,6 +998,7 @@ CREATE TABLE "TagPicture" (
             "cropH" REAL NOT NULL,
             "setByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
             "generatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "tileAtMs" INTEGER,
             PRIMARY KEY ("tagId", "source")
         ) WITHOUT ROWID;
 

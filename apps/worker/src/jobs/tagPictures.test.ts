@@ -34,6 +34,7 @@ interface Row {
     smallRelPath: string;
     mediaId: string | null;
     atMs: number | null;
+    tileAtMs?: number | null;
 }
 
 const state = vi.hoisted(() => ({
@@ -42,6 +43,10 @@ const state = vi.hoisted(() => ({
     /** The frame each item's original decodes to. */
     frames: new Map<string, { width: number; height: number }>(),
     reads: [] as string[],
+    /** The moment each read of an original was at. */
+    readAt: [] as (number | undefined)[],
+    /** Items with a sprite, and the frame their tiles were found to show. */
+    seen: new Map<string, number>(),
     /** Performers on an item, and the moment each would be stood in for by. */
     carried: [] as string[],
     standIns: new Map<string, { mediaId: string; kind: "video"; atMs: number; fileId: string }>(),
@@ -49,6 +54,21 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@private-stock/db", () => ({
     db: {},
+    artifactRepo: {
+        listForMedia: (mediaId: string) =>
+            state.seen.has(mediaId)
+                ? [
+                      {
+                          ordinal: 0,
+                          relPath: `art/${mediaId}/sprite-0.webp`,
+                          width: 2000,
+                          height: 1120,
+                          tileCount: 100,
+                          intervalMs: 2000,
+                      },
+                  ]
+                : [],
+    },
     faceRepo: { pictureCandidates: () => state.candidates },
     tagPictureRepo: {
         listAuto: () => [...state.rows.values()],
@@ -70,6 +90,11 @@ vi.mock("@private-stock/db", () => ({
 vi.mock("@private-stock/core/server", async (original) => ({
     ...(await original<typeof import("@private-stock/core/server")>()),
     loadConfig: () => ({ dataDir }),
+    readTileMoments: async ({ original }: { original: string }) => {
+        const seen = state.seen.get(original.slice("/media/file-".length));
+
+        return { moments: [{ atMs: seen, thumb: Buffer.alloc(0) }], matched: 0 };
+    },
 }));
 
 vi.mock("../media/sourcePath.js", () => ({
@@ -84,9 +109,10 @@ vi.mock("../media/sourcePath.js", () => ({
 const lastInput = new Map<string, string>();
 
 vi.mock("../media/frames.js", () => ({
-    extractFrame: async (input: string, output: string) => {
+    extractFrame: async (input: string, output: string, options: { atMs?: number }) => {
         if (input.startsWith("/media/")) {
             state.reads.push(input.slice("/media/".length));
+            state.readAt.push(options.atMs);
             lastInput.set(output, input.slice("/media/file-".length));
         }
     },
@@ -128,12 +154,54 @@ beforeEach(() => {
     state.rows.clear();
     state.frames.clear();
     state.reads = [];
+    state.readAt = [];
+    state.seen.clear();
     state.carried = [];
     state.standIns.clear();
     lastInput.clear();
 });
 
 describe("runTagPictures", () => {
+    /**
+     * A face records its sprite tile's moment, and the tile shows another frame (§9 "What a tile
+     * shows"): the picture is cut from that one, and the tile's moment kept to know the face by.
+     */
+    it("cuts a video's face from the frame its tile really shows", async () => {
+        state.candidates = [face(JANE, "a", 0.3)];
+        state.frames.set("a", { width: 1920, height: 1080 });
+        state.seen.set("a", 5900);
+
+        await runTagPictures();
+
+        expect(state.readAt).toEqual([5900]);
+        expect(state.rows.get(JANE)).toMatchObject({ mediaId: "a", atMs: 5900, tileAtMs: 5000 });
+
+        // The same face next time is the picture it already shows.
+        await runTagPictures();
+
+        expect(state.readAt).toEqual([5900]);
+    });
+
+    it("draws once more a picture drawn before tiles were told from frames", async () => {
+        state.candidates = [face(JANE, "a", 0.3)];
+        state.frames.set("a", { width: 1920, height: 1080 });
+        state.seen.set("a", 5900);
+        state.rows.set(JANE, {
+            tagId: JANE,
+            source: "auto",
+            relPath: "x",
+            smallRelPath: "y",
+            mediaId: "a",
+            atMs: 5000,
+            tileAtMs: null,
+        });
+
+        await runTagPictures();
+
+        expect(state.readAt).toEqual([5900]);
+        expect(state.rows.get(JANE)).toMatchObject({ atMs: 5900, tileAtMs: 5000 });
+    });
+
     it("draws a performer's picture from their best face", async () => {
         state.candidates = [face(JANE, "a", 0.3)];
         state.frames.set("a", { width: 1920, height: 1080 });
@@ -224,7 +292,8 @@ describe("runTagPictures", () => {
             relPath: "tags/ja/jane-tag-auto-large.webp",
             smallRelPath: "tags/ja/jane-tag-auto-small.webp",
             mediaId: "a",
-            atMs: 5000,
+            atMs: 5900,
+            tileAtMs: 5000,
         });
 
         await runTagPictures();

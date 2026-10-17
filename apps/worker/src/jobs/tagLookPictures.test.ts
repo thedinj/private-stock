@@ -59,18 +59,28 @@ vi.mock("@private-stock/core/server", async (original) => ({
     loadConfig: () => ({ dataDir }),
 }));
 
-vi.mock("../media/tagPicture.js", () => ({
-    drawAutoPicture: async (source: { tagId: string; mediaId: string; atMs: number | null }) => {
+/**
+ * Which frame a tile really shows is `tagPicture.ts`'s, and asserted in `tagPictures.test.ts`;
+ * here the frame is the tile's own moment, so what is asserted is which tile was chosen.
+ */
+vi.mock("../media/tagPicture.js", () => {
+    const draw = async (source: { tagId: string; mediaId: string; atMs: number | null }) => {
         state.drawn.push({ tagId: source.tagId, mediaId: source.mediaId, atMs: source.atMs });
 
         return true;
-    },
-    withdrawAutoPicture: async (row: Row) => {
-        state.withdrawn.push(row.tagId);
-    },
-    showsMoment: (row: Row, moment: { mediaId: string; atMs: number | null }) =>
-        row.mediaId === moment.mediaId && row.atMs === moment.atMs,
-}));
+    };
+    const shows = (row: Row, moment: { mediaId: string; atMs: number | null }) =>
+        row.mediaId === moment.mediaId && row.atMs === moment.atMs;
+
+    return {
+        drawAutoPicture: draw,
+        drawFromTile: draw,
+        withdrawAutoPicture: async (row: Row) => {
+            state.withdrawn.push(row.tagId);
+        },
+        showsTile: shows,
+    };
+});
 
 vi.mock("../eventLoop.js", () => ({ breathe: async (since: number) => since }));
 

@@ -2,15 +2,20 @@ import { mkdir, rm } from "node:fs/promises";
 import * as path from "node:path";
 
 import {
+    SPRITE_COLUMNS,
+    SPRITE_ROWS,
     TAG_PICTURE_WIDTH,
+    TILES_PER_SHEET,
     assertSafeRelativePath,
+    spriteTile,
     tagPictureRelPath,
     type PictureCrop,
 } from "@private-stock/core";
-import { dataPaths, loadConfig } from "@private-stock/core/server";
-import { tagPictureRepo } from "@private-stock/db";
+import { dataPaths, loadConfig, readTileMoments } from "@private-stock/core/server";
+import { artifactRepo, tagPictureRepo } from "@private-stock/db";
 
 import { extractFrame, imageDimensions } from "./frames.js";
+import { execFilePolitely } from "./politeSpawn.js";
 import { resolveSource } from "./sourcePath.js";
 
 /**
@@ -31,6 +36,8 @@ export interface AutoPictureSource {
     kind: "video" | "image";
     atMs: number | null;
     fileId: string;
+    /** The sprite tile's moment it was chosen by, where `atMs` is the frame the tile shows. */
+    tileAtMs?: number | null;
 }
 
 /**
@@ -94,6 +101,7 @@ export const drawAutoPicture = async (
             smallRelPath,
             mediaId: source.mediaId,
             atMs: source.atMs,
+            tileAtMs: source.tileAtMs ?? null,
             crop,
             setByUserId: null,
         });
@@ -123,7 +131,97 @@ export const withdrawAutoPicture = async (row: tagPictureRepo.TagPictureRow): Pr
     }
 };
 
-/** Is this the moment the picture already shows? The same item and moment. */
+/**
+ * The frame a video's sprite tile really shows (§9 "What a tile shows"), or the tile's own moment
+ * when that cannot be told -- no sprite left to compare with, or the original unreadable.
+ *
+ * A face or a look is found on a tile and records the tile's moment, and the tile is another
+ * frame, usually half an interval later: cut there, a picture is of a different moment, framed
+ * around where the face or the square was not.
+ */
+export const seenAt = async (face: {
+    mediaId: string;
+    atMs: number;
+    fileId: string;
+}): Promise<number> => {
+    const original = resolveSource(face.fileId);
+    const sheets = artifactRepo.listForMedia(face.mediaId, ["sprite"]);
+    const intervalMs = sheets[0]?.intervalMs ?? 0;
+    const total = sheets.reduce((sum, sheet) => sum + (sheet.tileCount ?? 0), 0);
+
+    if (!original || intervalMs <= 0 || total === 0) {
+        return face.atMs;
+    }
+
+    // As the faces job found it: the tile by arithmetic, its size from the sheet's.
+    const index = Math.min(Math.floor(face.atMs / intervalMs), total - 1);
+    const sheet = sheets.find((row) => row.ordinal === Math.floor(index / TILES_PER_SHEET));
+
+    if (!sheet?.width || !sheet.height) {
+        return face.atMs;
+    }
+
+    const width = sheet.width / SPRITE_COLUMNS;
+    const height = sheet.height / SPRITE_ROWS;
+    const { x, y } = spriteTile(index, SPRITE_COLUMNS, width, height);
+
+    try {
+        const read = await readTileMoments({
+            original: original.absolutePath,
+            atMs: face.atMs,
+            intervalMs,
+            tile: {
+                sheetPath: absolute(loadConfig().dataDir, sheet.relPath),
+                rect: { x, y, width, height },
+            },
+            run: execFilePolitely,
+        });
+
+        return read.matched === null ? face.atMs : read.moments[read.matched].atMs;
+    } catch (error) {
+        console.warn(
+            `No frame found for the tile of ${face.mediaId} at ${face.atMs}ms: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+
+        return face.atMs;
+    }
+};
+
+/**
+ * Does the picture already show what was found on this tile -- a face, a look? The same item,
+ * and the tile's moment, which a video's picture keeps apart from the frame it was cut from. A
+ * picture drawn before the two were told apart has none, so is drawn again once, from the frame
+ * really seen. A photograph has no moment and no tile.
+ */
+export const showsTile = (
+    row: tagPictureRepo.TagPictureRow,
+    found: { mediaId: string; atMs: number | null }
+): boolean =>
+    row.mediaId === found.mediaId &&
+    (found.atMs === null ? row.atMs === null : row.tileAtMs === found.atMs);
+
+/**
+ * The picture drawn from what was found on a tile: for a video, from the frame the tile really
+ * shows, remembering the tile's moment (`showsTile`).
+ */
+export const drawFromTile = async (
+    source: AutoPictureSource,
+    cropFor: (frame: { width: number; height: number }) => PictureCrop | null
+): Promise<boolean> =>
+    drawAutoPicture(
+        source.kind === "video" && source.atMs !== null
+            ? {
+                  ...source,
+                  atMs: await seenAt({ ...source, atMs: source.atMs }),
+                  tileAtMs: source.atMs,
+              }
+            : source,
+        cropFor
+    );
+
+/** Is this the moment the picture already shows? The same item and moment: a stand-in's. */
 export const showsMoment = (
     row: tagPictureRepo.TagPictureRow,
     moment: { mediaId: string; atMs: number | null }
