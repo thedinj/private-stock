@@ -4791,8 +4791,13 @@ from backups — losing it costs CPU, not data.
   Candidates come from a band index, then exact Hamming distance confirms. Scales to 200k
   rows in SQLite.
 - **Near-duplicate videos** — pHash over N sampled keyframes; a match needs a sufficient
-  fraction of frames to pair within threshold. Catches re-encodes, resolution changes, and
-  clips contained in longer files.
+  fraction of frames to pair within threshold. Catches re-encodes and resolution changes.
+  **It does not yet catch a copy offset in time** — a clip cut from a longer file, or the same
+  video with a second and a half more lead-in. Frames are sampled at fixed fractions of each
+  file's own length, so an offset moves every sample point, and in moving footage a few
+  hundred milliseconds is already 12–30 bits. This section used to claim contained clips;
+  making it true needs offset-tolerant sampling (scene-anchored frames, or a short burst
+  around each point), which is undecided.
 - **Review UI** — a triage sheet of compact rows with resolution/length/size/bitrate on each
   copy, a "keep best" preselection that is ordered first and states its reason, and a page
   resolved in one press (§10c). Admin-only.
@@ -4949,6 +4954,16 @@ candidate costs one XOR and a popcount while a missed duplicate is kept forever.
 threshold setting is clamped to this ceiling, since a larger number would not widen the net —
 it would only make results depend on which pairs happened to share a band.
 
+**One shared band is necessary, not selective.** A video brings twelve frames, so a lookup is
+96 one-byte equalities, and on the live library that reached ~98% of all videos. The lookup
+then had an unordered `LIMIT 200`, so it compared an arbitrary 2.5% of the library and missed
+a 720p/1080p pair whose frames matched 9 of 12. The same pigeonhole gives a stronger condition
+for free: hashes at most D apart differ in at most D bands, so they **share at least B − D**.
+Both lookups now require that many shared bands per frame (and, for videos, that
+`minMatchingFrames` distinct seed frames reach the candidate), which is still exact — nothing
+that would pass `compareVideos` is excluded — and they have no limit, because a limit on a
+candidate set is a decision about which duplicates to miss.
+
 ### ffmpeg rather than sharp
 
 The decoder is ffmpeg, not sharp as this section first said. sharp is a large native
@@ -5021,6 +5036,14 @@ comparing again: a pair between two old items was found when the later of the tw
 seed. So the pass now seeds only with items that have never been compared, and their
 _candidates_ still come from the whole library — incremental, not partial.
 
+**"The later of the two" only holds if a mark means the item was compared with what it has
+now.** An item seeds on a content hash alone, and the perceptual hash comes after the cover
+and the search index (§10), so an item can be marked before its frames exist. If its copy was
+marked before that too, neither is ever the later seed, and the pair is never compared: on the
+live library 690 videos had frames newer than their mark, among them a re-encode pair matching
+9 frames of 12. So **writing an item's perceptual hash, or a new content hash, forgets its
+mark**, inside the same transaction as the write, and the item seeds again with what it has.
+
 `DupeClustered` records which items have been through it. A row per item rather than a
 "clustered through T" watermark, because these timestamps have one-second granularity while a
 bulk import writes hundreds of rows a second, and a watermark silently drops whatever shares
@@ -5035,7 +5058,9 @@ Changing a threshold clears every mark, because the thresholds decide which pair
 all — otherwise lowering `imageDistance` would apply only to items hashed afterwards, and the
 setting would appear to do nothing to the library it was changed for. Only the marks are
 cleared; `upsertGroup` returns the identical group rather than replacing it, so anything that
-still clusters the same way keeps its id and its review state.
+still clusters the same way keeps its id and its review state. A change to how candidates
+are found does the same — the fingerprint the marks are checked against carries a recipe
+number alongside the thresholds, bumped when a pass can find pairs an earlier one could not.
 
 ### Merging is what makes it correct
 

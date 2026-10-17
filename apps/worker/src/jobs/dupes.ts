@@ -64,7 +64,11 @@ const imagePairs = async (settings: DupeSettings, seeds: string[]): Promise<Pair
 
         const hash = new Uint8Array(row.hash);
 
-        for (const candidate of phashRepo.imageCandidates(row.mediaId, hash)) {
+        for (const candidate of phashRepo.imageCandidates(
+            row.mediaId,
+            hash,
+            settings.imageDistance
+        )) {
             const key =
                 row.mediaId < candidate.mediaId
                     ? `${row.mediaId}|${candidate.mediaId}`
@@ -90,8 +94,7 @@ const imagePairs = async (settings: DupeSettings, seeds: string[]): Promise<Pair
 /**
  * Near-duplicate video pairs.
  *
- * Two stages on purpose. The band index narrows the library to a handful of candidates per
- * video, and only then are the candidate's frames loaded — most candidates are rejected, and
+ * Two stages on purpose. The band index narrows the library to the videos that could match, and only then are the candidate's frames loaded — most candidates are rejected, and
  * loading every frame of every one of them up front is the expensive half of the pass.
  */
 const videoPairs = async (settings: DupeSettings, seeds: string[]): Promise<Pair[]> => {
@@ -137,7 +140,9 @@ const videoPairs = async (settings: DupeSettings, seeds: string[]): Promise<Pair
 
         for (const candidateId of phashRepo.videoCandidates(
             mediaId,
-            frames.map((frame) => frame.hash)
+            frames.map((frame) => frame.hash),
+            settings.frameDistance,
+            settings.minMatchingFrames
         )) {
             const key =
                 mediaId < candidateId ? `${mediaId}|${candidateId}` : `${candidateId}|${mediaId}`;
@@ -244,6 +249,19 @@ const mergeIntoGroups = async (kind: "near" | "exact", pairs: Pair[]): Promise<v
 const CLUSTERED_WITH_KEY = "dupes.clusteredWith";
 
 /**
+ * Which way of finding candidates the marks were earned under.
+ *
+ * Part of the fingerprint for the same reason the thresholds are: a mark says "compared, and
+ * found what there was to find", and a pass that could not find some pairs did not earn it.
+ * Bump it whenever a change lets a pass find pairs an earlier one could not, and the next
+ * pass re-examines the library once, keeping every group and its review state.
+ *
+ * 2: candidates are exact rather than an unordered `LIMIT 200` of almost every video, and a
+ *    mark no longer survives the hashes arriving after it (§10b).
+ */
+const CANDIDATE_RECIPE = 2;
+
+/**
  * Start again when the thresholds change.
  *
  * The thresholds decide which pairs count at all, so lowering `imageDistance` after a library
@@ -255,7 +273,7 @@ const CLUSTERED_WITH_KEY = "dupes.clusteredWith";
  * through the re-pass -- the cost of a threshold change is CPU, not somebody's review work.
  */
 const forgetIfSettingsChanged = (settings: DupeSettings): void => {
-    const fingerprint = JSON.stringify(settings);
+    const fingerprint = JSON.stringify({ recipe: CANDIDATE_RECIPE, ...settings });
 
     if (settingRepo.get(CLUSTERED_WITH_KEY, "") === fingerprint) {
         return;
@@ -265,7 +283,7 @@ const forgetIfSettingsChanged = (settings: DupeSettings): void => {
     settingRepo.set(CLUSTERED_WITH_KEY, fingerprint);
 
     if (cleared > 0) {
-        console.log(`Duplicate thresholds changed; re-examining ${cleared} item(s)`);
+        console.log(`Duplicate detection changed; re-examining ${cleared} item(s)`);
     }
 };
 

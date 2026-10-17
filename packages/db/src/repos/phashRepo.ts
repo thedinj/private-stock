@@ -25,6 +25,33 @@ export interface VideoFrameRow extends PhashRow {
     atMs: number;
 }
 
+/** Any band equal: the indexed half of a candidate lookup, one equality per band column. */
+const BANDS_ANY_EQUAL = BAND_COLUMNS.map((column) => `${column} = ?`).join(" OR ");
+
+/**
+ * How many bands a row shares with a hash: `(band0 = ?) + ... + (band7 = ?)`.
+ *
+ * Pigeonhole again, and the stronger half of it: hashes at most D bits apart differ in at most
+ * D bands, so they share at least `PHASH_BANDS - D`. Requiring that many is still exact -- no
+ * pair within D is lost -- but it turns "shares a byte with", which a one-byte band makes true
+ * of most of a library, into a filter that lets through little besides the real matches.
+ */
+const SHARED_BAND_COUNT = BAND_COLUMNS.map((column) => `(${column} = ?)`).join(" + ");
+
+/**
+ * An item whose hashes have just changed has not been compared with them (§10b).
+ *
+ * Clustering marks an item once it has seeded a pass, and an item qualifies as a seed on a
+ * content hash alone -- so one whose frames arrived after that pass had never been compared on
+ * its frames. A pair is only found when the later of the two seeds, and when both were marked
+ * before the later one's hashes existed, neither ever does: a video and its re-encode sat
+ * ungrouped for weeks this way, among ~700 others. Forgetting the mark on every write is what
+ * makes "the later of the two seeds" true again.
+ */
+const forgetClustered = (mediaId: string): void => {
+    db.prepare(`DELETE FROM "DupeClustered" WHERE "mediaId" = ?`).run(mediaId);
+};
+
 /**
  * Stores an image's hash.
  *
@@ -36,13 +63,17 @@ export interface VideoFrameRow extends PhashRow {
 export const putImageHash = (mediaId: string, hash: Uint8Array): void => {
     const bands = hashBands(hash);
 
-    db.prepare(
-        `INSERT INTO "PhashImage" ("mediaId", "hash", ${BAND_COLUMNS.join(", ")})
-         VALUES (?, ?, ${bands.map(() => "?").join(", ")})
-         ON CONFLICT("mediaId") DO UPDATE SET
-             "hash" = excluded."hash",
-             ${BAND_COLUMNS.map((column) => `${column} = excluded.${column}`).join(", ")}`
-    ).run(mediaId, Buffer.from(hash), ...bands);
+    db.transaction(() => {
+        db.prepare(
+            `INSERT INTO "PhashImage" ("mediaId", "hash", ${BAND_COLUMNS.join(", ")})
+             VALUES (?, ?, ${bands.map(() => "?").join(", ")})
+             ON CONFLICT("mediaId") DO UPDATE SET
+                 "hash" = excluded."hash",
+                 ${BAND_COLUMNS.map((column) => `${column} = excluded.${column}`).join(", ")}`
+        ).run(mediaId, Buffer.from(hash), ...bands);
+
+        forgetClustered(mediaId);
+    })();
 };
 
 export const findImageHash = (mediaId: string): Uint8Array | undefined => {
@@ -86,6 +117,8 @@ export const putVideoHashes = (mediaId: string, frames: VideoFrameInput[]): void
                 ...hashBands(frame.hash)
             );
         }
+
+        forgetClustered(mediaId);
     })();
 };
 
@@ -100,64 +133,87 @@ export const listVideoHashes = (mediaId: string): VideoFrameRow[] =>
     ).map((row) => ({ ...row, hash: new Uint8Array(row.hash) }));
 
 /**
- * Images whose hash shares at least one band with this one.
+ * Images whose hash could be within `distance` of this one.
  *
- * The union of eight equality lookups, which is the whole point of the band columns: any
- * pair within the indexed distance must share a band (§10), so this returns a superset of
- * the true matches and the caller confirms each with an exact Hamming distance.
+ * The band lookups find the rows sharing at least one band, which any pair within the indexed
+ * distance must (§10); the shared-band count then keeps only those sharing the
+ * `PHASH_BANDS - distance` that a pair within `distance` must. Both are necessary conditions,
+ * so this is a superset of the true matches and the caller confirms each with an exact
+ * Hamming distance.
  *
- * `DISTINCT` because a genuine near-duplicate usually shares several bands and would
- * otherwise be returned once per band — turning the confirmation step into repeated work on
- * exactly the rows that matter most.
+ * **No limit.** There used to be one, with no order, and at one-byte selectivity the union of
+ * eight lookups outgrows it long before a library is large -- after which the pairs compared
+ * were whichever rows SQLite happened to reach first. The shared-band filter is what makes
+ * the result small enough not to need one.
  */
-export const imageCandidates = (mediaId: string, hash: Uint8Array, limit = 500): PhashRow[] => {
+export const imageCandidates = (
+    mediaId: string,
+    hash: Uint8Array,
+    distance: number
+): PhashRow[] => {
     const bands = hashBands(hash);
-    const clauses = bands.map((_, i) => `"band${i}" = ?`).join(" OR ");
 
     return (
         db
             .prepare(
-                `SELECT DISTINCT "mediaId", "hash" FROM "PhashImage"
-                  WHERE "mediaId" != ? AND (${clauses})
-                  LIMIT ?`
+                `SELECT "mediaId", "hash" FROM "PhashImage"
+                  WHERE "mediaId" != ? AND (${BANDS_ANY_EQUAL}) AND ${SHARED_BAND_COUNT} >= ?`
             )
-            .all(mediaId, ...bands, limit) as { mediaId: string; hash: Buffer }[]
+            .all(mediaId, ...bands, ...bands, PHASH_BANDS - distance) as {
+            mediaId: string;
+            hash: Buffer;
+        }[]
     ).map((row) => ({ mediaId: row.mediaId, hash: new Uint8Array(row.hash) }));
 };
 
 /**
- * Videos with at least one frame sharing a band with one of these frames.
+ * Videos that could pass `compareVideos` against these frames.
+ *
+ * A pair passes only if at least `minFrames` of the seed's frames each have a partner within
+ * `distance`, and each such partner shares at least `PHASH_BANDS - distance` bands with its
+ * seed frame. So the query finds, per seed frame, the rows sharing that many bands -- one
+ * indexed lookup each -- and keeps the videos reached from `minFrames` distinct seed frames.
+ * Every step is a necessary condition, so nothing that would match is lost.
+ *
+ * **No limit**, for the reason `imageCandidates` has none, only worse: twelve frames times
+ * eight one-byte bands reached ~98% of the library's videos, and an unordered `LIMIT 200` then
+ * kept an arbitrary 2.5% of them. Whether a real copy was ever compared was luck.
  *
  * Returns candidate *ids* rather than their frames. A candidate video's frames are fetched
- * only if it survives this filter, because most candidates are rejected and loading every
- * frame of every one of them up front is the expensive half of the whole pass.
+ * only if it survives this filter, so the expensive half of the pass is spent on the few that
+ * are worth it.
  */
 export const videoCandidates = (
     mediaId: string,
     frameHashes: Uint8Array[],
-    limit = 200
+    distance: number,
+    minFrames: number
 ): string[] => {
     if (frameHashes.length === 0) {
         return [];
     }
 
-    const conditions: string[] = [];
-    const params: unknown[] = [mediaId];
+    const lookups: string[] = [];
+    const params: unknown[] = [];
 
-    for (const hash of frameHashes) {
+    for (const [index, hash] of frameHashes.entries()) {
         const bands = hashBands(hash);
 
-        conditions.push(`(${bands.map((_, i) => `"band${i}" = ?`).join(" OR ")})`);
-        params.push(...bands);
+        lookups.push(
+            `SELECT "mediaId", ${index} AS "seedFrame" FROM "PhashVideo"
+              WHERE "mediaId" != ? AND (${BANDS_ANY_EQUAL}) AND ${SHARED_BAND_COUNT} >= ?`
+        );
+        params.push(mediaId, ...bands, ...bands, PHASH_BANDS - distance);
     }
 
     return (
         db
             .prepare(
-                `SELECT DISTINCT "mediaId" FROM "PhashVideo"
-                  WHERE "mediaId" != ? AND (${conditions.join(" OR ")})
-                  LIMIT ?`
+                `SELECT "mediaId" FROM (${lookups.join(" UNION ALL ")})
+                  GROUP BY "mediaId"
+                 HAVING count(DISTINCT "seedFrame") >= ?
+                  ORDER BY count(DISTINCT "seedFrame") DESC`
             )
-            .all(...params, limit) as { mediaId: string }[]
+            .all(...params, minFrames) as { mediaId: string }[]
     ).map((row) => row.mediaId);
 };

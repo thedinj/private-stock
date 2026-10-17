@@ -418,19 +418,42 @@ export const countByRoot = (rootId: string): number =>
  * quick collision makes the expensive answer worth having. Passing null for `contentHash`
  * leaves any existing value alone rather than clearing it, so the cheap job does not undo
  * the expensive one.
+ *
+ * A content hash that is new to the file also un-marks its item for clustering, for the reason
+ * `phashRepo` forgets the mark on a perceptual hash (§10b): an item compared before it had one
+ * was not compared for exact duplicates, and nobody else would find the pair.
  */
 export const setHashes = (
     fileId: string,
     quickHash: string | null,
     contentHash: string | null
 ): void => {
-    db.prepare(
-        `UPDATE "MediaFile"
-            SET "quickHash" = COALESCE(?, "quickHash"),
-                "contentHash" = COALESCE(?, "contentHash"),
-                "updatedAt" = CURRENT_TIMESTAMP
-          WHERE "id" = ?`
-    ).run(quickHash, contentHash, fileId);
+    db.transaction(() => {
+        const changed =
+            contentHash !== null &&
+            db
+                .prepare(
+                    `SELECT 1 FROM "MediaFile"
+                      WHERE "id" = ? AND "contentHash" IS NOT ?`
+                )
+                .get(fileId, contentHash) !== undefined;
+
+        db.prepare(
+            `UPDATE "MediaFile"
+                SET "quickHash" = COALESCE(?, "quickHash"),
+                    "contentHash" = COALESCE(?, "contentHash"),
+                    "updatedAt" = CURRENT_TIMESTAMP
+              WHERE "id" = ?`
+        ).run(quickHash, contentHash, fileId);
+
+        if (changed) {
+            db.prepare(
+                `DELETE FROM "DupeClustered"
+                  WHERE "mediaId" IN (SELECT "mediaId" FROM "MediaFileLink"
+                                       WHERE "fileId" = ? AND "role" = 'original')`
+            ).run(fileId);
+        }
+    })();
 };
 
 /**
