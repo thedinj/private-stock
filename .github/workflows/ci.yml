@@ -43,7 +43,16 @@ jobs:
 
     integration:
         runs-on: ubuntu-latest
+        # The image's own base and its own ffmpeg (Debian bookworm, 5.1), not the runner's.
+        # Ubuntu's ffmpeg 6.1 segfaults on `-reinit_filter 0` at a change of pixel format,
+        # which 5.1 handles -- so the runner's ffmpeg failed a test of behaviour the shipped
+        # image gets right, and would have passed anything that only its version does.
+        container: node:22-bookworm
         steps:
+            - name: Install the image's ffmpeg and Tesseract
+              run: |
+                  apt-get update
+                  apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-eng
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
             - uses: actions/setup-node@v4
@@ -51,8 +60,6 @@ jobs:
                   node-version: 22
                   cache: pnpm
 
-            # GitHub's Ubuntu runners ship ffmpeg, so the pipelines that shell out to it can
-            # be exercised for real rather than mocked.
             - name: Verify ffmpeg is available
               run: ffmpeg -version | head -1
 
