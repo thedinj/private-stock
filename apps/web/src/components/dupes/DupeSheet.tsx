@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Alert, Button, Center, Group, Pagination, Paper, Stack, Text } from "@mantine/core";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -14,9 +15,19 @@ import type {
     DupeSortResponse,
 } from "@private-stock/core";
 
-import { ApiError, api } from "@/lib/api/client";
+import { ApiError, api, getCurrentUser } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { invalidateListable } from "@/lib/api/trash";
+import {
+    choiceFor,
+    choicesOwner,
+    noChoices,
+    readChoices,
+    withChoice,
+    withoutChoices,
+    writeChoices,
+    type SheetChoices,
+} from "@/lib/dupeChoices";
 import {
     allApart,
     decidedOneByOne,
@@ -30,15 +41,16 @@ import {
     tickedByDefault,
     toResolveItem,
     toSortInput,
-    type Sorting,
 } from "@/lib/dupeTriage";
 import { prefersReducedMotion } from "@/lib/motion";
+import { rememberReturn } from "@/lib/returnTo";
 import { settling } from "@/lib/settling";
 import { isTypingTarget } from "@/lib/typingTarget";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DupeResolveDialog, type Decision } from "@/components/dupes/DupeResolveDialog";
 import { DupeRow } from "@/components/dupes/DupeRow";
 import { DupeViewDrawer } from "@/components/dupes/DupeViewDrawer";
+import { KeyTip } from "@/components/KeyTip";
 import { LoadFailed } from "@/components/LoadFailed";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
@@ -114,18 +126,42 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     onPage,
 }) => {
     const queryClient = useQueryClient();
+    const router = useRouter();
 
     /**
-     * The reviewer's departures from the defaults, per group.
+     * The reviewer's departures from the defaults, per group: the keeper, the tick, and a sorting
+     * under way (§10i).
      *
      * Only what they changed is stored; everything else is derived from the group, so a row
      * whose keeper they move re-derives whether it should be ticked — unless they have ticked
-     * or unticked it themselves, which then stands.
+     * or unticked it themselves, which then stands. Kept for the tab in `sessionStorage`
+     * (`dupeChoices.ts`), so opening an item and coming back finds them as they were.
      */
-    const [keeps, setKeeps] = useState<Record<string, string>>({});
-    const [ticks, setTicks] = useState<Record<string, boolean>>({});
+    const user = getCurrentUser();
+    const owner = user
+        ? choicesOwner(user.id, `${endpoint}?${new URLSearchParams(baseParams)}`)
+        : null;
+    const [kept, setKept] = useState(() => ({
+        owner,
+        choices: owner ? readChoices(owner) : noChoices(),
+    }));
+    let choices = kept.choices;
 
-    const [focused, setFocused] = useState(0);
+    // Another sheet -- the media control changed what it lists: its own choices, not these.
+    if (kept.owner !== owner) {
+        const next = { owner, choices: owner ? readChoices(owner) : noChoices() };
+
+        setKept(next);
+        choices = next.choices;
+    }
+
+    const setChoices = (change: (current: SheetChoices) => SheetChoices): void =>
+        setKept((current) => ({ ...current, choices: change(current.choices) }));
+
+    useEffect(() => {
+        if (kept.owner) writeChoices(kept.owner, kept.choices);
+    }, [kept]);
+
     const [confirming, setConfirming] = useState<Decision[] | null>(null);
     const [outcome, setOutcome] = useState<Outcome | null>(null);
     /** Groups just resolved, hidden until the refetch that drops them lands. */
@@ -136,8 +172,6 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
      * slide the copies into the keeper that was chosen, not into the default it reverts to.
      */
     const [merging, setMerging] = useState<Record<string, string>>({});
-    /** Rows being sorted into sets of the same thing (§10i), and how far each has got. */
-    const [sortings, setSortings] = useState<Record<string, Sorting>>({});
     /** A sorting waiting on the trash confirmation. */
     const [confirmingSort, setConfirmingSort] = useState<DupeGroup | null>(null);
     /** What the last sorting did, said once on the sheet. */
@@ -160,14 +194,14 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         placeholderData: keepPreviousData,
     });
 
-    /** A different set of rows: every per-row choice belonged to the old one. */
+    /**
+     * A different page of rows. The choices made on this one are kept, by group, for coming back
+     * to it; the keyboard starts at the top of the new one.
+     */
     const startOver = (): void => {
-        setKeeps({});
-        setTicks({});
-        setFocused(0);
+        setChoices((current) => ({ ...current, focusedId: null }));
         setSettled(new Set());
         setMerging({});
-        setSortings({});
     };
 
     const review = useMutation({
@@ -207,8 +241,12 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                     )
                 ),
             });
-            setKeeps({});
-            setTicks({});
+            setChoices((current) =>
+                withoutChoices(
+                    current,
+                    decisions.map(({ group }) => group.id)
+                )
+            );
 
             const done = new Set(
                 response.groups.filter((group) => group.reviewed).map((group) => group.groupId)
@@ -247,9 +285,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             }),
         onSuccess: (response, input) => {
             setConfirmingSort(null);
-            setSortings((current) =>
-                Object.fromEntries(Object.entries(current).filter(([id]) => id !== input.groupId))
-            );
+            setChoices((current) => withoutChoices(current, [input.groupId]));
 
             const together = input.sets.filter((set) => set.ids.length > 1).length;
             const alone = input.sets.length - together;
@@ -280,6 +316,28 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     });
 
     const groups = (data?.groups ?? []).filter((group) => !settled.has(group.id));
+
+    /**
+     * The row the keyboard is on, held as a group rather than a position so it survives the trip
+     * into an item and back. A row that leaves hands the keyboard to the one taking its place.
+     */
+    const lastFocused = useRef(0);
+    const foundFocus = groups.findIndex((group) => group.id === choices.focusedId);
+    const focused =
+        foundFocus >= 0
+            ? foundFocus
+            : Math.min(lastFocused.current, Math.max(groups.length - 1, 0));
+
+    lastFocused.current = focused;
+
+    const setFocused = (index: number): void => {
+        const id = groups[index]?.id ?? null;
+
+        if (id !== choices.focusedId) setChoices((current) => ({ ...current, focusedId: id }));
+    };
+
+    /** A row being sorted into sets of the same thing (§10i), and how far it has got. */
+    const sortingFor = (group: DupeGroup) => choiceFor(choices, group)?.sorting;
     // A settled group leaves and the rows below close ranks (§14, "Motion").
     const flip = useFlipGrid(groups.map((group) => group.id));
 
@@ -292,27 +350,28 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     };
     const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
-    const keepFor = (group: DupeGroup): string => keeps[group.id] ?? defaultKeep(group);
+    const keepFor = (group: DupeGroup): string =>
+        choiceFor(choices, group)?.keep ?? defaultKeep(group);
     // A row being sorted is decided by its own buttons, not by the page's.
     const tickedFor = (group: DupeGroup): boolean =>
         canDelete &&
-        !(group.id in sortings) &&
+        sortingFor(group) === undefined &&
         removable(group, keepFor(group)).length > 0 &&
-        (ticks[group.id] ?? tickedByDefault(group, keepFor(group)));
+        (choiceFor(choices, group)?.tick ?? tickedByDefault(group, keepFor(group)));
 
     const ticked = groups.filter(tickedFor);
     // What the page's own buttons reach: never a look-alike, which is decided where it stands.
     const tickable = groups.filter(
         (group) =>
             !decidedOneByOne(group) &&
-            !(group.id in sortings) &&
+            sortingFor(group) === undefined &&
             removable(group, keepFor(group)).length > 0
     );
     const unticked = groups.filter(
         (group) =>
             !decidedOneByOne(group) &&
             !group.reviewed &&
-            !(group.id in sortings) &&
+            sortingFor(group) === undefined &&
             !tickedFor(group)
     );
     const oneByOne = groups.some(decidedOneByOne);
@@ -321,45 +380,41 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     const startSort = (group: DupeGroup): void => {
         setRecorded(null);
         sort.reset();
-        setSortings((current) => ({ ...current, [group.id]: startSorting(group) }));
+        setChoices((current) => withChoice(current, group, { sorting: startSorting(group) }));
     };
     const cancelSort = (group: DupeGroup): void =>
-        setSortings((current) =>
-            Object.fromEntries(Object.entries(current).filter(([id]) => id !== group.id))
-        );
+        setChoices((current) => withChoice(current, group, { sorting: undefined }));
     const cycleSet = (group: DupeGroup, memberId: string): void =>
-        setSortings((current) => {
-            const sorting = current[group.id];
+        setChoices((current) => {
+            const sorting = choiceFor(current, group)?.sorting;
 
             return sorting
-                ? {
-                      ...current,
-                      [group.id]: {
+                ? withChoice(current, group, {
+                      sorting: {
                           ...sorting,
                           assign: {
                               ...sorting.assign,
                               [memberId]: nextSet(group, sorting, memberId),
                           },
                       },
-                  }
+                  })
                 : current;
         });
     const keepInSet = (group: DupeGroup, memberId: string): void =>
-        setSortings((current) => {
-            const sorting = current[group.id];
+        setChoices((current) => {
+            const sorting = choiceFor(current, group)?.sorting;
 
             return sorting
-                ? {
-                      ...current,
-                      [group.id]: {
+                ? withChoice(current, group, {
+                      sorting: {
                           ...sorting,
                           keepers: [memberId, ...sorting.keepers.filter((id) => id !== memberId)],
                       },
-                  }
+                  })
                 : current;
         });
     const submitSort = (group: DupeGroup, resolve: boolean): void => {
-        const sorting = sortings[group.id];
+        const sorting = sortingFor(group);
 
         if (!sorting) return;
 
@@ -381,15 +436,17 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     const freed = going.reduce((total, member) => total + (member.sizeBytes ?? 0), 0);
 
     const chooseKeep = (group: DupeGroup, memberId: string): void =>
-        setKeeps((current) => ({ ...current, [group.id]: memberId }));
+        setChoices((current) => withChoice(current, group, { keep: memberId }));
     const setTick = (group: DupeGroup, value: boolean): void =>
-        setTicks((current) => ({ ...current, [group.id]: value }));
+        setChoices((current) => withChoice(current, group, { tick: value }));
     /** "These are the same": the row goes with the page's trash, and folds out of the way. */
     const decideSame = (group: DupeGroup): void => {
         if (removable(group, keepFor(group)).length > 0) setTick(group, true);
     };
     const tickAll = (value: boolean): void =>
-        setTicks(Object.fromEntries(tickable.map((group) => [group.id, value])));
+        setChoices((current) =>
+            tickable.reduce((next, group) => withChoice(next, group, { tick: value }), current)
+        );
 
     const openConfirm = (): void => {
         if (ticked.length === 0) return;
@@ -408,9 +465,31 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     };
 
     /**
+     * Back from an item, the row the keyboard was on is put on screen again. The browser cannot
+     * restore the scroll itself: the rows arrive after it has tried.
+     */
+    const restoredFocus = useRef(choices.focusedId);
+
+    useEffect(() => {
+        if (restoredFocus.current === null || groups.length === 0) return;
+
+        const index = groups.findIndex((group) => group.id === restoredFocus.current);
+
+        restoredFocus.current = null;
+        if (index > 0) rowRefs.current[index]?.scrollIntoView({ block: "center" });
+    }, [groups]);
+
+    /** The group seen in the drawer, decided from there: the drawer closes, and on to the next. */
+    const decideFromDrawer = (group: DupeGroup, decide: () => void): void => {
+        decide();
+        setViewing(null);
+        moveFocus(groups.indexOf(group) + 1);
+    };
+
+    /**
      * The sheet from the keyboard: `j`/`k` between rows, a digit to choose the keeper, `y` for
-     * "these are the same" and on to the next, `n` for "none match", `x` to tick or untick,
-     * Shift+Enter to confirm. Read through a ref so the listener is attached once and still sees
+     * "these are the same" and on to the next, `n` for "none match", `r` to mark reviewed, `o` to
+     * open the copy it would keep, `x` to tick or untick, Shift+Enter to confirm. Read through a ref so the listener is attached once and still sees
      * this render's rows.
      */
     const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
@@ -430,7 +509,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         }
 
         const row = groups[Math.min(focused, groups.length - 1)];
-        const rowSorting = row ? sortings[row.id] : undefined;
+        const rowSorting = row ? sortingFor(row) : undefined;
 
         /**
          * A row being sorted (§10i) takes the keys that would otherwise choose: a digit moves that
@@ -476,6 +555,13 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             moveFocus(focused + 1);
         } else if (row && event.key === "n" && sortable(row) && !sort.isPending) {
             apart(row, null);
+        } else if (row && event.key === "r" && !review.isPending) {
+            // Keep them as they are, or reopen one kept that way.
+            review.mutate({ groupIds: [row.id], reviewed: !row.reviewed });
+        } else if (row && event.key === "o") {
+            // The copy it would keep, in full; Back returns here with the decisions intact.
+            rememberReturn();
+            router.push(`/media/${keepFor(row)}`);
         } else if (canDelete && row && event.key === "x") {
             if (removable(row, keepFor(row)).length > 0) setTick(row, !tickedFor(row));
         } else if (canDelete && event.key === "Enter" && event.shiftKey) {
@@ -508,15 +594,17 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         <Stack gap="lg">
             {canDelete && groups.length > 0 && (
                 <Text size="xs" c="dimmed" visibleFrom="sm">
-                    <kbd>j</kbd> / <kbd>k</kbd> move between groups · <kbd>1</kbd>–<kbd>9</kbd>{" "}
-                    choose the copy to keep · <kbd>y</kbd> the same: trash the rest
+                    Keys act on the group marked in brass · <kbd>j</kbd> / <kbd>k</kbd> move between
+                    groups · <kbd>1</kbd>–<kbd>9</kbd> choose the copy to keep · <kbd>y</kbd> the
+                    same: trash the rest
                     {oneByOne && (
                         <>
                             {" "}
                             · <kbd>n</kbd> none match · <kbd>s</kbd> sort into sets
                         </>
                     )}{" "}
-                    · <kbd>p</kbd> play the copies · <kbd>x</kbd> tick or untick · <kbd>Shift</kbd>+
+                    · <kbd>p</kbd> play the copies · <kbd>o</kbd> open the copy to keep ·{" "}
+                    <kbd>r</kbd> mark reviewed · <kbd>x</kbd> tick or untick · <kbd>Shift</kbd>+
                     <kbd>Enter</kbd> trash what is ticked
                 </Text>
             )}
@@ -632,7 +720,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                             onPlay={(member) =>
                                 setViewing({ groupId: group.id, memberId: member.id })
                             }
-                            sorting={sortings[group.id] ?? null}
+                            sorting={sortingFor(group) ?? null}
                             onSortStart={sortable(group) ? () => startSort(group) : null}
                             onSortCycle={(memberId) => cycleSet(group, memberId)}
                             onSortCancel={() => cancelSort(group)}
@@ -640,7 +728,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                             onApart={sortable(group) ? (memberId) => apart(group, memberId) : null}
                             sortBusy={sort.isPending && sort.variables?.groupId === group.id}
                             onKeep={
-                                group.id in sortings
+                                sortingFor(group)
                                     ? (memberId) => keepInSet(group, memberId)
                                     : canDelete
                                       ? (memberId) => chooseKeep(group, memberId)
@@ -724,9 +812,14 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                         )}
 
                         {canDelete && going.length > 0 && (
-                            <Button size="compact-sm" color="oxblood" onClick={openConfirm}>
-                                Trash {plural(going.length, "copy", "copies")}…
-                            </Button>
+                            <KeyTip
+                                label="Trash what the page has decided, after one confirmation"
+                                keys={["Shift", "Enter"]}
+                            >
+                                <Button size="compact-sm" color="oxblood" onClick={openConfirm}>
+                                    Trash {plural(going.length, "copy", "copies")}…
+                                </Button>
+                            </KeyTip>
                         )}
                     </Group>
                 </Paper>
@@ -743,15 +836,15 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             {/* A sorting's trash, confirmed like a page: each set of the same thing is a line. */}
             <DupeResolveDialog
                 decisions={
-                    confirmingSort && sortings[confirmingSort.id]
-                        ? sortedDecisions(confirmingSort, sortings[confirmingSort.id]!).filter(
+                    confirmingSort && sortingFor(confirmingSort)
+                        ? sortedDecisions(confirmingSort, sortingFor(confirmingSort)!).filter(
                               ({ group, keepId }) => removable(group, keepId).length > 0
                           )
                         : null
                 }
                 onCancel={() => setConfirmingSort(null)}
                 onConfirm={() => {
-                    const sorting = confirmingSort && sortings[confirmingSort.id];
+                    const sorting = confirmingSort && sortingFor(confirmingSort);
 
                     if (confirmingSort && sorting) {
                         sort.mutate(toSortInput(confirmingSort, sorting, true));
@@ -768,6 +861,20 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                     setViewing((current) => (current ? { ...current, memberId } : current))
                 }
                 onClose={() => setViewing(null)}
+                onSame={
+                    viewingGroup &&
+                    canDelete &&
+                    decidedOneByOne(viewingGroup) &&
+                    !tickedFor(viewingGroup) &&
+                    removable(viewingGroup, keepFor(viewingGroup)).length > 0
+                        ? () => decideFromDrawer(viewingGroup, () => decideSame(viewingGroup))
+                        : null
+                }
+                onNoneMatch={
+                    viewingGroup && sortable(viewingGroup) && !sort.isPending
+                        ? () => decideFromDrawer(viewingGroup, () => apart(viewingGroup, null))
+                        : null
+                }
             />
         </Stack>
     );

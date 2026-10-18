@@ -8,6 +8,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import type { DupeMember } from "@private-stock/core";
 
 import { FileName } from "@/components/faces/FileName";
+import { KeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { formatDuration } from "@/lib/dupeTriage";
 import { rememberReturn } from "@/lib/returnTo";
@@ -24,6 +25,10 @@ import { useCloseOnBack } from "@/lib/useCloseOnBack";
  * copies keeps the time, and a digit switches without reaching for the pointer. The time is kept
  * as it is rather than as a share of the length: copies of one video run within a second or two
  * of each other, and the same second is closer to the same frame than the same percentage is.
+ *
+ * **It decides, too.** Watching is how a look-alike gets settled, so the answer is given where
+ * the watching happened: `y` or "These are the same", `n` or "None match". Either closes the
+ * drawer and moves the sheet on to the next group.
  */
 export const DupeViewDrawer: React.FC<{
     /** The group's copies, in the order the row shows them. */
@@ -32,7 +37,11 @@ export const DupeViewDrawer: React.FC<{
     viewingId: string | null;
     onView: (memberId: string) => void;
     onClose: () => void;
-}> = ({ members, viewingId, onView, onClose }) => {
+    /** Decides the group as the same thing; null where it cannot be, or is already decided. */
+    onSame: (() => void) | null;
+    /** Decides that none of its copies match; null where that cannot be said. */
+    onNoneMatch: (() => void) | null;
+}> = ({ members, viewingId, onView, onClose, onSame, onNoneMatch }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
     const video = useRef<HTMLVideoElement | null>(null);
     /** Where the last copy was when another was chosen; the next one starts there. */
@@ -52,8 +61,10 @@ export const DupeViewDrawer: React.FC<{
 
     const switchRef = useRef(switchTo);
     switchRef.current = switchTo;
+    const decideRef = useRef({ onSame, onNoneMatch });
+    decideRef.current = { onSame, onNoneMatch };
 
-    // A digit plays that copy, as it chooses one on the row.
+    // A digit plays that copy, as it chooses one on the row; `y` and `n` decide the group.
     useEffect(() => {
         if (!open) return;
 
@@ -63,10 +74,19 @@ export const DupeViewDrawer: React.FC<{
             }
 
             const target = /^[1-9]$/.test(event.key) ? members[Number(event.key) - 1] : undefined;
+            const decide =
+                event.key === "y"
+                    ? decideRef.current.onSame
+                    : event.key === "n"
+                      ? decideRef.current.onNoneMatch
+                      : null;
 
             if (target) {
                 event.preventDefault();
                 switchRef.current(target.id);
+            } else if (decide) {
+                event.preventDefault();
+                decide();
             }
         };
 
@@ -144,6 +164,49 @@ export const DupeViewDrawer: React.FC<{
                         {members.length > 1
                             ? "Switching copies keeps the moment. Your choices on the row stay as they are."
                             : "Your choices on the row stay as they are."}
+                    </Text>
+                    {(onSame || onNoneMatch) && (
+                        <Group gap="xs">
+                            {onSame && (
+                                <KeyTip
+                                    label="Keep the chosen copy and trash the rest, then on to the next group"
+                                    keys={["y"]}
+                                >
+                                    <Button variant="light" color="brass" onClick={onSame}>
+                                        These are the same
+                                    </Button>
+                                </KeyTip>
+                            )}
+                            {onNoneMatch && (
+                                <KeyTip
+                                    label="Keep every copy and never offer them as duplicates again, then on to the next group"
+                                    keys={["n"]}
+                                >
+                                    <Button variant="subtle" color="oxblood" onClick={onNoneMatch}>
+                                        None match
+                                    </Button>
+                                </KeyTip>
+                            )}
+                        </Group>
+                    )}
+                    <Text size="xs" c="dimmed" visibleFrom="sm">
+                        {members.length > 1 && (
+                            <>
+                                <kbd>1</kbd>–<kbd>{Math.min(members.length, 9)}</kbd> switch copy
+                                ·{" "}
+                            </>
+                        )}
+                        {onSame && (
+                            <>
+                                <kbd>y</kbd> the same ·{" "}
+                            </>
+                        )}
+                        {onNoneMatch && (
+                            <>
+                                <kbd>n</kbd> none match ·{" "}
+                            </>
+                        )}
+                        <kbd>Esc</kbd> back to the list
                     </Text>
                     <Group>
                         <Button

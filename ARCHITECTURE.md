@@ -5392,8 +5392,10 @@ So the screen is a **triage sheet**, built for the glance that decides nearly ev
   button deletes what the line above it counted. The review nav's Duplicates count is of videos,
   matching what the page opens on.
 - **Keyboard**: `j`/`k` between rows, a digit to choose the keeper, `y` for "these are the same"
-  and on to the next, `n` for "none match" (§10i), `x` to tick or untick, Shift+Enter to
-  confirm. Identical rows left unticked can be marked reviewed together, which is its own press
+  and on to the next, `n` for "none match" (§10i), `p` to play the copies, `o` to open the copy
+  it would keep, `r` to mark reviewed, `x` to tick or untick, Shift+Enter to confirm. In the play
+  drawer, digits switch copies and `y`/`n` decide the group there, closing the drawer and moving
+  on, because watching is where a look-alike gets settled. Identical rows left unticked can be marked reviewed together, which is its own press
   rather than part of trashing because "unticked" can also mean "not decided yet".
 
 ### Look-alikes are decided one at a time
@@ -5418,6 +5420,15 @@ could not catch every wrong one. So, decided 2026-10-18:
 
 Moving on with `j` is the skip: an undecided row is simply left, and comes back on the next
 visit.
+
+**Decisions survive opening an item.** The sheet unmounts when an item opens, and Back used to
+find every decision gone. They are kept for the tab in `sessionStorage` (`dupeChoices.ts`), per
+user and per sheet, as the library keeps its selection (§14b), with the row the keyboard was on.
+Retaining them was chosen over warning before leaving: a warning still costs the decisions when
+the reviewer does leave, and leaving to check an item is the ordinary way of working. **Each
+decision carries the copies it was made about**, and it is dropped if the group has changed
+since. A tick restored onto a group that has gained a copy would trash that copy unseen. Page
+changes keep them as well, by group, for coming back to the page.
 
 **The request names the copies, not just the keeper.** `POST /api/dupes/resolve` takes, per
 group, the keeper _and_ the copies the row showed going. Naming the keeper was always required —

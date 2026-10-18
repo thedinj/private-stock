@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Badge, Button, Checkbox, Group, Text, Tooltip } from "@mantine/core";
+import { Badge, Button, Checkbox, Group, Kbd, Text, Tooltip } from "@mantine/core";
 
 import type { DupeGroup, DupeMember } from "@private-stock/core";
 
@@ -21,6 +21,7 @@ import {
 } from "@/lib/dupeTriage";
 import { animate, DURATION, EASE } from "@/lib/motion";
 import { rememberReturn } from "@/lib/returnTo";
+import { KeyTip } from "@/components/KeyTip";
 
 import { DupeLook } from "./DupeLook";
 import classes from "./DupeRow.module.scss";
@@ -254,13 +255,18 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                 >
                     <div className={classes.tick}>
                         {onTick && (
-                            <Checkbox
-                                size="md"
-                                color="brass"
-                                checked
-                                onChange={(event) => onTick(event.currentTarget.checked)}
-                                aria-label="Not decided after all: open this group again"
-                            />
+                            <KeyTip
+                                label="Not decided after all: open this group again"
+                                keys={["x"]}
+                            >
+                                <Checkbox
+                                    size="md"
+                                    color="brass"
+                                    checked
+                                    onChange={(event) => onTick(event.currentTarget.checked)}
+                                    aria-label="Not decided after all: open this group again"
+                                />
+                            </KeyTip>
                         )}
                     </div>
 
@@ -279,17 +285,19 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                             {formatBytes(freed)}
                         </Text>
                         {onTick && (
-                            <Button
-                                size="compact-xs"
-                                variant="subtle"
-                                color="brass"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onTick(false);
-                                }}
-                            >
-                                Undo
-                            </Button>
+                            <KeyTip label="Open this group again, undecided" keys={["x"]}>
+                                <Button
+                                    size="compact-xs"
+                                    variant="subtle"
+                                    color="brass"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onTick(false);
+                                    }}
+                                >
+                                    Undo
+                                </Button>
+                            </KeyTip>
                         )}
                     </div>
                 </div>
@@ -310,13 +318,22 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                     {/* Absent rather than disabled when nothing here could be removed: a
                         control that cannot apply is gone rather than greyed (§14e). */}
                     {onTick && !sorting && going.length > 0 && (
-                        <Checkbox
-                            size="md"
-                            color="brass"
-                            checked={ticked}
-                            onChange={(event) => onTick(event.currentTarget.checked)}
-                            aria-label={ticked ? "Leave this group out" : "Include this group"}
-                        />
+                        <KeyTip
+                            label={
+                                ticked
+                                    ? "Leave this group out of the page's trash"
+                                    : "Include this group in the page's trash"
+                            }
+                            keys={["x"]}
+                        >
+                            <Checkbox
+                                size="md"
+                                color="brass"
+                                checked={ticked}
+                                onChange={(event) => onTick(event.currentTarget.checked)}
+                                aria-label={ticked ? "Leave this group out" : "Include this group"}
+                            />
+                        </KeyTip>
                     )}
                 </div>
 
@@ -368,59 +385,85 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                 </Text>
                             )}
                             {onSame && !sorting && !ticked && going.length > 0 && (
-                                <Button
-                                    size="compact-xs"
-                                    variant="light"
-                                    color="brass"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        onSame();
-                                    }}
+                                <KeyTip
+                                    label="Keep the chosen copy and trash the rest, with the page"
+                                    keys={["y"]}
                                 >
-                                    These are the same
-                                </Button>
+                                    <Button
+                                        size="compact-xs"
+                                        variant="light"
+                                        color="brass"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onSame();
+                                        }}
+                                    >
+                                        These are the same
+                                    </Button>
+                                </KeyTip>
                             )}
                             {/* Sorting is for three or more: two copies that are not the same
                                 thing are "None match". Lit when the app sees more than one. */}
                             {onSortStart && !sorting && group.members.length > 2 && (
-                                <Button
-                                    size="compact-xs"
-                                    variant={group.suggestedSets.length > 1 ? "light" : "subtle"}
-                                    color="brass"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        onSortStart();
-                                    }}
+                                <KeyTip
+                                    label="Split the copies into the ones that are the same thing and the ones that are not"
+                                    keys={["s"]}
                                 >
-                                    Sort into sets…
-                                </Button>
+                                    <Button
+                                        size="compact-xs"
+                                        variant={
+                                            group.suggestedSets.length > 1 ? "light" : "subtle"
+                                        }
+                                        color="brass"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onSortStart();
+                                        }}
+                                    >
+                                        Sort into sets…
+                                    </Button>
+                                </KeyTip>
                             )}
                             {onApart && !sorting && (
+                                <KeyTip
+                                    label="Keep every copy, and never offer them as duplicates of each other again"
+                                    keys={["n"]}
+                                >
+                                    <Button
+                                        size="compact-xs"
+                                        variant="subtle"
+                                        color="oxblood"
+                                        loading={sortBusy}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onApart(null);
+                                        }}
+                                    >
+                                        None match
+                                    </Button>
+                                </KeyTip>
+                            )}
+                            <KeyTip
+                                label={
+                                    group.reviewed
+                                        ? "Put the group back in the queue"
+                                        : "Keep every copy as it is and take the group off the queue"
+                                }
+                                keys={["r"]}
+                            >
                                 <Button
                                     size="compact-xs"
                                     variant="subtle"
-                                    color="oxblood"
-                                    loading={sortBusy}
+                                    color="brass"
+                                    loading={reviewing}
                                     onClick={(event) => {
                                         event.stopPropagation();
-                                        onApart(null);
+                                        onReview(!group.reviewed);
                                     }}
                                 >
-                                    None match
+                                    {group.reviewed ? "Reopen" : "Mark reviewed"}
                                 </Button>
-                            )}
-                            <Button
-                                size="compact-xs"
-                                variant="subtle"
-                                color="brass"
-                                loading={reviewing}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onReview(!group.reviewed);
-                                }}
-                            >
-                                {group.reviewed ? "Reopen" : "Mark reviewed"}
-                            </Button>
+                            </KeyTip>
                         </div>
                     </div>
 
@@ -440,7 +483,24 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                     className={classes.member}
                                 >
                                     <Tooltip
-                                        label={`${member.rootLabel} · ${member.relPath}`}
+                                        label={
+                                            <>
+                                                {member.rootLabel} · {member.relPath}
+                                                {onKeep && (
+                                                    <Text size="xs" c="dimmed" mt={4}>
+                                                        {sorting
+                                                            ? "Press to keep this copy of its set"
+                                                            : "Press to keep this copy"}
+                                                        {!sorting && index < 9 && (
+                                                            <>
+                                                                {" "}
+                                                                <Kbd size="xs">{index + 1}</Kbd>
+                                                            </>
+                                                        )}
+                                                    </Text>
+                                                )}
+                                            </>
+                                        }
                                         openDelay={500}
                                         multiline
                                         maw={420}
@@ -505,18 +565,23 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                     {sorting && number !== null && (
                                         // The copy's set. Pressing moves it to the next set, then
                                         // to a new one; its digit does the same from the keys.
-                                        <button
-                                            type="button"
-                                            className={classes.setChip}
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                onSortCycle(member.id);
-                                            }}
-                                            aria-label={`In set ${setName(number)}. Move ${member.title} to another set`}
+                                        <KeyTip
+                                            label="Move this copy to the next set, or a new one"
+                                            keys={index < 9 ? [String(index + 1)] : []}
                                         >
-                                            Set {setName(number)}
-                                            <span aria-hidden>→</span>
-                                        </button>
+                                            <button
+                                                type="button"
+                                                className={classes.setChip}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onSortCycle(member.id);
+                                                }}
+                                                aria-label={`In set ${setName(number)}. Move ${member.title} to another set`}
+                                            >
+                                                Set {setName(number)}
+                                                <span aria-hidden>→</span>
+                                            </button>
+                                        </KeyTip>
                                     )}
 
                                     <div className={classes.titleLine}>
@@ -563,23 +628,33 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                         {plural(sortedGoing.length, "copy", "copies")}…
                                     </Button>
                                 )}
-                                <Button
-                                    size="compact-sm"
-                                    variant="light"
-                                    color="brass"
-                                    loading={sortBusy}
-                                    onClick={() => onSortSubmit(false)}
+                                <KeyTip
+                                    label="Record the sets without trashing anything; each comes back as its own group"
+                                    keys={["Enter"]}
                                 >
-                                    Just record
-                                </Button>
-                                <Button
-                                    size="compact-sm"
-                                    variant="subtle"
-                                    color="gray"
-                                    onClick={onSortCancel}
+                                    <Button
+                                        size="compact-sm"
+                                        variant="light"
+                                        color="brass"
+                                        loading={sortBusy}
+                                        onClick={() => onSortSubmit(false)}
+                                    >
+                                        Just record
+                                    </Button>
+                                </KeyTip>
+                                <KeyTip
+                                    label="Stop sorting, and leave the group as it was"
+                                    keys={["Esc"]}
                                 >
-                                    Cancel
-                                </Button>
+                                    <Button
+                                        size="compact-sm"
+                                        variant="subtle"
+                                        color="gray"
+                                        onClick={onSortCancel}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </KeyTip>
                             </Group>
                         </div>
                     )}
