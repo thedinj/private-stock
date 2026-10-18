@@ -90,6 +90,13 @@ interface DupeRowProps {
     group: DupeGroup;
     keepId: string;
     ticked: boolean;
+    /**
+     * Decided as the same and drawn as one line (§10c): a look-alike somebody has said is the
+     * same thing is out of the way of the ones still to decide, and unticking opens it again.
+     */
+    folded: boolean;
+    /** "These are the same", on a look-alike not yet decided; null without the `delete` scope. */
+    onSame: (() => void) | null;
     /** Whether the keyboard is on this row, which shows the keys that choose a copy. */
     focused: boolean;
     /** Null without the `delete` scope: the row is then a comparison with no choice in it. */
@@ -128,6 +135,8 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
             group,
             keepId,
             ticked,
+            folded,
+            onSame,
             focused,
             onKeep,
             onTick,
@@ -230,6 +239,63 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
         const disagreed = againstAdvice(group, keepId);
         const freed = going.reduce((total, member) => total + (member.sizeBytes ?? 0), 0);
 
+        if (folded) {
+            const keeper = group.members.find((member) => member.id === keepId);
+
+            // No strip to merge along, so a folded row that is resolved settles at once and leaves.
+            return (
+                <div
+                    ref={ref}
+                    data-flip-key={group.id}
+                    className={classes.row}
+                    data-focused={focused}
+                    onClick={onFocus}
+                    onFocus={onFocus}
+                >
+                    <div className={classes.tick}>
+                        {onTick && (
+                            <Checkbox
+                                size="md"
+                                color="brass"
+                                checked
+                                onChange={(event) => onTick(event.currentTarget.checked)}
+                                aria-label="Not decided after all: open this group again"
+                            />
+                        )}
+                    </div>
+
+                    <div className={classes.folded}>
+                        <div className={classes.foldedCover}>
+                            {keeper?.coverUrl && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={keeper.coverUrl} alt="" loading="lazy" />
+                            )}
+                        </div>
+                        <Text size="sm" truncate className={classes.foldedText}>
+                            Keeping {keeper?.title ?? "the chosen copy"}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                            trashing {plural(going.length, "copy", "copies")} · frees{" "}
+                            {formatBytes(freed)}
+                        </Text>
+                        {onTick && (
+                            <Button
+                                size="compact-xs"
+                                variant="subtle"
+                                color="brass"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onTick(false);
+                                }}
+                            >
+                                Undo
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div
                 ref={ref}
@@ -300,6 +366,19 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                 <Text size="xs" c="dimmed">
                                     frees {formatBytes(freed)}
                                 </Text>
+                            )}
+                            {onSame && !sorting && !ticked && going.length > 0 && (
+                                <Button
+                                    size="compact-xs"
+                                    variant="light"
+                                    color="brass"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onSame();
+                                    }}
+                                >
+                                    These are the same
+                                </Button>
                             )}
                             {/* Sorting is for three or more: two copies that are not the same
                                 thing are "None match". Lit when the app sees more than one. */}

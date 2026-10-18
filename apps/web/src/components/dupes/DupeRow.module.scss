@@ -296,3 +296,33 @@
         scroll-snap-align: start;
     }
 }
+
+// A look-alike decided as the same, folded to one line (§10c): the keeper, and what goes.
+.folded {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px var(--mantine-spacing-sm);
+    min-height: 44px;
+}
+
+.foldedCover {
+    flex: none;
+    width: 56px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--ps-well);
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.foldedText {
+    min-width: 0;
+    max-width: 100%;
+}

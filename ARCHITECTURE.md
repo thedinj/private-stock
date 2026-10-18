@@ -5377,8 +5377,9 @@ So the screen is a **triage sheet**, built for the glance that decides nearly ev
 - **The picture is the control.** Pressing a copy makes it the keeper; each copy says on its
   picture what will happen to it (Keep, Trash, Read-only). A row whose keeper the reviewer moved
   says "Not the app's pick" where the reason used to be.
-- **Rows start ticked** with the recommendation, and one button on a pinned bar — "Trash 73
-  copies… · frees 184 GB" — sends the page. **Unless a glance could get the row wrong**: a group
+- **Identical rows start ticked** with the recommendation, and one button on a pinned bar — "Trash 73
+  copies… · frees 184 GB" — sends the page. Look-alikes do not: they are decided one at a time
+  (below). **Unless a glance could get the row wrong**: a group
   with a caution (a different cut, a recommended copy shorter than another, a copy with no
   picture — see above) or with clips on the copies that would go starts unticked, and says why
   on the row. Clips are drawn on the client because they depend on which copy is kept.
@@ -5390,9 +5391,33 @@ So the screen is a **triage sheet**, built for the glance that decides nearly ev
   counts, Identical's summary and its "delete every identical copy" all follow the control, so the
   button deletes what the line above it counted. The review nav's Duplicates count is of videos,
   matching what the page opens on.
-- **Keyboard**: `j`/`k` between rows, a digit to choose the keeper, `x` to tick, Shift+Enter to
-  confirm. Rows left unticked can be marked reviewed together, which is its own press rather
-  than part of trashing because "unticked" can also mean "not decided yet".
+- **Keyboard**: `j`/`k` between rows, a digit to choose the keeper, `y` for "these are the same"
+  and on to the next, `n` for "none match" (§10i), `x` to tick or untick, Shift+Enter to
+  confirm. Identical rows left unticked can be marked reviewed together, which is its own press
+  rather than part of trashing because "unticked" can also mean "not decided yet".
+
+### Look-alikes are decided one at a time
+
+Ticking every row by default suited a matcher that found little beyond near-identical encodes.
+Once look-alikes came from tile prints and offset copies too (§10h), "looks the same" stopped
+being a safe default. A page of rows trashed in one press was a page of bets, and the cautions
+could not catch every wrong one. So, decided 2026-10-18:
+
+- **A look-alike never starts ticked, and nothing in bulk reaches it.** "Tick all" and "Mark
+  reviewed" for the page apply to identical rows only. A look-alike is ticked by somebody
+  saying its copies are the same: `y`, or **These are the same** on the row, which is the
+  same press on a phone.
+- **A decided row folds to one line**: the keeper's picture, "Keeping …", what goes and what it
+  frees, and **Undo**. The page stays about the groups still to decide. Unticking it opens the
+  row again.
+- **Trashing still goes by the page.** The bar sends every decided row in one confirmation, as
+  before. What changed is that every row in it was decided, not defaulted.
+- **No batch button for the clear-cut ones.** One was considered — tick every group whose
+  copies all match each other directly — and rejected. It is the same default under another
+  name, and `y` per group is fast enough.
+
+Moving on with `j` is the skip: an undecided row is simply left, and comes back on the next
+visit.
 
 **The request names the copies, not just the keeper.** `POST /api/dupes/resolve` takes, per
 group, the keeper _and_ the copies the row showed going. Naming the keeper was always required —

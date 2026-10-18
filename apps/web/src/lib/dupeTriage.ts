@@ -42,14 +42,23 @@ export const defaultKeep = (group: DupeGroup): string =>
     group.suggestedKeepId ?? group.members[0]?.id ?? "";
 
 /**
+ * Whether a group is decided one at a time (§10c "Look-alikes are decided one at a time"): a
+ * look-alike is ticked only by somebody saying its copies are the same, and nothing on the page
+ * ticks or marks it in bulk. Identical copies have nothing to judge, so they still go by the page.
+ */
+export const decidedOneByOne = (group: DupeGroup): boolean => group.kind === "near";
+
+/**
  * Whether a row starts ticked.
  *
- * Ticked unless there is a reason not to, because the sheet exists so a page of
- * recommendations can be accepted in one press — and the reasons are exactly the groups a
- * glance would get wrong. A group already marked reviewed starts unticked too: reviewing it was
- * a decision to leave it as it is.
+ * An identical row is ticked unless there is a reason not to, because a page of them can be
+ * accepted in one press — and the reasons are exactly the groups a glance would get wrong. A
+ * look-alike never starts ticked: matching finds varied enough copies that "looks the same" is a
+ * question for a person every time. A group already marked reviewed starts unticked too:
+ * reviewing it was a decision to leave it as it is.
  */
 export const tickedByDefault = (group: DupeGroup, keepId: string): boolean =>
+    !decidedOneByOne(group) &&
     !group.reviewed &&
     removable(group, keepId).length > 0 &&
     rowCautions(group, keepId).length === 0;

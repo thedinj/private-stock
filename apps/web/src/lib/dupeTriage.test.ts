@@ -38,16 +38,25 @@ const group = (overrides: Partial<DupeGroup> = {}): DupeGroup =>
     }) as DupeGroup;
 
 describe("which rows start ticked", () => {
-    it("ticks an ordinary group with the recommendation", () => {
-        expect(tickedByDefault(group(), "best")).toBe(true);
+    it("ticks an ordinary identical group with the recommendation", () => {
+        expect(tickedByDefault(group({ kind: "exact" }), "best")).toBe(true);
+    });
+
+    it("never ticks a look-alike: somebody has to say its copies are the same", () => {
+        expect(tickedByDefault(group(), "best")).toBe(false);
     });
 
     it("leaves a group with a server caution unticked", () => {
-        expect(tickedByDefault(group({ cautions: ["Lengths differ"] }), "best")).toBe(false);
+        expect(
+            tickedByDefault(group({ kind: "exact", cautions: ["Lengths differ"] }), "best")
+        ).toBe(false);
     });
 
     it("leaves a group unticked when clips would go with the doomed copy", () => {
-        const withClips = group({ members: [member("best"), member("worse", { clipCount: 2 })] });
+        const withClips = group({
+            kind: "exact",
+            members: [member("best"), member("worse", { clipCount: 2 })],
+        });
 
         expect(tickedByDefault(withClips, "best")).toBe(false);
         expect(rowCautions(withClips, "best")[0]).toMatch(/^2 clips are cut/);
@@ -61,7 +70,7 @@ describe("which rows start ticked", () => {
     });
 
     it("leaves a reviewed group unticked", () => {
-        expect(tickedByDefault(group({ reviewed: true }), "best")).toBe(false);
+        expect(tickedByDefault(group({ kind: "exact", reviewed: true }), "best")).toBe(false);
     });
 
     it("cannot tick a group where nothing could be removed", () => {

@@ -19,6 +19,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
 import { invalidateListable } from "@/lib/api/trash";
 import {
     allApart,
+    decidedOneByOne,
     defaultKeep,
     formatBytes,
     nextSet,
@@ -49,9 +50,13 @@ import barClasses from "@/components/library/SelectionBar.module.scss";
  *
  * The queue runs to hundreds of groups, and nearly all of them are decided by a glance at the
  * pictures and the resolution. So the sheet is built for the glance: a page of compact rows,
- * the recommended copy already chosen, every row that a glance could get wrong left unticked,
- * and one button that trashes the rest of the page. The old screen asked for one confirmation
- * per group; this one asks for one per page.
+ * the recommended copy already chosen, and one button that trashes what the page decided. The
+ * old screen asked for one confirmation per group; this one asks for one per page.
+ *
+ * **Identical rows are decided by the page, look-alikes one at a time** (§10c). An identical row
+ * starts ticked unless a glance could get it wrong, and "Tick all" and "Mark reviewed" reach it.
+ * A look-alike starts unticked and nothing in bulk touches it: `y` (or "These are the same") says
+ * its copies are, which ticks it and folds it to a line, and the keyboard moves to the next.
  *
  * **It still takes a side (§10c).** Each row is ordered best first, says why its keeper won, and
  * marks what each other copy would cost. Pressing a copy makes it the keeper instead, and the
@@ -296,12 +301,21 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         (ticks[group.id] ?? tickedByDefault(group, keepFor(group)));
 
     const ticked = groups.filter(tickedFor);
+    // What the page's own buttons reach: never a look-alike, which is decided where it stands.
     const tickable = groups.filter(
-        (group) => !(group.id in sortings) && removable(group, keepFor(group)).length > 0
+        (group) =>
+            !decidedOneByOne(group) &&
+            !(group.id in sortings) &&
+            removable(group, keepFor(group)).length > 0
     );
     const unticked = groups.filter(
-        (group) => !group.reviewed && !(group.id in sortings) && !tickedFor(group)
+        (group) =>
+            !decidedOneByOne(group) &&
+            !group.reviewed &&
+            !(group.id in sortings) &&
+            !tickedFor(group)
     );
+    const oneByOne = groups.some(decidedOneByOne);
 
     const sortable = (group: DupeGroup): boolean => group.kind === "near";
     const startSort = (group: DupeGroup): void => {
@@ -370,6 +384,10 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         setKeeps((current) => ({ ...current, [group.id]: memberId }));
     const setTick = (group: DupeGroup, value: boolean): void =>
         setTicks((current) => ({ ...current, [group.id]: value }));
+    /** "These are the same": the row goes with the page's trash, and folds out of the way. */
+    const decideSame = (group: DupeGroup): void => {
+        if (removable(group, keepFor(group)).length > 0) setTick(group, true);
+    };
     const tickAll = (value: boolean): void =>
         setTicks(Object.fromEntries(tickable.map((group) => [group.id, value])));
 
@@ -390,9 +408,10 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     };
 
     /**
-     * The sheet from the keyboard: `j`/`k` between rows, a digit to choose the keeper, `x` to
-     * tick, Shift+Enter to confirm. Read through a ref so the listener is attached once and
-     * still sees this render's rows.
+     * The sheet from the keyboard: `j`/`k` between rows, a digit to choose the keeper, `y` for
+     * "these are the same" and on to the next, `n` for "none match", `x` to tick or untick,
+     * Shift+Enter to confirm. Read through a ref so the listener is attached once and still sees
+     * this render's rows.
      */
     const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
 
@@ -452,6 +471,11 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             const member = row.members[Number(event.key) - 1];
 
             if (member) chooseKeep(row, member.id);
+        } else if (canDelete && row && event.key === "y") {
+            decideSame(row);
+            moveFocus(focused + 1);
+        } else if (row && event.key === "n" && sortable(row) && !sort.isPending) {
+            apart(row, null);
         } else if (canDelete && row && event.key === "x") {
             if (removable(row, keepFor(row)).length > 0) setTick(row, !tickedFor(row));
         } else if (canDelete && event.key === "Enter" && event.shiftKey) {
@@ -485,9 +509,15 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             {canDelete && groups.length > 0 && (
                 <Text size="xs" c="dimmed" visibleFrom="sm">
                     <kbd>j</kbd> / <kbd>k</kbd> move between groups · <kbd>1</kbd>–<kbd>9</kbd>{" "}
-                    choose the copy to keep · <kbd>x</kbd> tick · <kbd>p</kbd> play the copies ·{" "}
-                    <kbd>s</kbd> sort into sets · <kbd>Shift</kbd>+<kbd>Enter</kbd> trash what is
-                    ticked
+                    choose the copy to keep · <kbd>y</kbd> the same: trash the rest
+                    {oneByOne && (
+                        <>
+                            {" "}
+                            · <kbd>n</kbd> none match · <kbd>s</kbd> sort into sets
+                        </>
+                    )}{" "}
+                    · <kbd>p</kbd> play the copies · <kbd>x</kbd> tick or untick · <kbd>Shift</kbd>+
+                    <kbd>Enter</kbd> trash what is ticked
                 </Text>
             )}
 
@@ -591,6 +621,10 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                             group={group}
                             keepId={merging[group.id] ?? keepFor(group)}
                             ticked={group.id in merging || tickedFor(group)}
+                            folded={decidedOneByOne(group) && tickedFor(group)}
+                            onSame={
+                                canDelete && decidedOneByOne(group) ? () => decideSame(group) : null
+                            }
                             merging={group.id in merging}
                             onMerged={() => settle(group.id)}
                             focused={index === focused}
@@ -649,7 +683,9 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                             <Text size="sm">
                                 {ticked.length > 0
                                     ? `${plural(going.length, "copy", "copies")} from ${plural(ticked.length, "group", "groups")} · frees ${formatBytes(freed)}`
-                                    : "Nothing ticked on this page"}
+                                    : oneByOne
+                                      ? "Nothing decided yet: say which groups are the same"
+                                      : "Nothing ticked on this page"}
                             </Text>
                         )}
 
