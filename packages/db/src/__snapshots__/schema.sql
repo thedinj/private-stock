@@ -123,6 +123,17 @@ CREATE TABLE "DupeMember" (
             UNIQUE ("groupId", "mediaId")
         );
 
+CREATE TABLE "DupeVerdict" (
+            "aId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "bId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "verdict" TEXT NOT NULL CHECK("verdict" IN ('same', 'different')),
+            "decisionId" TEXT NOT NULL CHECK(length("decisionId") <= 64),
+            "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY ("aId", "bId"),
+            CHECK ("aId" < "bId")
+        ) WITHOUT ROWID;
+
 CREATE TABLE "ErrorLog" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "requestId" TEXT CHECK("requestId" IS NULL OR length("requestId") <= 64),
@@ -1168,6 +1179,10 @@ CREATE INDEX "idx_CollectionPin_lookup"
             ON "CollectionPin" ("kind", "collectionId");
 
 CREATE INDEX "idx_DupeMember_mediaId" ON "DupeMember" ("mediaId");
+
+CREATE INDEX "idx_DupeVerdict_bId" ON "DupeVerdict" ("bId");
+
+CREATE INDEX "idx_DupeVerdict_decision" ON "DupeVerdict" ("decisionId");
 
 CREATE INDEX "idx_ErrorLog_createdAt" ON "ErrorLog" ("createdAt");
 

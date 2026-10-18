@@ -1,0 +1,61 @@
+/**
+ * One sorting (§10i): its sets side by side, each framed, so "these two, apart from those two"
+ * reads from the pictures alone.
+ */
+.decision {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-block: var(--mantine-spacing-xs);
+    border-top: 1px solid var(--ps-hairline);
+}
+
+.sets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--mantine-spacing-xs);
+}
+
+.set {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--mantine-color-brass-8);
+    border-radius: 4px;
+}
+
+.copy {
+    display: block;
+    width: 96px;
+    aspect-ratio: 16 / 9;
+    border-radius: 3px;
+    overflow: hidden;
+    background-color: var(--ps-well);
+    font-size: 10px;
+    color: var(--mantine-color-dimmed);
+    text-decoration: none;
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    span {
+        display: block;
+        padding: 4px;
+        overflow: hidden;
+    }
+
+    // A copy that went to the trash since: still named, so the sorting still reads whole.
+    &[data-active="false"] {
+        opacity: 0.4;
+    }
+}
+
+@media (max-width: 640px) {
+    .copy {
+        width: 72px;
+    }
+}

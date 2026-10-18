@@ -11,6 +11,7 @@ import { DupeRulesForm } from "@/components/admin/DupeRulesForm";
 import { RulesDrawer } from "@/components/admin/RulesDrawer";
 import { DupeSheet } from "@/components/dupes/DupeSheet";
 import { IdenticalPanel } from "@/components/dupes/IdenticalPanel";
+import { SortedApart } from "@/components/dupes/SortedApart";
 import { Odometer } from "@/components/Odometer";
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { PagePlate } from "@/components/shell/PagePlate";
@@ -184,6 +185,7 @@ const DuplicatesPage: React.FC = () => {
                 </Tabs.Panel>
 
                 <Tabs.Panel value="reviewed">
+                    <SortedApart />
                     <DupeSheet
                         endpoint="/api/dupes"
                         params={{ status: "reviewed", ...only }}

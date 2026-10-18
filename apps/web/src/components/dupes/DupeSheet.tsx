@@ -10,17 +10,26 @@ import type {
     DupeResolveInput,
     DupeResolveResponse,
     DupeReviewInput,
+    DupeSortInput,
+    DupeSortResponse,
 } from "@private-stock/core";
 
-import { api } from "@/lib/api/client";
+import { ApiError, api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { invalidateListable } from "@/lib/api/trash";
 import {
+    allApart,
     defaultKeep,
     formatBytes,
+    nextSet,
+    oneApart,
     removable,
+    sortedDecisions,
+    startSorting,
     tickedByDefault,
     toResolveItem,
+    toSortInput,
+    type Sorting,
 } from "@/lib/dupeTriage";
 import { prefersReducedMotion } from "@/lib/motion";
 import { settling } from "@/lib/settling";
@@ -28,6 +37,7 @@ import { isTypingTarget } from "@/lib/typingTarget";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DupeResolveDialog, type Decision } from "@/components/dupes/DupeResolveDialog";
 import { DupeRow } from "@/components/dupes/DupeRow";
+import { DupeViewDrawer } from "@/components/dupes/DupeViewDrawer";
 import { LoadFailed } from "@/components/LoadFailed";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
@@ -121,6 +131,14 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
      * slide the copies into the keeper that was chosen, not into the default it reverts to.
      */
     const [merging, setMerging] = useState<Record<string, string>>({});
+    /** Rows being sorted into sets of the same thing (§10i), and how far each has got. */
+    const [sortings, setSortings] = useState<Record<string, Sorting>>({});
+    /** A sorting waiting on the trash confirmation. */
+    const [confirmingSort, setConfirmingSort] = useState<DupeGroup | null>(null);
+    /** What the last sorting did, said once on the sheet. */
+    const [recorded, setRecorded] = useState<string | null>(null);
+    /** A copy playing beside the sheet, and the row it belongs to. */
+    const [viewing, setViewing] = useState<{ groupId: string; memberId: string } | null>(null);
     const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const params = new URLSearchParams({
@@ -144,6 +162,7 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         setFocused(0);
         setSettled(new Set());
         setMerging({});
+        setSortings({});
     };
 
     const review = useMutation({
@@ -210,6 +229,51 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         },
     });
 
+    /**
+     * Sorting a group into what is the same and what is not (§10i), from the row's sort mode,
+     * "None match" or a copy's "Not the same as the others". The group is replaced by one per
+     * set, which the refetch brings in; sets the reviewer also resolved go as a row's would.
+     */
+    const sort = useMutation({
+        mutationFn: (input: DupeSortInput) =>
+            api<DupeSortResponse>("/api/dupes/sort", {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: (response, input) => {
+            setConfirmingSort(null);
+            setSortings((current) =>
+                Object.fromEntries(Object.entries(current).filter(([id]) => id !== input.groupId))
+            );
+
+            const together = input.sets.filter((set) => set.ids.length > 1).length;
+            const alone = input.sets.length - together;
+            const trashed = response.groups.reduce((total, group) => total + group.trashed, 0);
+            const failed = response.groups.flatMap((group) => group.failed).length;
+
+            setRecorded(
+                [
+                    together === 0
+                        ? "Kept apart: none of those copies will be offered as duplicates of each other again."
+                        : `Recorded ${together === 1 ? "one set" : `${together} sets`} of the same thing${alone > 0 ? ` and ${alone === 1 ? "one copy" : `${alone} copies`} on its own` : ""}.`,
+                    trashed > 0
+                        ? `${trashed === 1 ? "One copy" : `${trashed} copies`} went to the trash.`
+                        : null,
+                    failed > 0
+                        ? `${failed === 1 ? "One copy" : `${failed} copies`} could not be removed; their set stays in the queue.`
+                        : null,
+                    "Any sorting can be taken back from the Reviewed tab.",
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+            );
+
+            void queryClient.invalidateQueries({ queryKey: queryKeys.dupes.all() });
+
+            if (trashed > 0) invalidateListable(queryClient);
+        },
+    });
+
     const groups = (data?.groups ?? []).filter((group) => !settled.has(group.id));
     // A settled group leaves and the rows below close ranks (§14, "Motion").
     const flip = useFlipGrid(groups.map((group) => group.id));
@@ -224,14 +288,81 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
     const keepFor = (group: DupeGroup): string => keeps[group.id] ?? defaultKeep(group);
+    // A row being sorted is decided by its own buttons, not by the page's.
     const tickedFor = (group: DupeGroup): boolean =>
         canDelete &&
+        !(group.id in sortings) &&
         removable(group, keepFor(group)).length > 0 &&
         (ticks[group.id] ?? tickedByDefault(group, keepFor(group)));
 
     const ticked = groups.filter(tickedFor);
-    const tickable = groups.filter((group) => removable(group, keepFor(group)).length > 0);
-    const unticked = groups.filter((group) => !group.reviewed && !tickedFor(group));
+    const tickable = groups.filter(
+        (group) => !(group.id in sortings) && removable(group, keepFor(group)).length > 0
+    );
+    const unticked = groups.filter(
+        (group) => !group.reviewed && !(group.id in sortings) && !tickedFor(group)
+    );
+
+    const sortable = (group: DupeGroup): boolean => group.kind === "near";
+    const startSort = (group: DupeGroup): void => {
+        setRecorded(null);
+        sort.reset();
+        setSortings((current) => ({ ...current, [group.id]: startSorting(group) }));
+    };
+    const cancelSort = (group: DupeGroup): void =>
+        setSortings((current) =>
+            Object.fromEntries(Object.entries(current).filter(([id]) => id !== group.id))
+        );
+    const cycleSet = (group: DupeGroup, memberId: string): void =>
+        setSortings((current) => {
+            const sorting = current[group.id];
+
+            return sorting
+                ? {
+                      ...current,
+                      [group.id]: {
+                          ...sorting,
+                          assign: {
+                              ...sorting.assign,
+                              [memberId]: nextSet(group, sorting, memberId),
+                          },
+                      },
+                  }
+                : current;
+        });
+    const keepInSet = (group: DupeGroup, memberId: string): void =>
+        setSortings((current) => {
+            const sorting = current[group.id];
+
+            return sorting
+                ? {
+                      ...current,
+                      [group.id]: {
+                          ...sorting,
+                          keepers: [memberId, ...sorting.keepers.filter((id) => id !== memberId)],
+                      },
+                  }
+                : current;
+        });
+    const submitSort = (group: DupeGroup, resolve: boolean): void => {
+        const sorting = sortings[group.id];
+
+        if (!sorting) return;
+
+        setRecorded(null);
+
+        if (resolve) {
+            // Trashing goes through the same confirmation as a page, one set to a line.
+            setConfirmingSort(group);
+        } else {
+            sort.mutate(toSortInput(group, sorting, false));
+        }
+    };
+    const apart = (group: DupeGroup, memberId: string | null): void => {
+        setRecorded(null);
+        sort.mutate(memberId === null ? allApart(group) : oneApart(group, memberId));
+    };
+    const viewingGroup = viewing ? groups.find((group) => group.id === viewing.groupId) : undefined;
     const going = ticked.flatMap((group) => removable(group, keepFor(group)));
     const freed = going.reduce((total, member) => total + (member.sizeBytes ?? 0), 0);
 
@@ -268,6 +399,8 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
     onKeyRef.current = (event: KeyboardEvent) => {
         if (
             confirming !== null ||
+            confirmingSort !== null ||
+            viewing !== null ||
             event.ctrlKey ||
             event.metaKey ||
             event.altKey ||
@@ -278,8 +411,40 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
         }
 
         const row = groups[Math.min(focused, groups.length - 1)];
+        const rowSorting = row ? sortings[row.id] : undefined;
 
-        if (event.key === "j") {
+        /**
+         * A row being sorted (§10i) takes the keys that would otherwise choose: a digit moves that
+         * copy to the next set, Enter records, Escape stops sorting.
+         */
+        if (row && rowSorting) {
+            const member = /^[1-9]$/.test(event.key)
+                ? row.members[Number(event.key) - 1]
+                : undefined;
+
+            if (member) {
+                cycleSet(row, member.id);
+            } else if (event.key === "Enter" && !event.shiftKey) {
+                submitSort(row, false);
+            } else if (event.key === "Escape" || event.key === "s") {
+                cancelSort(row);
+            } else if (!["j", "k", "p"].includes(event.key)) {
+                // Ticking and trashing the page are not this row's business while it is sorted.
+                return;
+            }
+
+            if (!["j", "k", "p"].includes(event.key)) {
+                event.preventDefault();
+                return;
+            }
+        }
+
+        if (event.key === "p" && row) {
+            // Play the row's copies beside the sheet, starting with the one it would keep.
+            setViewing({ groupId: row.id, memberId: keepFor(row) });
+        } else if (event.key === "s" && row && sortable(row) && row.members.length > 2) {
+            startSort(row);
+        } else if (event.key === "j") {
             moveFocus(focused + 1);
         } else if (event.key === "k") {
             moveFocus(focused - 1);
@@ -320,9 +485,31 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
             {canDelete && groups.length > 0 && (
                 <Text size="xs" c="dimmed" visibleFrom="sm">
                     <kbd>j</kbd> / <kbd>k</kbd> move between groups · <kbd>1</kbd>–<kbd>9</kbd>{" "}
-                    choose the copy to keep · <kbd>x</kbd> tick · <kbd>Shift</kbd>+<kbd>Enter</kbd>{" "}
-                    trash what is ticked
+                    choose the copy to keep · <kbd>x</kbd> tick · <kbd>p</kbd> play the copies ·{" "}
+                    <kbd>s</kbd> sort into sets · <kbd>Shift</kbd>+<kbd>Enter</kbd> trash what is
+                    ticked
                 </Text>
+            )}
+
+            {recorded && (
+                <Alert
+                    color="brass"
+                    variant="light"
+                    withCloseButton
+                    onClose={() => setRecorded(null)}
+                >
+                    <Text size="sm">{recorded}</Text>
+                </Alert>
+            )}
+
+            {sort.error && (
+                <Alert color="oxblood" variant="light" withCloseButton onClose={() => sort.reset()}>
+                    <Text size="sm">
+                        {sort.error instanceof ApiError
+                            ? sort.error.message
+                            : "The sorting could not be recorded."}
+                    </Text>
+                </Alert>
             )}
 
             {outcome && (
@@ -408,7 +595,23 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                             onMerged={() => settle(group.id)}
                             focused={index === focused}
                             onFocus={() => setFocused(index)}
-                            onKeep={canDelete ? (memberId) => chooseKeep(group, memberId) : null}
+                            onPlay={(member) =>
+                                setViewing({ groupId: group.id, memberId: member.id })
+                            }
+                            sorting={sortings[group.id] ?? null}
+                            onSortStart={sortable(group) ? () => startSort(group) : null}
+                            onSortCycle={(memberId) => cycleSet(group, memberId)}
+                            onSortCancel={() => cancelSort(group)}
+                            onSortSubmit={(resolve) => submitSort(group, resolve)}
+                            onApart={sortable(group) ? (memberId) => apart(group, memberId) : null}
+                            sortBusy={sort.isPending && sort.variables?.groupId === group.id}
+                            onKeep={
+                                group.id in sortings
+                                    ? (memberId) => keepInSet(group, memberId)
+                                    : canDelete
+                                      ? (memberId) => chooseKeep(group, memberId)
+                                      : null
+                            }
                             onTick={canDelete ? (value) => setTick(group, value) : null}
                             onReview={(reviewed) =>
                                 review.mutate({ groupIds: [group.id], reviewed })
@@ -499,6 +702,36 @@ export const DupeSheet: React.FC<DupeSheetProps> = ({
                 onConfirm={() => confirming && resolve.mutate(confirming)}
                 busy={resolve.isPending}
                 error={resolve.error}
+            />
+
+            {/* A sorting's trash, confirmed like a page: each set of the same thing is a line. */}
+            <DupeResolveDialog
+                decisions={
+                    confirmingSort && sortings[confirmingSort.id]
+                        ? sortedDecisions(confirmingSort, sortings[confirmingSort.id]!).filter(
+                              ({ group, keepId }) => removable(group, keepId).length > 0
+                          )
+                        : null
+                }
+                onCancel={() => setConfirmingSort(null)}
+                onConfirm={() => {
+                    const sorting = confirmingSort && sortings[confirmingSort.id];
+
+                    if (confirmingSort && sorting) {
+                        sort.mutate(toSortInput(confirmingSort, sorting, true));
+                    }
+                }}
+                busy={sort.isPending}
+                error={sort.error}
+            />
+
+            <DupeViewDrawer
+                members={viewingGroup?.members ?? []}
+                viewingId={viewingGroup ? (viewing?.memberId ?? null) : null}
+                onView={(memberId) =>
+                    setViewing((current) => (current ? { ...current, memberId } : current))
+                }
+                onClose={() => setViewing(null)}
             />
         </Stack>
     );

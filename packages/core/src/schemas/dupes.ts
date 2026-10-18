@@ -89,6 +89,16 @@ export const dupeGroupSchema = z.object({
      * the keeper is here; clips at risk do, and are drawn from `clipCount` on the client.
      */
     cautions: z.array(z.string()),
+    /**
+     * How the app would sort the copies into sets of the same thing (§10i), each set best first.
+     *
+     * One set when every copy matches every other directly, or when somebody has said they are
+     * all the same. More than one means the group is a chain whose ends do not match, and it
+     * comes with a caution; sorting it starts from this.
+     */
+    suggestedSets: z.array(z.array(z.string())),
+    /** Every two copies here were said by a person to be the same thing (§10i). */
+    confirmed: z.boolean(),
 });
 export type DupeGroup = z.infer<typeof dupeGroupSchema>;
 
@@ -200,6 +210,83 @@ export const dupeResolveResponseSchema = z.object({
     groups: z.array(dupeGroupOutcomeSchema),
 });
 export type DupeResolveResponse = z.infer<typeof dupeResolveResponseSchema>;
+
+/**
+ * One set in a sorting (§10i): copies that are the same thing, and what to do about them.
+ *
+ * `keepId` and `trashIds` are what a row would resolve, named for the reason `dupeResolveItem`
+ * names them; without them the set is only recorded. A set of one is a copy on its own.
+ */
+export const dupeSortSetSchema = z.object({
+    ids: z.array(z.string().min(1)).min(1).max(DUPE_PAGE_LIMIT),
+    /**
+     * Whether the reviewer says these are all the same thing. False leaves them together only
+     * because nothing was said about them -- what is left of a group after "not the same as the
+     * others" -- so they are kept apart from the other sets and nothing is said among them.
+     */
+    alike: z.boolean().default(true),
+    keepId: z.string().min(1).nullable().default(null),
+    trashIds: z.array(z.string().min(1)).max(DUPE_PAGE_LIMIT).default([]),
+});
+export type DupeSortSet = z.infer<typeof dupeSortSetSchema>;
+
+/**
+ * Sorting a look-alike group into what is the same and what is not (§10i).
+ *
+ * Every copy the row showed has to be in exactly one set: the sorting is a statement about
+ * every pair, and a copy merged into the group since the page loaded has had nothing said
+ * about it. "None of these match" is every copy in a set of its own; "not this one" is one
+ * copy alone and the rest together.
+ */
+export const dupeSortSchema = z.object({
+    groupId: z.string().min(1),
+    sets: z.array(dupeSortSetSchema).min(1).max(DUPE_PAGE_LIMIT),
+});
+export type DupeSortInput = z.infer<typeof dupeSortSchema>;
+
+export const dupeSortResponseSchema = z.object({
+    /** Groups of two or more the sorting left, for the sets it was told to resolve too. */
+    groups: z.array(dupeGroupOutcomeSchema),
+    /** Groups of two or more the sorting left in the queue, sorted but not resolved. */
+    kept: z.number(),
+});
+export type DupeSortResponse = z.infer<typeof dupeSortResponseSchema>;
+
+/** One copy in a decision that kept copies apart, as the Reviewed tab draws it. */
+export const dupeApartCopySchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    coverUrl: z.string().nullable(),
+    /** Still in the library: a copy in the bin is named, and dimmed. */
+    active: z.boolean(),
+});
+export type DupeApartCopy = z.infer<typeof dupeApartCopySchema>;
+
+/**
+ * A sorting that kept copies apart (§10i), with the sets it made as they stand now.
+ *
+ * Listed so it can be taken back. A pair said again by a later sorting belongs to that one, so
+ * a set here is what this decision still says.
+ */
+export const dupeApartDecisionSchema = z.object({
+    id: z.string(),
+    decidedAt: z.string(),
+    decidedBy: z.string().nullable(),
+    sets: z.array(z.array(dupeApartCopySchema)),
+});
+export type DupeApartDecision = z.infer<typeof dupeApartDecisionSchema>;
+
+export const dupeApartQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(DUPE_PAGE_LIMIT).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+});
+export type DupeApartQuery = z.infer<typeof dupeApartQuerySchema>;
+
+export const dupeApartListResponseSchema = z.object({
+    decisions: z.array(dupeApartDecisionSchema),
+    total: z.number(),
+});
+export type DupeApartListResponse = z.infer<typeof dupeApartListResponseSchema>;
 
 /**
  * Marking groups reviewed, or reopening them.

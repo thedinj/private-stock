@@ -146,9 +146,20 @@ export interface Cluster {
  * The cost is chaining: a long enough chain of small differences can join two genuinely
  * different pictures. `maxDistance` is reported so the review UI can show how loose a group
  * is, and the thresholds are tight enough that chains stay short in practice.
+ *
+ * **Except where a person has said two items differ** (§10i). `apart` names those pairs, and
+ * no join may put both in one cluster: links are taken closest first, and one that would is
+ * refused. So an item that looks like both of two copies somebody kept apart joins the one it
+ * is closer to, and does not tie them back together. Without `apart` the order changes nothing,
+ * since connectivity does not depend on it.
  */
-export const clusterPairs = (pairs: Pair[]): Cluster[] => {
+export const clusterPairs = (
+    pairs: Pair[],
+    apart?: ReadonlyMap<string, ReadonlySet<string>>
+): Cluster[] => {
     const parent = new Map<string, string>();
+    /** Each root's members, kept only when there is something to check them against. */
+    const membersOf = new Map<string, Set<string>>();
 
     const find = (id: string): string => {
         let root = parent.get(id) ?? id;
@@ -185,24 +196,64 @@ export const clusterPairs = (pairs: Pair[]): Cluster[] => {
      * `pruneDegenerate` exists to clean up after.
      */
     const links = pairs.filter((pair) => pair.a !== pair.b);
+    const constrained = apart !== undefined && apart.size > 0;
 
     for (const pair of links) {
-        if (!parent.has(pair.a)) parent.set(pair.a, pair.a);
-        if (!parent.has(pair.b)) parent.set(pair.b, pair.b);
+        for (const id of [pair.a, pair.b]) {
+            if (!parent.has(id)) {
+                parent.set(id, id);
+                if (constrained) membersOf.set(id, new Set([id]));
+            }
+        }
     }
 
-    for (const pair of links) {
+    /** Whether any member of one set has been said to differ from any member of the other. */
+    const kept = (one: Set<string>, other: Set<string>): boolean => {
+        const [small, large] = one.size <= other.size ? [one, other] : [other, one];
+
+        for (const id of small) {
+            for (const differs of apart?.get(id) ?? []) {
+                if (large.has(differs)) return true;
+            }
+        }
+
+        return false;
+    };
+
+    // Closest first, so a refused link is the weaker of the two that compete. Stable, so pairs
+    // at one distance keep the order they came in.
+    const ordered = constrained
+        ? links
+              .map((pair, index) => ({ pair, index }))
+              .sort((x, y) => x.pair.distance - y.pair.distance || x.index - y.index)
+              .map(({ pair }) => pair)
+        : links;
+    const accepted: Pair[] = [];
+
+    for (const pair of ordered) {
         const rootA = find(pair.a);
         const rootB = find(pair.b);
 
         if (rootA !== rootB) {
+            if (constrained) {
+                const setA = membersOf.get(rootA)!;
+                const setB = membersOf.get(rootB)!;
+
+                if (kept(setA, setB)) continue;
+
+                for (const id of setA) setB.add(id);
+                membersOf.delete(rootA);
+            }
+
             parent.set(rootA, rootB);
         }
+
+        accepted.push(pair);
     }
 
     const groups = new Map<string, { members: Set<string>; maxDistance: number }>();
 
-    for (const pair of links) {
+    for (const pair of accepted) {
         const root = find(pair.a);
         let group = groups.get(root);
 
@@ -224,6 +275,96 @@ export const clusterPairs = (pairs: Pair[]): Cluster[] => {
             maxDistance: group.maxDistance,
         }))
         .filter((group) => group.members.length > 1);
+};
+
+/** What a person said about two items (§10i): the same thing, or different things. */
+export type DupeVerdictKind = "same" | "different";
+
+export interface VerdictPair {
+    a: string;
+    b: string;
+    verdict: DupeVerdictKind;
+}
+
+/** The pairs said to differ, as `clusterPairs` reads them: each item's list, both ways round. */
+export const apartFrom = (verdicts: VerdictPair[]): Map<string, Set<string>> => {
+    const apart = new Map<string, Set<string>>();
+
+    for (const { a, b, verdict } of verdicts) {
+        if (verdict !== "different" || a === b) continue;
+
+        apart.set(a, (apart.get(a) ?? new Set()).add(b));
+        apart.set(b, (apart.get(b) ?? new Set()).add(a));
+    }
+
+    return apart;
+};
+
+/**
+ * Everything a sorting of copies into sets says (§10i): every two in one set are the same, and
+ * every two in different sets are not. A set of one is a copy on its own, unlike all the rest.
+ *
+ * Pairs come out with `a < b`, the order they are stored in, so saying it twice is one row.
+ */
+export const verdictsOfSets = (sets: string[][]): VerdictPair[] => {
+    const pairs: VerdictPair[] = [];
+    const flat = sets.flatMap((set, index) => set.map((id) => ({ id, index })));
+
+    for (let i = 0; i < flat.length; i += 1) {
+        for (let j = i + 1; j < flat.length; j += 1) {
+            const [x, y] = [flat[i], flat[j]];
+
+            if (x.id === y.id) continue;
+
+            pairs.push({
+                a: x.id < y.id ? x.id : y.id,
+                b: x.id < y.id ? y.id : x.id,
+                verdict: x.index === y.index ? "same" : "different",
+            });
+        }
+    }
+
+    return pairs;
+};
+
+/**
+ * How the app would sort a group's copies, before anybody has (§10i).
+ *
+ * A group is a chain of links (above), so its ends need not look alike at all. Here each copy
+ * joins the first set where it matches **every** copy already in it, and otherwise starts one
+ * of its own -- a chain A–B–C–D where only neighbours match comes out as {A, B} and {C, D}.
+ * Copies are taken in the order given, which is best first, so each set is led by its best copy.
+ *
+ * `same` is a person's word that two copies are alike, and counts as a match; `different` is
+ * their word that they are not, and outweighs one. One set means the app sees nothing to sort.
+ */
+export const suggestSets = (
+    ids: string[],
+    matches: (a: string, b: string) => boolean,
+    verdicts: VerdictPair[] = []
+): string[][] => {
+    const said = new Map<string, DupeVerdictKind>();
+
+    for (const { a, b, verdict } of verdicts) {
+        said.set(a < b ? `${a}|${b}` : `${b}|${a}`, verdict);
+    }
+
+    const alike = (a: string, b: string): boolean => {
+        const verdict = said.get(a < b ? `${a}|${b}` : `${b}|${a}`);
+
+        return verdict === undefined ? matches(a, b) : verdict === "same";
+    };
+
+    const sets: string[][] = [];
+
+    for (const id of ids) {
+        const home = sets.find((set) => set.every((other) => alike(id, other)));
+
+        if (home) home.push(id);
+        else sets.push([id]);
+    }
+
+    return sets;
 };
 
 export interface KeepCandidate {

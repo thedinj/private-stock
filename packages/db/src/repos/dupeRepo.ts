@@ -788,3 +788,153 @@ export const reopenGroupsOf = (mediaId: string): number =>
                 AND "id" IN (SELECT "groupId" FROM "DupeMember" WHERE "mediaId" = ?)`
         )
         .run(mediaId).changes;
+
+export interface DupeVerdictRow {
+    aId: string;
+    bId: string;
+    verdict: "same" | "different";
+}
+
+/**
+ * Every verdict between two of these items (§10i).
+ *
+ * Both ends must be in the list: what clustering and a group's suggestion need is what was said
+ * about the items in hand, not about everything each of them was ever compared with.
+ */
+export const verdictsAmong = (mediaIds: string[]): DupeVerdictRow[] => {
+    if (mediaIds.length < 2) {
+        return [];
+    }
+
+    const placeholders = mediaIds.map(() => "?").join(", ");
+
+    return db
+        .prepare(
+            `SELECT "aId", "bId", "verdict" FROM "DupeVerdict"
+              WHERE "aId" IN (${placeholders}) AND "bId" IN (${placeholders})`
+        )
+        .all(...mediaIds, ...mediaIds) as DupeVerdictRow[];
+};
+
+/**
+ * Records one sorting of a group (§10i): its verdicts, and the groups it leaves behind.
+ *
+ * One transaction, so the queue never shows the old group beside the new ones, nor new groups
+ * with nothing to stop the next pass rebuilding the old one. Each set of two or more becomes a
+ * group of its own, carrying its members' distances; a set of one is a copy on its own and
+ * belongs to no group. A pair said again replaces what was said before -- the later word wins --
+ * and joins this decision.
+ *
+ * Returns the group each set became, or null for a set of one.
+ */
+export const recordSorting = (input: {
+    groupId: string;
+    decisionId: string;
+    userId: string;
+    verdicts: DupeVerdictRow[];
+    sets: string[][];
+}): (string | null)[] =>
+    db.transaction((): (string | null)[] => {
+        const distances = new Map(
+            listMembers(input.groupId).map((member) => [member.mediaId, member.distance])
+        );
+        const write = db.prepare(
+            `INSERT INTO "DupeVerdict" ("aId", "bId", "verdict", "decisionId", "decidedByUserId")
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT ("aId", "bId") DO UPDATE SET
+                 "verdict" = excluded."verdict",
+                 "decisionId" = excluded."decisionId",
+                 "decidedByUserId" = excluded."decidedByUserId",
+                 "decidedAt" = CURRENT_TIMESTAMP`
+        );
+
+        for (const pair of input.verdicts) {
+            write.run(pair.aId, pair.bId, pair.verdict, input.decisionId, input.userId);
+        }
+
+        const kind = findGroup(input.groupId)?.kind ?? "near";
+
+        // Deleted first, so a set with the old group's exact members becomes it again rather
+        // than being found and returned as it was.
+        deleteGroups([input.groupId]);
+
+        return input.sets.map((set) =>
+            set.length < 2
+                ? null
+                : upsertGroup({
+                      kind,
+                      members: set.map((mediaId) => ({
+                          mediaId,
+                          distance: distances.get(mediaId) ?? null,
+                      })),
+                  })
+        );
+    })();
+
+export interface DupeDecisionSummary {
+    decisionId: string;
+    decidedAt: string;
+    decidedBy: string | null;
+    pairs: number;
+}
+
+/**
+ * Sortings that kept copies apart, newest first (§10i): what the Reviewed tab lists to take back.
+ *
+ * Only decisions with a 'different' pair left in them. One that said only "these are the same"
+ * stops nothing from happening and has nothing to undo; and a pair said again later belongs to
+ * the later decision, so an older one can empty out.
+ */
+export const listApartDecisions = (limit: number, offset: number): DupeDecisionSummary[] =>
+    db
+        .prepare(
+            `SELECT v."decisionId", max(v."decidedAt") AS "decidedAt",
+                    max(u."displayName") AS "decidedBy", count(*) AS "pairs"
+               FROM "DupeVerdict" v
+               LEFT JOIN "User" u ON u."id" = v."decidedByUserId"
+              GROUP BY v."decisionId"
+             HAVING sum(v."verdict" = 'different') > 0
+              ORDER BY max(v."decidedAt") DESC, v."decisionId"
+              LIMIT ? OFFSET ?`
+        )
+        .all(limit, offset) as DupeDecisionSummary[];
+
+export const countApartDecisions = (): number =>
+    (
+        db
+            .prepare(
+                `SELECT count(*) AS n FROM (
+                     SELECT 1 FROM "DupeVerdict" GROUP BY "decisionId"
+                     HAVING sum("verdict" = 'different') > 0
+                 )`
+            )
+            .get() as { n: number }
+    ).n;
+
+/** The pairs one decision wrote, as it stands. */
+export const verdictsOf = (decisionId: string): DupeVerdictRow[] =>
+    db
+        .prepare(`SELECT "aId", "bId", "verdict" FROM "DupeVerdict" WHERE "decisionId" = ?`)
+        .all(decisionId) as DupeVerdictRow[];
+
+/**
+ * Takes a decision back (§10i): its verdicts go, and its items are compared again.
+ *
+ * The groups it split are not stitched back here. Forgetting the items' marks makes each a seed
+ * of the next pass, which finds their pairs again and, with nothing now holding them apart,
+ * merges the groups as it would have the first time -- the same path as everything else that
+ * builds a group. Returns the items, so the caller can ask for that pass.
+ */
+export const undoDecision = (decisionId: string): string[] =>
+    db.transaction((): string[] => {
+        const pairs = verdictsOf(decisionId);
+        const items = [...new Set(pairs.flatMap((pair) => [pair.aId, pair.bId]))];
+
+        db.prepare(`DELETE FROM "DupeVerdict" WHERE "decisionId" = ?`).run(decisionId);
+
+        for (const mediaId of items) {
+            forgetClustered(mediaId);
+        }
+
+        return items;
+    })();

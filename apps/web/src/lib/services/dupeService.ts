@@ -1,10 +1,21 @@
+import { randomUUID } from "node:crypto";
+
 import {
     AuthorizationError,
+    ConflictError,
     NotFoundError,
     ValidationError,
     identicalKeeper,
     planIdentical,
     rankCopies,
+    suggestSets,
+    verdictsOfSets,
+    type DupeApartCopy,
+    type DupeApartListResponse,
+    type DupeApartQuery,
+    type DupeKind,
+    type DupeSortInput,
+    type DupeSortResponse,
     type IdenticalCopy,
     type IdenticalListResponse,
     type IdenticalPlan,
@@ -32,6 +43,7 @@ import { db, dupeRepo, mediaRepo } from "@private-stock/db";
 import type { AuthContext } from "../auth/withAuth";
 import { coverUrl } from "./artService";
 import { copyCaution, groupCautions } from "./dupeCautions";
+import { directMatcher } from "./dupeLinks";
 import { costOfKeeping, keepReason } from "./keepAdvice";
 import { trashMedia } from "./trashService";
 
@@ -223,6 +235,7 @@ const toGroup = (summary: dupeRepo.DupeGroupSummary): DupeGroup | null => {
     const { ranked, ordered } = rankRows(rows);
     const best = ranked[0];
     const members = ordered.map((row) => toMember(row, ranked));
+    const { suggestedSets, confirmed } = sortingOf(summary.kind, ordered);
 
     /**
      * For identical files, the copy trashing every identical copy would keep (§10e) -- a
@@ -248,8 +261,54 @@ const toGroup = (summary: dupeRepo.DupeGroupSummary): DupeGroup | null => {
               ? keepReason(best, ranked[1])
               : null,
         members,
-        cautions: groupCautions(summary.kind, members, suggestedKeepId),
+        cautions: [
+            ...groupCautions(summary.kind, members, suggestedKeepId),
+            ...(suggestedSets.length > 1
+                ? [
+                      `Not every copy matches every other — these look like ${suggestedSets.length} different things. Sort them before trashing.`,
+                  ]
+                : []),
+        ],
+        suggestedSets,
+        confirmed,
     };
+};
+
+/**
+ * How a group's copies sort into sets of the same thing, and whether a person has said so (§10i).
+ *
+ * Identical files and pairs have nothing to sort: a pair is in its group because the two match.
+ * For three or more, what people said decides each pair it covers and the comparison the rest,
+ * which is only run when a pair is actually asked about -- a group somebody confirmed costs none.
+ */
+const sortingOf = (
+    kind: DupeKind,
+    ordered: MemberRow[]
+): { suggestedSets: string[][]; confirmed: boolean } => {
+    const ids = ordered.map((row) => row.id);
+
+    if (kind === "exact") {
+        return { suggestedSets: [ids], confirmed: false };
+    }
+
+    const verdicts = dupeRepo
+        .verdictsAmong(ids)
+        .map((row) => ({ a: row.aId, b: row.bId, verdict: row.verdict }));
+    const same = verdicts.filter((verdict) => verdict.verdict === "same").length;
+    const confirmed = same === (ids.length * (ids.length - 1)) / 2;
+
+    if (ids.length < 3) {
+        return { suggestedSets: [ids], confirmed };
+    }
+
+    let matcher: ((a: string, b: string) => boolean) | null = null;
+    const matches = (a: string, b: string): boolean => {
+        matcher ??= directMatcher(ordered);
+
+        return matcher(a, b);
+    };
+
+    return { suggestedSets: suggestSets(ids, matches, verdicts), confirmed };
 };
 
 const identicalCopyOf = (row: MemberRow): IdenticalCopy => ({
@@ -677,4 +736,198 @@ export const trashWithCopies = async (
     }
 
     return { trashed, failed };
+};
+
+/**
+ * Sorts a look-alike group into what is the same thing and what is not (§10i).
+ *
+ * Records a verdict for every pair -- the same within a set, different across -- and replaces
+ * the group with one per set of two or more, in one transaction. Clustering then never joins a
+ * pair said to differ, so the sorting outlasts every later pass. Then, for each set the reviewer
+ * also chose a keeper for, resolves it exactly as a row would (`resolveOne`): the copies named go
+ * to the bin, and the copy kept inherits only from copies of the same thing.
+ *
+ * **Every copy the row showed, and only those.** A copy merged in since the page loaded has had
+ * nothing said about it, and placing it in a set by default would be saying it on the reviewer's
+ * behalf; the request is refused and nothing is recorded.
+ */
+export const sortGroup = async (
+    input: DupeSortInput,
+    auth: AuthContext
+): Promise<DupeSortResponse> => {
+    requireAdmin(auth);
+
+    const group = dupeRepo.findGroup(input.groupId);
+
+    if (!group) {
+        throw new ConflictError("This group has changed since the page loaded");
+    }
+
+    if (group.kind !== "near") {
+        throw new ValidationError("Identical files are the same thing; there is nothing to sort");
+    }
+
+    const named = input.sets.flatMap((set) => set.ids);
+
+    if (new Set(named).size !== named.length) {
+        throw new ValidationError("A copy can be in only one set");
+    }
+
+    const live = new Set(loadMembers(input.groupId).map((row) => row.id));
+
+    if (named.length !== live.size || named.some((id) => !live.has(id))) {
+        throw new ConflictError(
+            "This group has changed since the page loaded. Nothing was recorded; look again."
+        );
+    }
+
+    for (const set of input.sets) {
+        if (set.keepId !== null && !set.ids.includes(set.keepId)) {
+            throw new ValidationError("The copy to keep must be in its own set");
+        }
+
+        if (
+            set.trashIds.some((id) => !set.ids.includes(id) || id === set.keepId) ||
+            (set.trashIds.length > 0 && set.keepId === null)
+        ) {
+            throw new ValidationError(
+                "Only other copies in a set can go, and only beside a keeper"
+            );
+        }
+    }
+
+    const resolving = input.sets.some((set) => set.trashIds.length > 0);
+
+    if (resolving && !auth.scopes.includes("delete")) {
+        throw new AuthorizationError("You do not have permission to delete files");
+    }
+
+    // Copies left together without being called the same: nothing is said among them.
+    const unsaid = new Set(input.sets.filter((set) => !set.alike).flatMap((set) => set.ids));
+    const groupIds = dupeRepo.recordSorting({
+        groupId: input.groupId,
+        decisionId: randomUUID(),
+        userId: auth.userId,
+        verdicts: verdictsOfSets(input.sets.map((set) => set.ids))
+            .filter((pair) => pair.verdict === "different" || !unsaid.has(pair.a))
+            .map((pair) => ({ aId: pair.a, bId: pair.b, verdict: pair.verdict })),
+        sets: input.sets.map((set) => set.ids),
+    });
+
+    const groups: DupeGroupOutcome[] = [];
+    let kept = 0;
+
+    for (const [index, set] of input.sets.entries()) {
+        const groupId = groupIds[index];
+
+        if (!groupId) continue;
+
+        if (set.keepId !== null && set.trashIds.length > 0) {
+            groups.push(
+                await resolveOne({ groupId, keepId: set.keepId, trashIds: set.trashIds }, auth)
+            );
+        } else {
+            kept += 1;
+        }
+    }
+
+    return { groups, kept };
+};
+
+/** What the Reviewed tab draws of a copy in a decision: its name, its cover, and whether it is still here. */
+const apartCopies = (mediaIds: string[]): Map<string, DupeApartCopy> => {
+    if (mediaIds.length === 0) {
+        return new Map();
+    }
+
+    const rows = db
+        .prepare(
+            `SELECT ${MEMBER_SELECT}, f."state"
+               FROM (SELECT value AS "mediaId" FROM json_each(?)) dm
+               ${MEMBER_JOINS}`
+        )
+        .all(JSON.stringify(mediaIds)) as (MemberRow & { state: string })[];
+
+    return new Map(
+        rows.map((row) => [
+            row.id,
+            {
+                id: row.id,
+                title: row.title ?? row.relPath,
+                coverUrl: coverUrl(row.id, row.coverPath, row.coverGeneratedAt),
+                active: row.state === "active",
+            },
+        ])
+    );
+};
+
+/**
+ * The sortings that kept copies apart, newest first, each with the sets it made (§10i).
+ *
+ * The sets are rebuilt from the decision's own verdicts: copies it called the same are one set,
+ * and a copy it called the same as none of them is on its own.
+ */
+export const listApart = (query: DupeApartQuery, auth: AuthContext): DupeApartListResponse => {
+    requireAdmin(auth);
+
+    const decisions = dupeRepo.listApartDecisions(query.limit, query.offset).map((decision) => {
+        const pairs = dupeRepo.verdictsOf(decision.decisionId);
+        const items = [...new Set(pairs.flatMap((pair) => [pair.aId, pair.bId]))].sort();
+        const setOf = new Map(items.map((id) => [id, id]));
+        const root = (id: string): string => {
+            let at = id;
+
+            while (setOf.get(at) !== at) at = setOf.get(at)!;
+
+            return at;
+        };
+
+        for (const pair of pairs) {
+            if (pair.verdict === "same") setOf.set(root(pair.aId), root(pair.bId));
+        }
+
+        const sets = new Map<string, string[]>();
+
+        for (const id of items) {
+            sets.set(root(id), [...(sets.get(root(id)) ?? []), id]);
+        }
+
+        return { decision, sets: [...sets.values()] };
+    });
+
+    const copies = apartCopies([...new Set(decisions.flatMap(({ sets }) => sets.flat()))]);
+
+    return {
+        decisions: decisions.map(({ decision, sets }) => ({
+            id: decision.decisionId,
+            decidedAt: decision.decidedAt,
+            decidedBy: decision.decidedBy,
+            sets: sets
+                .map((set) =>
+                    set
+                        .map((id) => copies.get(id))
+                        .filter((copy): copy is DupeApartCopy => copy !== undefined)
+                )
+                .filter((set) => set.length > 0),
+        })),
+        total: dupeRepo.countApartDecisions(),
+    };
+};
+
+/**
+ * Takes a sorting back (§10i). Its verdicts go and its copies are compared again on the next
+ * pass, which regroups them as it would have before anybody sorted them.
+ */
+export const undoApart = (decisionId: string, auth: AuthContext): { items: number } => {
+    requireAdmin(auth);
+
+    const items = dupeRepo.undoDecision(decisionId);
+
+    if (items.length === 0) {
+        throw new NotFoundError("That decision has already been taken back");
+    }
+
+    dupeRepo.enqueueRescan();
+
+    return { items: items.length };
 };

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    apartFrom,
     clusterPairs,
+    suggestSets,
+    verdictsOfSets,
     compareVideos,
     dupeSettingsSchema,
     identicalKeeper,
@@ -184,6 +187,91 @@ describe("clusterPairs", () => {
 
         expect(clusters).toHaveLength(1);
         expect(clusters[0].members).toEqual(["a", "b", "c"]);
+    });
+});
+
+/**
+ * Sorting copies apart (§10i). The example the feature was built for: five videos, where A and
+ * B are one thing, C and D another, and E a third -- linked into one group by a chain.
+ */
+describe("clusterPairs with copies kept apart", () => {
+    const chain = [
+        { a: "A", b: "B", distance: 2 },
+        { a: "B", b: "C", distance: 9 },
+        { a: "C", b: "D", distance: 3 },
+        { a: "D", b: "E", distance: 8 },
+    ];
+    const sorted = apartFrom(verdictsOfSets([["A", "B"], ["C", "D"], ["E"]]));
+
+    it("keeps a group sorted into sets apart however the chain links it", () => {
+        const clusters = clusterPairs(chain, sorted);
+
+        expect(clusters.map((cluster) => cluster.members)).toEqual([
+            ["A", "B"],
+            ["C", "D"],
+        ]);
+    });
+
+    it("lets a new copy join the set it is closer to, without tying the sets back together", () => {
+        const clusters = clusterPairs(
+            [...chain, { a: "X", b: "C", distance: 5 }, { a: "X", b: "A", distance: 1 }],
+            sorted
+        );
+
+        expect(clusters.map((cluster) => cluster.members)).toEqual([
+            ["A", "B", "X"],
+            ["C", "D"],
+        ]);
+    });
+
+    it("does not report the distance of a link it refused", () => {
+        const clusters = clusterPairs(chain, sorted);
+
+        expect(clusters.map((cluster) => cluster.maxDistance)).toEqual([2, 3]);
+    });
+
+    it("clusters as before when nobody has said anything", () => {
+        expect(clusterPairs(chain, new Map())).toEqual(clusterPairs(chain));
+    });
+});
+
+describe("verdictsOfSets", () => {
+    it("says same within a set and different across, once per pair", () => {
+        const pairs = verdictsOfSets([["B", "A"], ["C"]]);
+
+        expect(pairs).toEqual([
+            { a: "A", b: "B", verdict: "same" },
+            { a: "B", b: "C", verdict: "different" },
+            { a: "A", b: "C", verdict: "different" },
+        ]);
+    });
+});
+
+describe("suggestSets", () => {
+    // Only neighbours in the chain match each other directly.
+    const direct = new Set(["A|B", "B|C", "C|D", "D|E"]);
+    const matches = (a: string, b: string) => direct.has(`${a}|${b}`) || direct.has(`${b}|${a}`);
+
+    it("splits a chain where its ends do not match", () => {
+        expect(suggestSets(["A", "B", "C", "D", "E"], matches)).toEqual([
+            ["A", "B"],
+            ["C", "D"],
+            ["E"],
+        ]);
+    });
+
+    it("keeps a group whose copies all match as one set", () => {
+        expect(suggestSets(["A", "B"], matches)).toEqual([["A", "B"]]);
+    });
+
+    it("lets a person's word outweigh the comparison", () => {
+        expect(
+            suggestSets(["A", "B", "C"], matches, [
+                { a: "A", b: "B", verdict: "different" },
+                { a: "A", b: "C", verdict: "same" },
+                { a: "B", b: "C", verdict: "different" },
+            ])
+        ).toEqual([["A", "C"], ["B"]]);
     });
 });
 

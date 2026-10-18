@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { DupeGroup, DupeMember } from "@private-stock/core";
 
-import { rowCautions, tickedByDefault, toResolveItem } from "./dupeTriage";
+import {
+    nextSet,
+    oneApart,
+    rowCautions,
+    setsOf,
+    startSorting,
+    tickedByDefault,
+    toResolveItem,
+    toSortInput,
+} from "./dupeTriage";
 
 /**
  * Which rows of the triage sheet start ticked, and what a ticked row sends (§10c).
@@ -78,5 +87,55 @@ describe("what a ticked row sends", () => {
 
     it("follows the reviewer's keeper", () => {
         expect(toResolveItem(group(), "worse")?.trashIds).toEqual(["best"]);
+    });
+});
+
+/** Sorting a row into sets of the same thing (§10i): five copies, A–B, C–D and E. */
+describe("sorting a row", () => {
+    const five = group({
+        members: ["A", "B", "C", "D", "E"].map((id) => member(id)),
+        suggestedKeepId: "A",
+        suggestedSets: [["A", "B"], ["C", "D"], ["E"]],
+    });
+
+    it("starts from the app's suggestion", () => {
+        expect(setsOf(five, startSorting(five)).map((set) => set.map((m) => m.id))).toEqual([
+            ["A", "B"],
+            ["C", "D"],
+            ["E"],
+        ]);
+    });
+
+    it("moves a copy to the next set, then a new one, then round to the first", () => {
+        const sorting = startSorting(five);
+
+        expect(nextSet(five, sorting, "A")).toBe(1);
+        expect(nextSet(five, sorting, "C")).toBe(2);
+        // E is alone in the newest set, so a new set would be the same as staying: round it goes.
+        expect(nextSet(five, sorting, "E")).toBe(0);
+        expect(nextSet(five, { ...sorting, assign: { ...sorting.assign, E: 1 } }, "E")).toBe(2);
+    });
+
+    it("trashes within each set, around its own keeper, and nothing alone", () => {
+        const sorting = { ...startSorting(five), keepers: ["D"] };
+
+        expect(toSortInput(five, sorting, true).sets).toEqual([
+            { ids: ["A", "B"], alike: true, keepId: "A", trashIds: ["B"] },
+            { ids: ["C", "D"], alike: true, keepId: "D", trashIds: ["C"] },
+            { ids: ["E"], alike: true, keepId: null, trashIds: [] },
+        ]);
+    });
+
+    it("only records when not resolving", () => {
+        const sets = toSortInput(five, startSorting(five), false).sets;
+
+        expect(sets.every((set) => set.keepId === null && set.trashIds.length === 0)).toBe(true);
+    });
+
+    it("says nothing about the rest when one copy is set apart", () => {
+        expect(oneApart(five, "E").sets).toEqual([
+            { ids: ["E"], alike: true, keepId: null, trashIds: [] },
+            { ids: ["A", "B", "C", "D"], alike: false, keepId: null, trashIds: [] },
+        ]);
     });
 });

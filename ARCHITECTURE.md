@@ -5102,7 +5102,8 @@ group even when A and C are further apart. The alternative — requiring every m
 every other — splits an obvious family of re-encodes into overlapping pairs, and the reviewer
 then sees the same file in three groups and has to reason about which deletion affects which.
 One slightly loose group is one decision. The cost is chaining, so `maxDistance` is reported
-and shown, and the thresholds are tight enough that chains stay short.
+and shown, and the thresholds are tight enough that chains stay short. Where a chain joins
+things that are not the same, a person can sort it apart, and clustering keeps to that (§10i).
 
 Groups are identified by their sorted member list. Without that key a re-run would create a
 fresh group for the same files every pass and the queue would fill with duplicates of
@@ -5866,6 +5867,83 @@ the 20 strongest and all were duplicates.
   (the hash-frame hits, which do surface them, are the obvious one).
 - **The thresholds are constants**, not settings. They came from one measurement, and an admin
   has nothing to tune them against until the review queue says they are wrong.
+
+## 10i. Look-alikes that are not all one thing
+
+**Built 2026-10-17**, once §10h brought in looser candidates. The example that set the
+requirement: five videos A–E where A and B are one video, C and D another, and E a third, linked
+into one group by a chain. The only decision the app could store was the group's `reviewed`
+flag. Marking it hid two real duplicate pairs; leaving it open kept E in the queue forever. And a
+split made by hand would not have lasted: a group is only its member set (§10b), rebuilt by any
+pass that touches a member, and the A–C link is still above the threshold.
+
+### Decisions are stored per pair, not per group
+
+`DupeVerdict` holds what a person said about two items: `same` or `different`, one row per pair
+(`aId < bId`), with the decision it came from. A pair of items does not change when groups merge,
+grow or are rebuilt, so the decision outlives all of that. Storing a split on the group was
+rejected for exactly that reason: it would be lost the moment the group gained a copy, which
+is when new candidates arrive.
+
+**Clustering follows the verdicts** (`clusterPairs(pairs, apart)`). A `different` pair is never
+joined: links are taken closest first, and a join that would put two such items in one cluster is
+refused. So a new copy X that looks like both A and C joins the one it is closer to and does not
+tie them back together. A `same` pair is a link of its own, taken first. Only a person's word does
+this; the transitive rule in §10 still decides everything nobody has spoken about. Identical
+groups ignore verdicts, since bytes are bytes.
+
+Inheritance follows too, for free: §10c's heir is chosen among a copy's group, and after a
+sorting E is in no group with A, so a trash of B never hands anything to E.
+
+### Three ways to say it, one request
+
+`POST /api/dupes/sort` takes the group and every copy the row showed, divided into sets. A set is
+one thing; a set of one is a copy on its own. Every pair gets a verdict: `same` within a set,
+`different` across sets. The group is replaced by one group per set of two or more, in the same
+transaction. A copy merged in since the page loaded makes the request fail: nobody has said
+anything about it.
+
+- **None match**: every copy in a set of its own. This is the usual false positive from §10h
+  (same room, same light, a different video).
+- **Not the same as the others**, from a copy's Look: that copy alone, the rest left together.
+  The rest are sent with `alike: false`, so they are kept apart from it and nothing is said
+  among them. Leaving them together is not saying they are the same.
+- **Sort into sets…** (`s`): the row opens in place. Each copy carries its set's letter and
+  colour; pressing the set (or the copy's digit) moves it to the next set, then to a new one.
+  Pressing a picture makes it its set's keeper. **Record and trash** resolves each set through
+  `resolveOne`, exactly as a row would, after the ordinary confirmation with one line per set.
+  **Just record** saves the sets, and they come back as groups marked "You said these are the
+  same", with no looseness caution.
+
+### The app sorts first
+
+A group's ends need not match, so for three or more copies the server checks which copies match
+each other **directly**, with the same tests and thresholds as the pass (`dupeLinks.ts`: frame
+hashes from the database, tile prints from `/data`). `suggestSets` places each copy, best first,
+in the first set where it matches every copy already there. For A–E it gives {A,B}, {C,D}, {E}.
+A verdict overrides the comparison for any pair it covers. Sorting starts from this suggestion,
+so agreeing with it takes one press. When there is more than one set, the row gets a caution and
+starts unticked, because trashing it under a single keeper would trash a different video.
+
+The comparison only runs for pairs nobody has decided, and only for groups of three or more, so
+a confirmed group or a pair costs nothing.
+
+### Looking quickly, as with faces
+
+Every copy has a **Look**, as a face does (§5f): a popover with eight moments spread across the
+video (tiles from its sprite track rather than its cover, because two look-alikes are usually
+alike at the cover's moment), its file, and **Play it here**. That opens a drawer beside the
+sheet that plays the copy. It switches between the group's copies at the **same second**, by
+press or by digit, because watching one and then the other at the same point is what settles
+"same video?". It uses the same second rather than the same percentage: copies of one video
+run within a second or two of each other. `p` opens it from the keyboard.
+
+### Taking it back
+
+The Reviewed tab lists each sorting that kept anything apart, folded by default, with its sets
+side by side. **Take back** deletes that decision's verdicts and forgets its copies' clustering
+marks. The next pass then regroups them the way it does everything else; nothing stitches the
+groups back by hand. A pair decided again later belongs to the later decision.
 
 ## 11. Casting to TVs
 

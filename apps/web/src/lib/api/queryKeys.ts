@@ -417,7 +417,14 @@ export const queryKeys = {
         counts: (media: ReviewMedia) => ["dupes", "counts", media],
         /** One page of identical groups, routine or needing a look, with the run's summary. */
         identical: (params: string) => ["dupes", "identical", params],
+        /** One page of the sortings that kept look-alikes apart, to take back (§10i). */
+        apart: (params: string) => ["dupes", "apart", params],
     },
+    /**
+     * A video's sprite track, parsed into cues (§9). Keyed by the track's URL, which carries a
+     * version token, so a rebuilt sprite is a different key and nothing ever invalidates this.
+     */
+    spriteCues: (vttUrl: string) => ["spriteCues", vttUrl],
     /** Every page of the bin: what restoring, purging and deleting reach. */
     trash: () => ["trash"],
     /** One page of the bin, zero-based. */

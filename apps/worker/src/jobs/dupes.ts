@@ -3,6 +3,7 @@ import * as path from "node:path";
 
 import {
     alignTilePrints,
+    apartFrom,
     assertSafeRelativePath,
     clusterPairs,
     compareVideos,
@@ -361,10 +362,30 @@ const mergeIntoGroups = async (kind: "near" | "exact", pairs: Pair[]): Promise<v
         }
     }
 
+    /**
+     * What people said about these items (§10i). A pair said to differ is never joined, so a
+     * group somebody sorted apart stays apart however the chain links it; one said to be the
+     * same is a link of its own, taken first. Identical files are the same bytes, and nothing a
+     * person says changes that.
+     */
+    const verdicts =
+        kind === "near"
+            ? dupeRepo.verdictsAmong([...new Set([...touched, ...[...byGroup.values()].flat()])])
+            : [];
+
+    for (const verdict of verdicts) {
+        if (verdict.verdict === "same") {
+            edges.unshift({ a: verdict.aId, b: verdict.bId, distance: 0 });
+        }
+    }
+
+    const apart = apartFrom(
+        verdicts.map((verdict) => ({ a: verdict.aId, b: verdict.bId, verdict: verdict.verdict }))
+    );
     const survivors = new Set<string>();
     let since = Date.now();
 
-    for (const cluster of clusterPairs(edges)) {
+    for (const cluster of clusterPairs(edges, apart)) {
         since = await breathe(since);
 
         survivors.add(

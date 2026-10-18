@@ -745,6 +745,28 @@ export function initializeDatabase(db: Database): void {
             FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE
         );
 
+        -- What a person said about two look-alikes (§10i): the same thing, or different things.
+        --
+        -- Per pair rather than per group, because a group is only its member set and is rebuilt
+        -- whenever clustering touches it (§10b); a decision kept on the group would be lost the
+        -- moment it gained a copy. Clustering never joins a 'different' pair into one group.
+        -- "decisionId" names the press that wrote the row -- every pair of one sorting shares
+        -- it -- so the decision can be listed and taken back as one. A plain column: there is
+        -- no decision table, only the rows it wrote. "aId" < "bId" keeps each pair to one row.
+        CREATE TABLE IF NOT EXISTS "DupeVerdict" (
+            "aId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "bId" TEXT NOT NULL REFERENCES "Media" ("id") ON DELETE CASCADE,
+            "verdict" TEXT NOT NULL CHECK("verdict" IN ('same', 'different')),
+            "decisionId" TEXT NOT NULL CHECK(length("decisionId") <= 64),
+            "decidedByUserId" TEXT REFERENCES "User" ("id") ON DELETE SET NULL,
+            "decidedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY ("aId", "bId"),
+            CHECK ("aId" < "bId")
+        ) WITHOUT ROWID;
+
+        CREATE INDEX IF NOT EXISTS "idx_DupeVerdict_bId" ON "DupeVerdict" ("bId");
+        CREATE INDEX IF NOT EXISTS "idx_DupeVerdict_decision" ON "DupeVerdict" ("decisionId");
+
         -- ─────────────────────────────────────────────────────────────────────────────
         -- Descriptive metadata: faceted tags (§5b)
         -- ─────────────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Badge, Button, Checkbox, Text, Tooltip } from "@mantine/core";
+import { Badge, Button, Checkbox, Group, Text, Tooltip } from "@mantine/core";
 
 import type { DupeGroup, DupeMember } from "@private-stock/core";
 
@@ -12,11 +12,17 @@ import {
     formatDuration,
     removable,
     rowCautions,
+    setKeeper,
+    setOf,
+    setsOf,
+    sortedDecisions,
     stranded,
+    type Sorting,
 } from "@/lib/dupeTriage";
 import { animate, DURATION, EASE } from "@/lib/motion";
 import { rememberReturn } from "@/lib/returnTo";
 
+import { DupeLook } from "./DupeLook";
 import classes from "./DupeRow.module.scss";
 
 /**
@@ -27,7 +33,7 @@ import classes from "./DupeRow.module.scss";
  * says on its picture what will happen to it, so the row can be read without reading anything.
  */
 
-type Fate = "keep" | "trash" | "stays" | "idle";
+type Fate = "keep" | "trash" | "stays" | "idle" | "alone";
 
 /**
  * What a copy is shown as.
@@ -42,11 +48,42 @@ const fateOf = (member: DupeMember, keepId: string, ticked: boolean): Fate => {
     return ticked ? "trash" : "idle";
 };
 
+/**
+ * What a copy is shown as while its group is sorted (§10i): what "Record and trash" would do to
+ * it within its own set. A copy alone in its set is kept apart, and nothing happens to it.
+ */
+const sortedFateOf = (member: DupeMember, set: DupeMember[], sorting: Sorting): Fate => {
+    if (set.length < 2) return "alone";
+    if (setKeeper(set, sorting).id === member.id) return "keep";
+
+    return member.deletable ? "trash" : "stays";
+};
+
 const FATE_LABEL: Record<Fate, string | null> = {
     keep: "Keep",
     trash: "Trash",
     stays: "Read-only",
     idle: null,
+    alone: "On its own",
+};
+
+/** A set's name: a letter, which stays with the set while copies move in and out of it. */
+const setName = (number: number): string => String.fromCharCode(65 + (number % 26));
+
+const plural = (count: number, one: string, many: string): string =>
+    `${count} ${count === 1 ? one : many}`;
+
+/** The sorting so far, in a sentence: how many things, and what is on its own. */
+const sortSummary = (sets: DupeMember[][]): string => {
+    const together = sets.filter((set) => set.length > 1).length;
+    const alone = sets.length - together;
+
+    if (sets.length === 1) return "All one thing.";
+    if (together === 0) return "None of these match.";
+
+    return `${plural(together, "set", "sets")} of the same thing${
+        alone === 0 ? "" : alone === 1 ? ", one copy on its own" : `, ${alone} copies on their own`
+    }.`;
 };
 
 interface DupeRowProps {
@@ -61,6 +98,22 @@ interface DupeRowProps {
     onReview: (reviewed: boolean) => void;
     reviewing: boolean;
     onFocus: () => void;
+    /** A copy to play beside the sheet (§10i). */
+    onPlay: (member: DupeMember) => void;
+    /**
+     * Sorting the group into sets of the same thing (§10i), or null when the row is not being
+     * sorted. Only look-alike groups are sorted; the handlers are null on an identical one.
+     */
+    sorting: Sorting | null;
+    onSortStart: (() => void) | null;
+    onSortCycle: (memberId: string) => void;
+    onSortCancel: () => void;
+    /** Records the sorting; with `resolve`, trashes what each set shows going, once confirmed. */
+    onSortSubmit: (resolve: boolean) => void;
+    /** "None match" (null), or one copy "not the same as the others", recorded at once. */
+    onApart: ((memberId: string | null) => void) | null;
+    /** A sorting is being recorded. */
+    sortBusy: boolean;
     /**
      * Resolved, and playing the merge before it leaves (§14, "Motion"): the copies going slide
      * into the keeper and the keeper takes them in. `onMerged` when it is over.
@@ -81,12 +134,28 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
             onReview,
             reviewing,
             onFocus,
+            onPlay,
+            sorting,
+            onSortStart,
+            onSortCycle,
+            onSortCancel,
+            onSortSubmit,
+            onApart,
+            sortBusy,
             merging = false,
             onMerged,
         },
         ref
     ) => {
         const going = removable(group, keepId);
+        const sets = sorting ? setsOf(group, sorting) : [];
+        const setFor = (member: DupeMember): DupeMember[] =>
+            sets.find((set) => set.some((other) => other.id === member.id)) ?? [member];
+        const sortedGoing = sorting
+            ? sortedDecisions(group, sorting).flatMap((decision) =>
+                  removable(decision.group, decision.keepId)
+              )
+            : [];
         const strip = useRef<HTMLDivElement>(null);
         const merged = useRef(onMerged);
         merged.current = onMerged;
@@ -174,7 +243,7 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                 <div className={classes.tick}>
                     {/* Absent rather than disabled when nothing here could be removed: a
                         control that cannot apply is gone rather than greyed (§14e). */}
-                    {onTick && going.length > 0 && (
+                    {onTick && !sorting && going.length > 0 && (
                         <Checkbox
                             size="md"
                             color="brass"
@@ -194,6 +263,12 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                         >
                             {group.kind === "exact" ? "Identical" : "Looks the same"}
                         </Badge>
+
+                        {group.confirmed && (
+                            <Text size="xs" c="verdigris.4" fw={500}>
+                                You said these are the same
+                            </Text>
+                        )}
 
                         {group.kind === "near" && (
                             // Clustering treats similarity as transitive, so a group is a chain
@@ -221,10 +296,39 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                         )}
 
                         <div className={classes.headEnd}>
-                            {onTick && ticked && freed > 0 && (
+                            {onTick && ticked && !sorting && freed > 0 && (
                                 <Text size="xs" c="dimmed">
                                     frees {formatBytes(freed)}
                                 </Text>
+                            )}
+                            {/* Sorting is for three or more: two copies that are not the same
+                                thing are "None match". Lit when the app sees more than one. */}
+                            {onSortStart && !sorting && group.members.length > 2 && (
+                                <Button
+                                    size="compact-xs"
+                                    variant={group.suggestedSets.length > 1 ? "light" : "subtle"}
+                                    color="brass"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onSortStart();
+                                    }}
+                                >
+                                    Sort into sets…
+                                </Button>
+                            )}
+                            {onApart && !sorting && (
+                                <Button
+                                    size="compact-xs"
+                                    variant="subtle"
+                                    color="oxblood"
+                                    loading={sortBusy}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onApart(null);
+                                    }}
+                                >
+                                    None match
+                                </Button>
                             )}
                             <Button
                                 size="compact-xs"
@@ -243,11 +347,19 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
 
                     <div className={classes.strip} ref={strip}>
                         {group.members.map((member, index) => {
-                            const fate = fateOf(member, keepId, ticked);
+                            const fate = sorting
+                                ? sortedFateOf(member, setFor(member), sorting)
+                                : fateOf(member, keepId, ticked);
                             const label = FATE_LABEL[fate];
+                            const number = sorting ? setOf(sorting, member.id) : null;
 
                             return (
-                                <div key={member.id} data-member-id={member.id}>
+                                <div
+                                    key={member.id}
+                                    data-member-id={member.id}
+                                    data-set={number === null ? undefined : number % 5}
+                                    className={classes.member}
+                                >
                                     <Tooltip
                                         label={`${member.rootLabel} · ${member.relPath}`}
                                         openDelay={500}
@@ -300,7 +412,7 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                                     : ""}
                                             </div>
 
-                                            {member.costOfKeeping && (
+                                            {!sorting && member.costOfKeeping && (
                                                 <div
                                                     className={classes.note}
                                                     title={member.costOfKeeping}
@@ -311,22 +423,89 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                                         </button>
                                     </Tooltip>
 
-                                    {/* Recorded like every other way into an item, so "back"
-                                        returns here (§14b). */}
-                                    <Link
-                                        href={`/media/${member.id}`}
-                                        onClick={rememberReturn}
-                                        className={classes.title}
-                                        title={member.title}
-                                    >
-                                        {member.title}
-                                    </Link>
+                                    {sorting && number !== null && (
+                                        // The copy's set. Pressing moves it to the next set, then
+                                        // to a new one; its digit does the same from the keys.
+                                        <button
+                                            type="button"
+                                            className={classes.setChip}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onSortCycle(member.id);
+                                            }}
+                                            aria-label={`In set ${setName(number)}. Move ${member.title} to another set`}
+                                        >
+                                            Set {setName(number)}
+                                            <span aria-hidden>→</span>
+                                        </button>
+                                    )}
+
+                                    <div className={classes.titleLine}>
+                                        {/* Recorded like every other way into an item, so
+                                            "back" returns here (§14b). */}
+                                        <Link
+                                            href={`/media/${member.id}`}
+                                            onClick={rememberReturn}
+                                            className={classes.title}
+                                            title={member.title}
+                                        >
+                                            {member.title}
+                                        </Link>
+                                        <DupeLook
+                                            member={member}
+                                            onPlay={onPlay}
+                                            onNotThis={
+                                                onApart && !sorting
+                                                    ? (chosen) => onApart(chosen.id)
+                                                    : null
+                                            }
+                                        />
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
 
-                    {(cautions.length > 0 || (onTick && staying.length > 0)) && (
+                    {sorting && (
+                        <div className={classes.sortBar}>
+                            <Text size="xs" c="dimmed">
+                                {sortSummary(sets)} Press a copy&apos;s set to move it; press a
+                                picture to keep that copy of its set.
+                            </Text>
+                            <Group gap="xs">
+                                {onTick && sortedGoing.length > 0 && (
+                                    <Button
+                                        size="compact-sm"
+                                        color="oxblood"
+                                        loading={sortBusy}
+                                        onClick={() => onSortSubmit(true)}
+                                    >
+                                        Record and trash{" "}
+                                        {plural(sortedGoing.length, "copy", "copies")}…
+                                    </Button>
+                                )}
+                                <Button
+                                    size="compact-sm"
+                                    variant="light"
+                                    color="brass"
+                                    loading={sortBusy}
+                                    onClick={() => onSortSubmit(false)}
+                                >
+                                    Just record
+                                </Button>
+                                <Button
+                                    size="compact-sm"
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={onSortCancel}
+                                >
+                                    Cancel
+                                </Button>
+                            </Group>
+                        </div>
+                    )}
+
+                    {!sorting && (cautions.length > 0 || (onTick && staying.length > 0)) && (
                         <div className={classes.cautions}>
                             {cautions.map((caution) => (
                                 <div key={caution}>{caution}</div>

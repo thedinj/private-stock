@@ -1,4 +1,4 @@
-import type { DupeGroup, DupeMember, DupeResolveItem } from "@private-stock/core";
+import type { DupeGroup, DupeMember, DupeResolveItem, DupeSortInput } from "@private-stock/core";
 
 /**
  * The triage sheet's arithmetic (§10c): what a row would do, and whether it starts ticked.
@@ -64,6 +64,148 @@ export const toResolveItem = (group: DupeGroup, keepId: string): DupeResolveItem
 
     return trashIds.length > 0 ? { groupId: group.id, keepId, trashIds } : null;
 };
+
+/**
+ * A group being sorted into sets of the same thing (§10i).
+ *
+ * `assign` is each copy's set, by number; numbers are not renumbered as sets empty, so a set
+ * keeps its letter and its colour while copies move around it. `keepers` is the copies chosen
+ * to keep, latest first: a set's keeper is the first of them it holds, else its best copy.
+ */
+export interface Sorting {
+    assign: Record<string, number>;
+    keepers: string[];
+}
+
+/** Sorting starts from how the app would sort (`suggestedSets`), so agreeing is one press. */
+export const startSorting = (group: DupeGroup): Sorting => ({
+    assign: Object.fromEntries(
+        group.suggestedSets.flatMap((set, index) => set.map((id) => [id, index]))
+    ),
+    keepers: [],
+});
+
+/** The set a copy is in; a copy merged in since the suggestion was made starts in the first. */
+export const setOf = (sorting: Sorting, memberId: string): number => sorting.assign[memberId] ?? 0;
+
+/** The sets as they stand, each in the row's order (best first) and in order of their number. */
+export const setsOf = (group: DupeGroup, sorting: Sorting): DupeMember[][] => {
+    const byNumber = new Map<number, DupeMember[]>();
+
+    for (const member of group.members) {
+        const number = setOf(sorting, member.id);
+
+        byNumber.set(number, [...(byNumber.get(number) ?? []), member]);
+    }
+
+    return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([, members]) => members);
+};
+
+/**
+ * The next set for a copy: the following one in use, then a new one, then round to the first.
+ *
+ * "In use" by the other copies: counting this one, a copy alone in the newest set would make a
+ * newer set every press and never come round.
+ */
+export const nextSet = (group: DupeGroup, sorting: Sorting, memberId: string): number => {
+    const highest = Math.max(
+        0,
+        ...group.members
+            .filter((member) => member.id !== memberId)
+            .map((member) => setOf(sorting, member.id))
+    );
+    const next = setOf(sorting, memberId) + 1;
+
+    return next > highest + 1 ? 0 : next;
+};
+
+/** A set's keeper: the latest one chosen in it, or its best copy. */
+export const setKeeper = (set: DupeMember[], sorting: Sorting): DupeMember =>
+    sorting.keepers
+        .map((id) => set.find((member) => member.id === id))
+        .find((member): member is DupeMember => member !== undefined) ?? set[0]!;
+
+/**
+ * One set seen as a group of its own, so it can be counted, confirmed and argued about with the
+ * same arithmetic and the same dialogue as a row. The cautions about the whole group do not
+ * carry: the one that matters most -- that its copies are not all alike -- is what sorting
+ * answered.
+ */
+export const asGroup = (group: DupeGroup, set: DupeMember[], index: number): DupeGroup => ({
+    ...group,
+    id: `${group.id}:${index}`,
+    members: set,
+    suggestedKeepId: set[0]?.id ?? null,
+    keepReason: null,
+    cautions: [],
+    suggestedSets: [set.map((member) => member.id)],
+});
+
+/** The sets of two or more, with their keeper: what "Record and trash" would resolve. */
+export const sortedDecisions = (
+    group: DupeGroup,
+    sorting: Sorting
+): { group: DupeGroup; keepId: string }[] =>
+    setsOf(group, sorting)
+        .map((set, index) => ({ set, index }))
+        .filter(({ set }) => set.length > 1)
+        .map(({ set, index }) => ({
+            group: asGroup(group, set, index),
+            keepId: setKeeper(set, sorting).id,
+        }));
+
+/**
+ * A sorting as the server takes it. With `resolve`, each set of two or more also names its
+ * keeper and the copies shown going, exactly as a row's decision does.
+ */
+export const toSortInput = (
+    group: DupeGroup,
+    sorting: Sorting,
+    resolve: boolean
+): DupeSortInput => ({
+    groupId: group.id,
+    sets: setsOf(group, sorting).map((set) => {
+        const keeper = setKeeper(set, sorting);
+        const trashIds = resolve
+            ? set.filter((member) => member.id !== keeper.id && member.deletable).map((m) => m.id)
+            : [];
+
+        return {
+            ids: set.map((member) => member.id),
+            alike: true,
+            keepId: trashIds.length > 0 ? keeper.id : null,
+            trashIds,
+        };
+    }),
+});
+
+/** "None of these match": every copy on its own. */
+export const allApart = (group: DupeGroup): DupeSortInput => ({
+    groupId: group.id,
+    sets: group.members.map((member) => ({
+        ids: [member.id],
+        alike: true,
+        keepId: null,
+        trashIds: [],
+    })),
+});
+
+/**
+ * "Not the same as the others": this copy on its own, the rest left together -- and only left
+ * together. Nothing is said about whether they are the same as each other.
+ */
+export const oneApart = (group: DupeGroup, memberId: string): DupeSortInput => ({
+    groupId: group.id,
+    sets: [
+        { ids: [memberId], alike: true, keepId: null, trashIds: [] },
+        {
+            ids: group.members.filter((member) => member.id !== memberId).map((m) => m.id),
+            alike: false,
+            keepId: null,
+            trashIds: [],
+        },
+    ],
+});
 
 export const formatBytes = (bytes: number | null): string => {
     if (!bytes) return "—";

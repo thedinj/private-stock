@@ -166,10 +166,17 @@
     text-overflow: ellipsis;
 }
 
-// The item's name, linking to its page; as wide as the copy above it.
-.title {
-    display: block;
+// The item's name, linking to its page, and "Look" beside it; as wide as the copy above.
+.titleLine {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     width: 176px;
+}
+
+.title {
+    flex: 1;
+    min-width: 0;
     padding-inline: 6px;
     font-size: var(--mantine-font-size-xs);
     color: var(--mantine-color-dimmed);
@@ -182,6 +189,79 @@
         color: var(--ps-text-warm);
         text-decoration: underline;
     }
+}
+
+/**
+ * Sorting (§10i). Each set has a colour, carried by a bar over its copies' pictures and by the
+ * chip that names it, so the sets read at a glance across the strip without reading a letter.
+ * Five, then round again: a group of more than five different things is rare, and the letter
+ * still tells them apart.
+ */
+.member[data-set] {
+    --set-colour: var(--mantine-color-brass-5);
+}
+
+.member[data-set="1"] {
+    --set-colour: var(--mantine-color-verdigris-5);
+}
+
+.member[data-set="2"] {
+    --set-colour: var(--mantine-color-oxblood-4);
+}
+
+.member[data-set="3"] {
+    --set-colour: var(--mantine-color-oak-3);
+}
+
+.member[data-set="4"] {
+    --set-colour: var(--mantine-color-gray-5);
+}
+
+.member[data-set] .cover {
+    box-shadow: inset 0 4px 0 var(--set-colour);
+}
+
+.setChip {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 176px;
+    min-height: 44px;
+    margin-top: 2px;
+    padding: 0 10px;
+    border: 1px solid var(--set-colour);
+    border-radius: 4px;
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    color: var(--set-colour);
+    cursor: pointer;
+
+    &:hover {
+        background-color: var(--ps-surface);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--mantine-color-brass-5);
+        outline-offset: 1px;
+    }
+}
+
+// A copy alone in its set is kept apart, and nothing happens to it.
+.copy[data-fate="alone"] .cover img {
+    opacity: 0.75;
+}
+
+.sortBar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-xs);
+    border: 1px solid var(--ps-hairline);
+    border-radius: 4px;
+    background-color: var(--ps-surface);
 }
 
 .cautions {
@@ -207,7 +287,8 @@
     }
 
     .copy,
-    .title {
+    .titleLine,
+    .setChip {
         width: 148px;
     }
 

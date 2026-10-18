@@ -577,3 +577,104 @@ describe("forgetClustered", () => {
         expect(dupeRepo.seedsNeedingClustering()).toEqual(["m1"]);
     });
 });
+
+/**
+ * Sorting a look-alike group (§10i). The five-copy example: A and B one thing, C and D another,
+ * E a third.
+ */
+describe("recordSorting", () => {
+    const sets = [["A", "B"], ["C", "D"], ["E"]];
+    const pairs = (): dupeRepo.DupeVerdictRow[] => [
+        { aId: "A", bId: "B", verdict: "same" },
+        { aId: "C", bId: "D", verdict: "same" },
+        ...["C", "D", "E"].flatMap((other) => [
+            { aId: "A", bId: other, verdict: "different" as const },
+            { aId: "B", bId: other, verdict: "different" as const },
+        ]),
+        { aId: "C", bId: "E", verdict: "different" },
+        { aId: "D", bId: "E", verdict: "different" },
+    ];
+
+    beforeEach(() => {
+        db.exec(`DELETE FROM "DupeVerdict"; DELETE FROM "User"`);
+        db.prepare(
+            `INSERT INTO "User" ("id", "email", "displayName", "password", "updatedAt")
+             VALUES ('u1', 'a@b.c', 'Admin', 'x', CURRENT_TIMESTAMP)`
+        ).run();
+
+        for (const id of ["A", "B", "C", "D", "E"]) givenMedia(id, { imageHash: true });
+    });
+
+    const sortFive = (decisionId = "d1"): (string | null)[] => {
+        const groupId = dupeRepo.upsertGroup({
+            kind: "near",
+            members: ["A", "B", "C", "D", "E"].map((mediaId) => ({ mediaId, distance: 9 })),
+        });
+
+        return dupeRepo.recordSorting({
+            groupId,
+            decisionId,
+            userId: "u1",
+            verdicts: pairs(),
+            sets,
+        });
+    };
+
+    it("replaces the group with one per set of two or more", () => {
+        const [first, second, alone] = sortFive();
+
+        expect(alone).toBeNull();
+        expect(
+            dupeRepo
+                .membersOf([first!])
+                .map((row) => row.mediaId)
+                .sort()
+        ).toEqual(["A", "B"]);
+        expect(
+            dupeRepo
+                .membersOf([second!])
+                .map((row) => row.mediaId)
+                .sort()
+        ).toEqual(["C", "D"]);
+        expect(dupeRepo.groupsContaining(["E"])).toEqual([]);
+    });
+
+    it("keeps every pair's verdict, and the members' distances", () => {
+        const [first] = sortFive();
+
+        expect(dupeRepo.verdictsAmong(["A", "B", "C", "D", "E"])).toHaveLength(10);
+        expect(dupeRepo.listMembers(first!).map((row) => row.distance)).toEqual([9, 9]);
+    });
+
+    it("lists the decision with who made it, and takes it back whole", () => {
+        sortFive();
+        dupeRepo.markClustered(["A", "B", "C", "D", "E"]);
+
+        expect(dupeRepo.listApartDecisions(10, 0)).toEqual([
+            expect.objectContaining({ decisionId: "d1", decidedBy: "Admin", pairs: 10 }),
+        ]);
+
+        expect(dupeRepo.undoDecision("d1").sort()).toEqual(["A", "B", "C", "D", "E"]);
+        expect(dupeRepo.verdictsAmong(["A", "B", "C", "D", "E"])).toEqual([]);
+        // Compared again on the next pass, which is what regroups them.
+        expect(dupeRepo.seedsNeedingClustering().sort()).toEqual(["A", "B", "C", "D", "E"]);
+        expect(dupeRepo.countApartDecisions()).toBe(0);
+    });
+
+    it("gives a pair said again to the later decision", () => {
+        sortFive("d1");
+
+        const groupId = dupeRepo.groupsContaining(["A"])[0]!.id;
+
+        dupeRepo.recordSorting({
+            groupId,
+            decisionId: "d2",
+            userId: "u1",
+            verdicts: [{ aId: "A", bId: "B", verdict: "different" }],
+            sets: [["A"], ["B"]],
+        });
+
+        expect(dupeRepo.verdictsOf("d2")).toEqual([{ aId: "A", bId: "B", verdict: "different" }]);
+        expect(dupeRepo.verdictsOf("d1")).toHaveLength(9);
+    });
+});
