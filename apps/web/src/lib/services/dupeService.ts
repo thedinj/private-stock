@@ -90,13 +90,18 @@ interface MemberRow {
  *
  * One definition, so the review screen and the delete confirmation compare copies on the same
  * numbers -- they are the same comparison, asked from two places.
+ *
+ * The cover is the generated one even where someone chose another (§10i "Comparing by the
+ * generated cover"). Every generated cover is taken the same way into its file, so two copies of
+ * one video show the same picture; a chosen one can be any moment, and makes duplicates look
+ * different. The chosen cover stands in only when nothing has been generated yet.
  */
 const MEMBER_SELECT = `m."id", m."kind", m."title", m."durationMs", m."width", m."height",
                     m."bitrate", m."codec", m."addedAt", m."capturedAt",
                     f."size" AS "sizeBytes", f."relPath", f."contentHash",
                     r."id" AS "rootId", r."label" AS "rootLabel", r."writable",
-                    COALESCE(chosen."relPath", generated."relPath") AS "coverPath",
-                    COALESCE(chosen."generatedAt", generated."generatedAt") AS "coverGeneratedAt",
+                    COALESCE(generated."relPath", chosen."relPath") AS "coverPath",
+                    COALESCE(generated."generatedAt", chosen."generatedAt") AS "coverGeneratedAt",
                     (SELECT count(*) FROM "Clip" c WHERE c."mediaId" = m."id") AS "clipCount"`;
 
 const MEMBER_JOINS = `JOIN "Media" m ON m."id" = dm."mediaId"

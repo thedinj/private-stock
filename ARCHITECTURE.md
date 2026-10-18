@@ -5945,6 +5945,20 @@ side by side. **Take back** deletes that decision's verdicts and forgets its cop
 marks. The next pass then regroups them the way it does everything else; nothing stitches the
 groups back by hand. A pair decided again later belongs to the later decision.
 
+### Comparing by the generated cover
+
+Wherever copies are compared — the review rows, the delete confirmation, an item's other copies,
+and Sorted apart — each copy shows its **generated** cover, even where someone chose another
+(§9 "User-chosen covers and captures"). Every generated cover is taken the same way, 10% into
+its file, so two copies of one video show the same picture. A chosen cover can come from any
+moment, and it made true duplicates look different at exactly the glance the sheet relies on. A
+chosen cover stands in only for a copy with nothing generated yet. Everywhere else the chosen
+cover is still the item's face.
+
+Nothing warns that a copy about to be trashed had a cover chosen for it. Losing a chosen frame
+costs a few seconds to pick again; a warning on every such row would cost the screen's
+quickness.
+
 ## 11. Casting to TVs
 
 Two different protocols; there is no single mechanism that hits both.
