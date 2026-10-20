@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Anchor, Badge, Box, Checkbox, Group, Paper, Stack, Text } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Box, Checkbox, Group, Paper, Stack, Text } from "@mantine/core";
 
 import type { Clip } from "@private-stock/core";
 
+import { PlayGlyph } from "@/components/media/Glyph";
 import { rememberReturn } from "@/lib/returnTo";
 
 import { ClipTagLine } from "./ClipTagLine";
@@ -35,6 +36,8 @@ interface ClipCardProps {
     clip: Clip;
     selected: boolean;
     onToggle: () => void;
+    /** Watch it, without leaving the wall (`ClipViewer`). */
+    onPlay: () => void;
     /** Hidden when the wall is already grouped by item, where it would be on every card. */
     showSource?: boolean;
 }
@@ -43,6 +46,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
     clip,
     selected,
     onToggle,
+    onPlay,
     showSource = true,
 }) => (
     <Paper
@@ -93,6 +97,32 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                         size="xs"
                     />
                 </Box>
+
+                {/*
+                 * Watching, in the corner opposite the checkbox. The rest of the card already
+                 * means "pick this", which is what the page is for, so playing has to be a
+                 * control of its own -- and one drawn always, for the same touchscreen reason as
+                 * the checkbox.
+                 */}
+                <ActionIcon
+                    variant="filled"
+                    color="dark"
+                    size={30}
+                    radius="xl"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onPlay();
+                    }}
+                    aria-label={`Play ${clip.label ?? "clip"}`}
+                    style={{
+                        position: "absolute",
+                        top: 5,
+                        right: 5,
+                        background: "rgba(0, 0, 0, 0.55)",
+                    }}
+                >
+                    <PlayGlyph size={16} />
+                </ActionIcon>
 
                 <Group gap={4} wrap="nowrap" style={{ position: "absolute", right: 6, bottom: 6 }}>
                     {clip.speed !== null && (

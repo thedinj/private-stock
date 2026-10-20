@@ -30,6 +30,7 @@ import { BulkTagDialog } from "@/components/library/BulkTagDialog";
 import { FlipWall } from "@/components/FlipWall";
 import { ClipCard } from "@/components/media/ClipCard";
 import { ClipTagFilter, type ClipTagFilterValue } from "@/components/media/ClipTagFilter";
+import { ClipViewer } from "@/components/media/ClipViewer";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
@@ -126,6 +127,8 @@ const ClipsPage: React.FC = () => {
     /** The batch the last "Tag…" wrote, while its Undo is on offer. */
     const [lastBatch, setLastBatch] = useState<TagBatch | null>(null);
     const [tagging, setTagging] = useState(false);
+    /** The clip being watched over the wall, by id so a refetch cannot strand a stale copy. */
+    const [watching, setWatching] = useState<string | null>(null);
     const undo = useUndoBatch(() => {
         setLastBatch(null);
         setDone("Tags withdrawn");
@@ -193,6 +196,16 @@ const ClipsPage: React.FC = () => {
         return [...out.entries()];
     }, [items]);
 
+    /**
+     * The page in the order it is drawn, for the viewer's Previous and Next: grouped, a video's
+     * clips sit together even where the query interleaved them.
+     */
+    const shown = useMemo(
+        () => (grouped ? groups.flatMap(([, group]) => group.clips) : items),
+        [grouped, groups, items]
+    );
+    const watchIndex = shown.findIndex((clip) => clip.id === watching);
+
     const pages = data ? Math.ceil(data.total / Math.max(1, data.pageSize)) : 0;
     /** Everything the current filter matches, not merely this page of it. */
     const total = data?.total ?? 0;
@@ -241,6 +254,7 @@ const ClipsPage: React.FC = () => {
                         clip={clip}
                         selected={selected.includes(clip.id)}
                         onToggle={() => toggle(clip.id)}
+                        onPlay={() => setWatching(clip.id)}
                         showSource={showSource}
                     />
                 </div>
@@ -524,6 +538,21 @@ const ClipsPage: React.FC = () => {
                         </Button>
                     </Group>
                 </Paper>
+            )}
+
+            {watchIndex >= 0 && (
+                <ClipViewer
+                    clip={shown[watchIndex]}
+                    onClose={() => setWatching(null)}
+                    onPrevious={
+                        watchIndex > 0 ? () => setWatching(shown[watchIndex - 1].id) : undefined
+                    }
+                    onNext={
+                        watchIndex < shown.length - 1
+                            ? () => setWatching(shown[watchIndex + 1].id)
+                            : undefined
+                    }
+                />
             )}
 
             {/* Keyed on opening, so each opens fresh with nothing carried from the last apply. */}
