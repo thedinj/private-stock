@@ -264,6 +264,30 @@ const ReplayGlyph = () => (
 );
 
 /**
+ * Back ten seconds: an arrow turning backwards around the number it goes back by.
+ *
+ * Ten rather than five because it is the same distance as `j` and a double-tap on the left
+ * third, so the bar, the keys and the thumb all agree on what "back a bit" means.
+ */
+const BackTenGlyph = () => (
+    <Glyph>
+        <path d="M5.5 9.5A7.5 7.5 0 1 1 4.5 13" />
+        <path d="M5.5 5v4.5H10" />
+        <text
+            x="12.5"
+            y="15.5"
+            textAnchor="middle"
+            fontSize="7.5"
+            fontWeight="600"
+            fill="currentColor"
+            stroke="none"
+        >
+            10
+        </text>
+    </Glyph>
+);
+
+/**
  * A camera, for grabbing the frame on screen (§13).
  *
  * Drawn rather than typed, for the reason every other control here is: an emoji renders in
@@ -1750,6 +1774,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             aria-label={atEnd ? "Play again" : playing ? "Pause" : "Play"}
                         >
                             {atEnd ? <ReplayGlyph /> : playing ? <PauseGlyph /> : <PlayGlyph />}
+                        </ActionIcon>
+
+                        <ActionIcon
+                            variant="subtle"
+                            color="brass"
+                            size="lg"
+                            onClick={() => {
+                                // A reel seeks in reel time, so going back can cross into the
+                                // previous span rather than stopping at this one's start.
+                                if (timeline) {
+                                    timeline.onSeek(Math.max(0, reelPositionMs - 10_000));
+
+                                    return;
+                                }
+
+                                const video = videoRef.current;
+                                if (video) seekTo(Math.max(0, video.currentTime * 1000 - 10_000));
+                            }}
+                            aria-label="Back 10 seconds (j)"
+                        >
+                            <BackTenGlyph />
                         </ActionIcon>
 
                         <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
