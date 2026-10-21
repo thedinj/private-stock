@@ -29,7 +29,8 @@ import { MARKS, PersonCardView } from "./PersonCardView";
  * person in each item, each correctable where it is seen.
  *
  * - **Confirmed**: the people confirmed as them. Press one that is not, and take it back.
- * - **Their items**: their own items with nobody on them confirmed — press the person who is them.
+ * - **Their items**: their own items with nobody on them confirmed — press whoever is them, more
+ *   than one in an item where the faces stage split them in two.
  * - **Ruled out**: the people refused for them, those somebody saw or every one. Press one that is
  *   them after all, and restore it: undecided, to be suggested again.
  *
@@ -54,7 +55,7 @@ const INTRO: Record<Section, (name: string) => string> = {
     confirmed: (name) =>
         `The people confirmed as ${name}, one an item. Press any that is not them, then take them back.`,
     items: (name) =>
-        `${name}'s own items with nobody on them confirmed yet. Press the person who is them — one an item.`,
+        `${name}'s own items with nobody on them confirmed yet. Press the people who are them — more than one in an item where their face was split.`,
     ruledOut: (name) =>
         `The people said not to be ${name}. Press any that are them after all, then restore them: they are suggested again.`,
 };
@@ -181,19 +182,15 @@ const SectionView: React.FC<{
         if (loaded) onNoSingleFace(since);
     }, [loaded, since, onNoSingleFace]);
 
-    const press = (card: PersonCard, mediaId: string): void =>
+    // Several in one item may be them: the faces stage still splits one person in a video into two
+    // now and then — a change of angle or light — and each part is a card of its own.
+    const press = (card: PersonCard): void =>
         setPressed((current) => {
             const next = new Set(current);
 
             if (next.has(card.id)) {
                 next.delete(card.id);
             } else {
-                // One person an item is them: picking another takes the first back.
-                if (section === "items") {
-                    for (const other of groups.find((g) => g.mediaId === mediaId)?.people ?? []) {
-                        next.delete(other.id);
-                    }
-                }
                 next.add(card.id);
             }
 
@@ -284,9 +281,7 @@ const SectionView: React.FC<{
                                             caption={saved.has(card.id) ? say.done : caption(card)}
                                             label={`${group.title}: ${pressed.has(card.id) ? "them" : "not chosen"}`}
                                             onPress={
-                                                saved.has(card.id)
-                                                    ? undefined
-                                                    : () => press(card, group.mediaId)
+                                                saved.has(card.id) ? undefined : () => press(card)
                                             }
                                             onPlay={setViewing}
                                             compare={{ tagId, name }}
@@ -315,9 +310,7 @@ const SectionView: React.FC<{
                             look={lookOf(card)}
                             caption={saved.has(card.id) ? say.done : caption(card)}
                             label={`${card.title}: ${pressed.has(card.id) ? say.verb.toLowerCase() : "as it is"}`}
-                            onPress={
-                                saved.has(card.id) ? undefined : () => press(card, card.mediaId)
-                            }
+                            onPress={saved.has(card.id) ? undefined : () => press(card)}
                             onPlay={setViewing}
                             compare={{ tagId, name }}
                         />
@@ -361,7 +354,8 @@ const SectionView: React.FC<{
                                     loading={decide.isPending}
                                     onClick={save}
                                 >
-                                    {say.verb} {items(chosen.length)}
+                                    {say.verb}{" "}
+                                    {items(new Set(chosen.map((card) => card.mediaId)).size)}
                                 </Button>
                             </Group>
                         </Stack>

@@ -31,9 +31,10 @@ import { PerformerPicture } from "./PerformerPicture";
  * Performers, on the item's page (§5f "People in this item"): who it is tagged with and who the
  * faces found in it, as one list — they are the same question. Each tagged performer is one card,
  * with their face in the item where one was found, and its menu says whether that face is them.
- * After the cards, for administrators, who else may be in it: a face that looks clearly like
- * somebody not tagged ("Jane?" — Yes / No), a performer the item's text names, and the faces
- * nobody matched, folded away until asked for. Every answer is one decision in History.
+ * For administrators, first — ahead of the box a name is typed into — the faces nobody matched,
+ * each asking "Who is this?"; after the cards, who else may be in it: a face that looks clearly
+ * like somebody not tagged ("Jane?" — Yes / No), and a performer the item's text names. Every
+ * answer is one decision in History.
  */
 
 const FIELD_WORDS: Record<MentionField, string> = {
@@ -131,12 +132,17 @@ const Maybe: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     </Paper>
 );
 
-/** A face that looks clearly like a performer the item does not carry: "Jane?" — Yes / No. */
+/**
+ * A face that looks clearly like a performer the item does not carry: "Jane?" — Yes / No. Or,
+ * `also`, a second person in it who looks like a performer it does carry — one person the faces
+ * stage split in two: "Also Jane?", whose No leaves the tag where it is.
+ */
 const SuggestedCard: React.FC<{
     mediaId: string;
     person: Person;
     onSeek: (face: FaceReviewFace) => void;
-}> = ({ mediaId, person, onSeek }) => {
+    also?: boolean;
+}> = ({ mediaId, person, onSeek, also = false }) => {
     const decide = useDecideItemPeople(mediaId);
     const { card, performer } = person;
     const busy = (action: string): boolean =>
@@ -155,7 +161,7 @@ const SuggestedCard: React.FC<{
                 <Stack gap={4} style={{ minWidth: 0 }}>
                     <Group gap={4} wrap="nowrap" justify="space-between">
                         <Text size="sm" fw={600} truncate>
-                            {performer.name}?
+                            {also ? `Also ${performer.name}?` : `${performer.name}?`}
                         </Text>
                         <LookButton
                             face={card.face}
@@ -169,7 +175,9 @@ const SuggestedCard: React.FC<{
                             ? decide.error.message
                             : person.state === "confirmed"
                               ? "Their face, but not tagged"
-                              : "Looks clearly like them"}
+                              : also
+                                ? "Looks like them too"
+                                : "Looks clearly like them"}
                     </Text>
                     <Group gap="xs" wrap="nowrap">
                         <Button
@@ -260,14 +268,13 @@ const NamedCard: React.FC<{ mediaId: string; named: ItemPeople["named"][number] 
     );
 };
 
-/** A face nobody matched: "Who is this?", and a name for them. */
+/** A face nobody matched: "Who is this?", and the box for their name, already open. */
 const UnknownRow: React.FC<{
     mediaId: string;
     person: Person;
     onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, person, onSeek }) => {
     const decide = useDecideItemPeople(mediaId);
-    const [naming, setNaming] = useState(false);
     const { card } = person;
 
     return (
@@ -293,80 +300,73 @@ const UnknownRow: React.FC<{
                     <Text size="xs" c={decide.error ? "oxblood.4" : "dimmed"}>
                         {decide.error ? decide.error.message : "Nobody matched yet"}
                     </Text>
-                    {!naming && (
-                        <Button
-                            size="compact-md"
-                            variant="subtle"
-                            color="gray"
-                            h={44}
-                            style={{ alignSelf: "flex-start" }}
-                            onClick={() => setNaming(true)}
-                        >
-                            Name…
-                        </Button>
-                    )}
                 </Stack>
             </Group>
-            {/* The row's full width, not the column beside the face: a name needs the room. */}
-            {naming && (
-                <Box mt="xs">
-                    <NameBox
-                        autoFocus
-                        busy={decide.isPending}
-                        disabled={false}
-                        action={(name) => `That's ${name}`}
-                        onName={(name) =>
-                            decide.mutate(
-                                { action: "name", name, person: facesOf(person) },
-                                { onSuccess: () => setNaming(false) }
-                            )
-                        }
-                    />
-                </Box>
-            )}
+            {/* The row's full width, not the column beside the face: a name needs the room. Not
+                focused: several rows are open at once, and the page should not jump to one. */}
+            <Box mt="xs">
+                <NameBox
+                    busy={decide.isPending}
+                    disabled={false}
+                    action={(name) => `That's ${name}`}
+                    onName={(name) =>
+                        decide.mutate({ action: "name", name, person: facesOf(person) })
+                    }
+                />
+            </Box>
         </Paper>
     );
 };
 
-/** The faces nobody matched, folded: often extras, and not what the section is for. */
+/** How many faces nobody matched are asked about at once; the rest wait behind a link. */
+const UNKNOWN_SHOWN = 3;
+
+/**
+ * The faces nobody matched, ahead of the box a name is typed into: a face found is better
+ * evidence than a name remembered, so it is asked about first. The most seen first; past a few,
+ * the rest are folded — those are usually extras.
+ */
 const Unknown: React.FC<{
     mediaId: string;
     people: Person[];
     onSeek: (face: FaceReviewFace) => void;
 }> = ({ mediaId, people, onSeek }) => {
-    const [open, setOpen] = useState(false);
+    const [all, setAll] = useState(false);
+    const ranked = [...people].sort((a, b) => b.card.moments - a.card.moments);
+    const shown = all ? ranked : ranked.slice(0, UNKNOWN_SHOWN);
+    const more = people.length - UNKNOWN_SHOWN;
 
     return (
-        <Stack gap="xs">
-            <Anchor
-                component="button"
-                type="button"
-                size="sm"
-                c="dimmed"
-                onClick={() => setOpen((shown) => !shown)}
-                style={{ alignSelf: "flex-start", minHeight: 44 }}
+        <Stack gap="xs" mb="xs">
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))",
+                    gap: "var(--mantine-spacing-sm)",
+                }}
             >
-                {open
-                    ? "Hide the other faces"
-                    : `${people.length} other ${people.length === 1 ? "face" : "faces"} — who is this? ›`}
-            </Anchor>
-            {open && (
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))",
-                        gap: "var(--mantine-spacing-sm)",
-                    }}
+                {shown.map((person) => (
+                    <UnknownRow
+                        key={person.card.id}
+                        mediaId={mediaId}
+                        person={person}
+                        onSeek={onSeek}
+                    />
+                ))}
+            </div>
+            {more > 0 && (
+                <Anchor
+                    component="button"
+                    type="button"
+                    size="sm"
+                    c="dimmed"
+                    onClick={() => setAll((shownAll) => !shownAll)}
+                    style={{ alignSelf: "flex-start", minHeight: 44 }}
                 >
-                    {people.map((person) => (
-                        <UnknownRow
-                            key={person.card.id}
-                            mediaId={mediaId}
-                            person={person}
-                            onSeek={onSeek}
-                        />
-                    ))}
-                </div>
+                    {all
+                        ? "Fewer faces"
+                        : `${more} more ${more === 1 ? "face" : "faces"} nobody matched ›`}
+                </Anchor>
             )}
         </Stack>
     );
@@ -384,14 +384,28 @@ export const ItemPerformers: React.FC<{
     const { data } = useItemPeople(mediaId, faces);
     const seekFace = useSeekToFace(onSeek);
     const people = data?.people ?? [];
-    // On a tagged performer's card: their face, confirmed or awaiting a yes — the most seen.
-    const onCard = (tagId: string) =>
-        people.find(
+    const ofTag = (tagId: string) =>
+        people.filter(
             (person) =>
                 person.performer?.id === tagId &&
                 person.tagged &&
                 (person.state === "confirmed" || person.state === "suggested")
         );
+    // On a tagged performer's card: their face, confirmed if one is, else awaiting a yes.
+    const onCard = (tagId: string) => {
+        const theirs = ofTag(tagId);
+
+        return theirs.find((person) => person.state === "confirmed") ?? theirs[0];
+    };
+    // Anybody else in it who looks like a tagged performer, not yet confirmed: one person split
+    // in two, asked about rather than left out because the item already carries the tag.
+    const also = people.filter(
+        (person) =>
+            person.performer &&
+            person.tagged &&
+            person.state === "suggested" &&
+            onCard(person.performer.id) !== person
+    );
     const suggested = people.filter(
         (person) =>
             person.performer &&
@@ -411,6 +425,11 @@ export const ItemPerformers: React.FC<{
                 values={values}
                 moment={moment}
                 removeChoice
+                lead={
+                    unknown.length > 0 && (
+                        <Unknown mediaId={mediaId} people={unknown} onSeek={seekFace} />
+                    )
+                }
                 faceFor={(tagId) => {
                     const person = onCard(tagId);
 
@@ -424,8 +443,17 @@ export const ItemPerformers: React.FC<{
                     ) : null;
                 }}
             >
-                {suggested.length + named.length > 0 && (
+                {also.length + suggested.length + named.length > 0 && (
                     <Group gap={8} wrap="wrap" mt={4} align="flex-start">
+                        {also.map((person) => (
+                            <SuggestedCard
+                                key={person.card.id}
+                                mediaId={mediaId}
+                                person={person}
+                                onSeek={seekFace}
+                                also
+                            />
+                        ))}
                         {suggested.map((person) => (
                             <SuggestedCard
                                 key={person.card.id}
@@ -438,9 +466,6 @@ export const ItemPerformers: React.FC<{
                             <NamedCard key={row.tagId} mediaId={mediaId} named={row} />
                         ))}
                     </Group>
-                )}
-                {unknown.length > 0 && (
-                    <Unknown mediaId={mediaId} people={unknown} onSeek={seekFace} />
                 )}
             </FacetBox>
         </Stack>

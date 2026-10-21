@@ -71,6 +71,8 @@ interface FacetBoxProps {
     removeChoice?: boolean;
     /** A tag's face in the item, for its card. */
     faceFor?: (tagId: string) => React.ReactNode;
+    /** Before the box: what is asked first, ahead of typing a name. */
+    lead?: React.ReactNode;
     /** After the chips: who else may be in it. */
     children?: React.ReactNode;
 }
@@ -95,6 +97,7 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
     moment,
     removeChoice,
     faceFor,
+    lead,
     children,
 }) => {
     const { chips, add, remove, error } = useItemFacetTags(mediaId, kind, scope, values);
@@ -146,6 +149,8 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
                     </Text>
                 )}
             </Group>
+
+            {lead}
 
             {/* Always empty: Enter adds what was typed as a chip below and clears the box for
                 the next one. The chips live outside it so that each can be a link.

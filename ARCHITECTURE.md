@@ -2181,8 +2181,13 @@ faces".)
   moment, says "Yes, that's their face" or "Not their face" (the tag stays). After the cards, for
   administrators, who else may be in it as dashed cards: "‹name›?" with Yes / No for a face that
   looks clearly like somebody not tagged, "‹name›?" with Add / Not them for a name in the item's
-  text; and the faces nobody matched, folded under "N other faces" with "Name…". A performer's ×
-  asks how: **Remove tag** only takes it off (`notThem: false` on the tag edit), and their face may
+  text, and "Also ‹name›?" with Yes / No for a second person who looks like a performer it is
+  tagged with — one person split in two, who was shown nowhere once the tag was on (2026-10-21);
+  No refuses those faces and leaves the tag. A tagged performer's card carries a confirmed face
+  of theirs where there is one. The faces nobody matched come first, ahead of the box a name is
+  typed into, each with "Who is this?" and its name box open — the three most seen, the rest
+  under "N more faces" (2026-10-21: a face found is better evidence than a name remembered, and
+  folded under a dim link it was never answered). A performer's × asks how: **Remove tag** only takes it off (`notThem: false` on the tag edit), and their face may
   be suggested again; **Not them** is the untag-by-hand of "Corrections stick", refused on the
   item's faces and name. Everybody else sees the cards, without the faces.
 
@@ -2493,9 +2498,11 @@ person in every item is a card (`PersonCardView`), and each section says one thi
   Pressed and saved, "take back": the confirmations go and the faces are refused for them, so they
   are not suggested again. The item's tag stays — that is the undo list's.
 - **Their items**: their own items — tagged by hand or by name, never by a face — with nobody on
-  them confirmed, each with its people (appearances). Press the one who is them, one an item; saved,
-  all that person's faces there are confirmed. Always there, where "Pick their face" disappeared
-  once three items were confirmed.
+  them confirmed, each with its people (appearances). Press whoever is them; saved, all those
+  people's faces there are confirmed. More than one an item since 2026-10-21: grouping at
+  `APPEARANCE_NEAR` still splits one person in a video in about one in sixteen, and "one an item"
+  left the other half to be suggested again, or never asked about once the item was tagged.
+  Always there, where "Pick their face" disappeared once three items were confirmed.
 - **Ruled out**: one card an item, the faces refused for them — those somebody saw, or every one
   with "Also faces nobody saw". Pressed and saved, "restore": undecided again, to be suggested
   again. A restore is itself an undoing, and is not listed in History; the rest are one decision
