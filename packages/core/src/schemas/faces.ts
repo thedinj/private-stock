@@ -448,3 +448,54 @@ export const newPeopleDecisionSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("later"), people: newPeoplePeople }),
 ]);
 export type NewPeopleDecision = z.infer<typeof newPeopleDecisionSchema>;
+
+/**
+ * Who is this? (§5f "Who is this?"): the faces on the frame on screen, read by the worker, and for
+ * each the items across the library whose faces are most like it.
+ */
+export const faceSearchStateSchema = z.enum(["pending", "running", "done", "failed"]);
+export type FaceSearchState = z.infer<typeof faceSearchStateSchema>;
+
+export const faceSearchStartSchema = z.object({
+    mediaId: z.string().min(1).max(64),
+    atMs: z.number().int().min(0),
+});
+export type FaceSearchStart = z.infer<typeof faceSearchStartSchema>;
+
+const faceBoxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+
+/** What the worker stores: each face on the frame, and the stored faces nearest it. */
+export const storedFaceSearchSchema = z.array(
+    faceBoxSchema.extend({
+        matches: z.array(
+            z.object({ mediaId: z.string(), vectorIndex: z.number(), score: z.number() })
+        ),
+    })
+);
+export type StoredFaceSearch = z.infer<typeof storedFaceSearchSchema>;
+
+export const faceSearchSchema = z.object({
+    id: z.string(),
+    state: faceSearchStateSchema,
+    error: z.string().nullable(),
+    /** The faces found, as fractions of the frame, left to right. */
+    faces: z.array(faceBoxSchema),
+});
+export type FaceSearch = z.infer<typeof faceSearchSchema>;
+
+export const faceSearchMatchesSchema = z.object({
+    matches: z.array(
+        z.object({
+            face: faceReviewFaceSchema,
+            title: z.string(),
+            score: z.number(),
+            /** Who the face is confirmed as, if anybody. */
+            confirmed: z.object({ tagId: z.string(), name: z.string() }).nullable(),
+            /** The item's performers, by name. */
+            performers: z.array(z.string()),
+            /** The same person's other moments in the item, for the closer look. */
+            others: z.array(faceReviewFaceSchema),
+        })
+    ),
+});
+export type FaceSearchMatches = z.infer<typeof faceSearchMatchesSchema>;

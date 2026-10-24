@@ -233,6 +233,20 @@ CREATE TABLE "FaceRefusal" (
             PRIMARY KEY ("faceId", "tagId")
         ) WITHOUT ROWID;
 
+CREATE TABLE "FaceSearch" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "mediaId" TEXT NOT NULL,
+            "atMs" INTEGER NOT NULL,
+            "state" TEXT NOT NULL DEFAULT 'pending' CHECK("state" IN ('pending', 'running', 'done', 'failed')),
+            "resultJson" TEXT CHECK("resultJson" IS NULL OR length("resultJson") <= 400000),
+            "error" TEXT CHECK("error" IS NULL OR length("error") <= 500),
+            "requestedByUserId" TEXT,
+            "requestedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "finishedAt" DATETIME,
+            FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
+            FOREIGN KEY ("requestedByUserId") REFERENCES "User" ("id") ON DELETE SET NULL
+        );
+
 CREATE TABLE "FaceStale" (
             "kind" TEXT NOT NULL CHECK("kind" IN ('tag', 'item')),
             "id" TEXT NOT NULL CHECK(length("id") <= 64),
@@ -1205,6 +1219,10 @@ CREATE INDEX "idx_FaceRefusal_decision"
             ON "FaceRefusal" ("decisionId") WHERE "decisionId" IS NOT NULL;
 
 CREATE INDEX "idx_FaceRefusal_tag" ON "FaceRefusal" ("tagId", "faceId");
+
+CREATE INDEX "idx_FaceSearch_media" ON "FaceSearch" ("mediaId", "state");
+
+CREATE INDEX "idx_FaceSearch_requestedAt" ON "FaceSearch" ("requestedAt");
 
 CREATE INDEX "idx_Face_appearance" ON "Face" ("appearanceId") WHERE "appearanceId" IS NOT NULL;
 

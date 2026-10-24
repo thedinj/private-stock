@@ -56,6 +56,7 @@ import { runFaceAnchors } from "./jobs/faceAnchors.js";
 import { runTagLookPictures } from "./jobs/tagLookPictures.js";
 import { runTagPictures } from "./jobs/tagPictures.js";
 import { runFaces } from "./jobs/faces.js";
+import { runFaceSearch } from "./jobs/faceSearch.js";
 import { withAffinity, modelKindsWaited } from "./embed/affinity.js";
 import { heldFamily, stopModelChild } from "./embed/embedder.js";
 import { runFileHash } from "./jobs/fileHash.js";
@@ -240,6 +241,7 @@ const handlers: Record<string, JobHandler> = {
     dupes: runDupes,
     embed: runEmbed,
     faces: runFaces,
+    faceSearch: runFaceSearch,
     faceAnchors: runFaceAnchors,
     tagPictures: runTagPictures,
     tagLookPictures: runTagLookPictures,

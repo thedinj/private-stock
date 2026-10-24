@@ -27,6 +27,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LoadFailed } from "@/components/LoadFailed";
 import { MediaDetailsDrawer } from "@/components/media/MediaDetailsDrawer";
 import { ItemPerformers } from "@/components/faces/ItemPerformers";
+import { WhoIsThis } from "@/components/faces/WhoIsThis";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
 import { LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
@@ -157,6 +158,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * player for a value nobody is looking at.
      */
     const positionRef = useRef(0);
+    /** The element playing, for "Who is this?" to draw the frame it stopped on (§5f). */
+    const elementRef = useRef<HTMLVideoElement | null>(null);
 
     /**
      * Whether the last press produced something, for a moment.
@@ -171,6 +174,10 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * page opens, which means it also hears keys aimed at anything opened over it.
      */
     const [lightboxOpen, setLightboxOpen] = useState(false);
+    /** "Who is this?" open (§5f): it takes the keys as the enlarged frame view does. */
+    const [whoIsThisOpen, setWhoIsThisOpen] = useState(false);
+    /** A view over the page that owns the keys while it is open. */
+    const overlayOpen = lightboxOpen || whoIsThisOpen;
 
     /**
      * Whether the trash confirmation has the keyboard -- for the same reason as the lightbox.
@@ -640,8 +647,9 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             if (event.metaKey || event.ctrlKey || event.altKey) return;
 
             // The confirmation's keys are its own: Enter confirms, Escape cancels, and n must
-            // not walk the set out from under a dialog about this item.
-            if (trashOpen) return;
+            // not walk the set out from under a dialog about this item. "Who is this?" likewise:
+            // a search being compared is not to be thrown away by a stray n.
+            if (trashOpen || whoIsThisOpen) return;
 
             if (event.key === "n") {
                 event.preventDefault();
@@ -670,7 +678,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
              */
             const numpad = /^Numpad([1-5])$/.exec(event.code);
 
-            if (numpad && !lightboxOpen) {
+            if (numpad && !overlayOpen) {
                 event.preventDefault();
                 setOpinion({
                     rating: ratingAfterPressing(Number(numpad[1]), ratingRef.current),
@@ -684,7 +692,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
              * Here with the rating for the same reason -- it is about the item, not the
              * playback, so a photograph answers to it too.
              */
-            if (event.key === "h" && !lightboxOpen) {
+            if (event.key === "h" && !overlayOpen) {
                 event.preventDefault();
                 setOpinion({ favorite: !favoriteRef.current });
                 return;
@@ -700,7 +708,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
              * A held key repeats, and a repeat must not be the thing that answers the
              * confirmation it opened -- so only the first press counts.
              */
-            if ((event.key === "Delete" || event.key === "Backspace") && !lightboxOpen) {
+            if ((event.key === "Delete" || event.key === "Backspace") && !overlayOpen) {
                 event.preventDefault();
 
                 if (event.repeat) return;
@@ -724,7 +732,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         return () => document.removeEventListener("keydown", onKeyDown);
     }, [
         go,
-        lightboxOpen,
+        overlayOpen,
+        whoIsThisOpen,
         trashOpen,
         trashDialog,
         setOpinion,
@@ -980,6 +989,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // Kept current so the capture button can read the playhead
                             // without this page re-rendering four times a second (§13).
                             positionRef={positionRef}
+                            elementRef={elementRef}
                             preloadMediaId={warmableVideo}
                             /*
                              * Warm the part that will actually be played (§8b).
@@ -1031,7 +1041,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // Released while the enlarged view is open, or its arrows would
                             // move between frames and seek the video at the same time -- and
                             // while the trash confirmation is, whose buttons take space.
-                            hotkeys={!lightboxOpen && !trashOpen}
+                            hotkeys={!overlayOpen && !trashOpen}
                             seekRef={seekRef}
                             // Rolling onward is a separate consent from playing what you
                             // opened, so it is a separate switch and is off by default.
@@ -1057,7 +1067,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             onDwellSeconds={setDwellSeconds}
                             // Released while the enlarged frame view or the trash confirmation
                             // is open, so nothing fights this stage for the same keystroke.
-                            hotkeys={!lightboxOpen && !trashOpen}
+                            hotkeys={!overlayOpen && !trashOpen}
                         />
                     )}
                 </Box>
@@ -1116,6 +1126,19 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     >
                         {narrow ? <LookAlikeGlyph size={16} /> : "More like this"}
                     </Button>
+
+                    {/* Who is this? (§5f): this frame's faces, found across the library.
+                        Administrators', as every face surface is; a film's, being a moment. It
+                        takes the keys while open, as the frame view does. */}
+                    {hasScope("admin") && data.kind === "video" && mode === "player" && (
+                        <WhoIsThis
+                            mediaId={data.id}
+                            positionRef={positionRef}
+                            elementRef={elementRef}
+                            iconOnly={narrow}
+                            onOpenChange={setWhoIsThisOpen}
+                        />
+                    )}
 
                     <Button
                         variant="default"

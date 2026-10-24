@@ -751,3 +751,23 @@ export const runFaceAnchors = async (): Promise<void> => {
         done();
     }
 };
+
+/** What the last run kept of every item's faces, or null before the first. */
+const keptFaces = (): ReadonlyMap<string, readonly (Quantized | null)[] | null> | null =>
+    kept?.faces ?? null;
+
+/**
+ * Every item's face vectors, as the references run keeps them between runs (§5f "Who is this?"): a
+ * search of the library's faces reads them from memory, not from 11,000 files on the NAS's disks.
+ * Up to date as of the last run, a minute or two behind the faces stage. Before the first run —
+ * which comes at start-up — one is made, and waited for.
+ */
+export const libraryFaces = async (): Promise<
+    ReadonlyMap<string, readonly (Quantized | null)[] | null>
+> => {
+    if (keptFaces() === null) {
+        await runFaceAnchors();
+    }
+
+    return keptFaces() ?? new Map();
+};

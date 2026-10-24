@@ -22,6 +22,9 @@ import type {
     FaceHistoryPage,
     FaceMoments,
     FaceReviewFace,
+    FaceSearch,
+    FaceSearchMatches,
+    FaceSearchStart,
     NewPeopleDecision,
     NewPeoplePage,
     PerformerPeopleDecision,
@@ -149,6 +152,44 @@ export const useDecideItemPeople = (mediaId: string) => {
         },
     });
 };
+
+/** While the worker reads a frame, how often to ask whether it has finished. */
+const FACE_SEARCH_POLL_MS = 1500;
+
+/** Who is this? (§5f): search the library's faces from the frame on screen. */
+export const useStartFaceSearch = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: FaceSearchStart) =>
+            api<FaceSearch>("/api/faces/search", { method: "POST", body: JSON.stringify(input) }),
+        onSuccess: (search) =>
+            queryClient.setQueryData(queryKeys.faceSearch.detail(search.id), search),
+    });
+};
+
+/** A search, asked about again until the worker has answered. */
+export const useFaceSearch = (id: string | null) =>
+    useQuery({
+        queryKey: queryKeys.faceSearch.detail(id ?? ""),
+        queryFn: () => api<FaceSearch>(`/api/faces/search/${encodeURIComponent(id!)}`),
+        enabled: id !== null,
+        refetchInterval: (query) => {
+            const state = query.state.data?.state;
+
+            return state === "pending" || state === "running" ? FACE_SEARCH_POLL_MS : false;
+        },
+    });
+
+/** The items most like one face on the frame. Fixed once the search is done. */
+export const useFaceSearchMatches = (id: string | null, index: number | null) =>
+    useQuery({
+        queryKey: queryKeys.faceSearch.matches(id ?? "", index ?? -1),
+        queryFn: () =>
+            api<FaceSearchMatches>(`/api/faces/search/${encodeURIComponent(id!)}/faces/${index!}`),
+        enabled: id !== null && index !== null,
+        staleTime: Infinity,
+    });
 
 /**
  * "No single face", or taken back: the performer's face section, their "Likely" and the review

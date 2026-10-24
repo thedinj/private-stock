@@ -1542,6 +1542,26 @@ export function initializeDatabase(db: Database): void {
             UNIQUE ("mediaId", "side")
         );
 
+        -- "Who is this?" (§5f): the faces on the frame somebody had on screen, and for each the
+        -- stored faces most like it across the library. Scratch, like a trial: read back whole,
+        -- to be shown, so JSON; kept a day, long enough to come back to from an item it found.
+        CREATE TABLE IF NOT EXISTS "FaceSearch" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "mediaId" TEXT NOT NULL,
+            "atMs" INTEGER NOT NULL,
+            "state" TEXT NOT NULL DEFAULT 'pending' CHECK("state" IN ('pending', 'running', 'done', 'failed')),
+            "resultJson" TEXT CHECK("resultJson" IS NULL OR length("resultJson") <= 400000),
+            "error" TEXT CHECK("error" IS NULL OR length("error") <= 500),
+            "requestedByUserId" TEXT,
+            "requestedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "finishedAt" DATETIME,
+            FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
+            FOREIGN KEY ("requestedByUserId") REFERENCES "User" ("id") ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS "idx_FaceSearch_media" ON "FaceSearch" ("mediaId", "state");
+        CREATE INDEX IF NOT EXISTS "idx_FaceSearch_requestedAt" ON "FaceSearch" ("requestedAt");
+
         -- An OCR tuning run (§5d "Tuning against expected text"): a search for the settings that
         -- best read what an administrator says the bench's videos contain. The result is JSON
         -- because it is only ever read whole, to be shown; the readings it was scored from live

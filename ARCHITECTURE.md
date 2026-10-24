@@ -2762,6 +2762,61 @@ pairs marked `applied`.
   (`SINGLE_PERFORMER`) nor a performer's shared face; and a face-made tag confirms no face. Only a
   person's decisions build a reference.
 
+### Who is this?
+
+**"I know I've seen this person before — where?"** (2026-10-24). In the viewer, beside "More like
+this", an administrator presses **"Who is this?"** on a film. It works like "More like this" — the
+moment on screen, over the whole library — but asks about the people in the frame rather than the
+frame's look: the video stops, the frame shows with its faces boxed and numbered, you choose one (a
+lone face is chosen for you), and the **100 items whose stored faces are most like it** follow, best
+first, as face crops. **No line**: the weakest of them is still shown, worded "Faintly alike",
+because casting around is the point. A face somebody has confirmed shows that name; otherwise the
+item's performers, if it has any.
+
+Decided with the owner before it was built, after a first version — faces on a frame opened in the
+lightbox, matched to performers' references — answered a different question:
+
+- **Literally the frame on screen**, not the nearest stored moment. "More like this" can use the
+  nearest kept moment because every moment has a vector; faces are kept from every second sprite
+  tile, at most twelve a video, so the frame paused on seldom has a stored face. So the worker reads
+  that frame from the original, at up to 2,560 px, and finds and recognises its faces with the
+  `faces` stage's own models and code (`faceSearch` job). **That costs seconds, and the cost is
+  accepted** — it is an occasional question: the face models load if the child holds the other
+  family or none (it retires after a minute idle), behind whatever item a backlog has it on.
+  The browser shows the frame at once, drawn from the video element, so the wait is visibly about
+  it; the boxes arrive when the worker answers (polled every 1.5 s).
+- **Every stored face, not performers.** The search is over all 73,000 faces (2026-10-24) — named,
+  confirmed or nobody's — since the person may never have been named. It runs in the worker against
+  the face vectors the references run already keeps in memory (`libraryFaces`), never the 11,000
+  files on the NAS's disks; each item counts by its most alike face (`nearestFaces`, the stored
+  bytes compared directly, as the look search does). Measured with that many faces: 60 ms a face on
+  the desktop. The item asked from is left out. Every face on the frame is searched at once, so
+  choosing between them afterwards is instant.
+- **Candidates are examined without leaving** (decided 2026-10-24). A tap on one opens the closer
+  look the review uses (`FacePeek`, through `LookButton`): the frame that face was seen in, marked,
+  its file, and the same person's other moments in that item — fetched with the page of results,
+  one query, not as each look opens. "Play it here" plays the item in the review's drawer
+  (`FaceViewDrawer`) over the results, a second before the face. The face asked about stays pinned
+  above the results as they scroll, cropped from the frame, with the other faces' numbers beside it.
+- **Leaving does not lose the search.** It lives in the viewer's address — `who` (the search),
+  `whoFace` (the face chosen) and `at` (the moment) — pushed as a history entry when it starts. So
+  "Open the full item" from the drawer is an ordinary step forward, and Back from that item returns
+  to this one at the same moment with the same search, face and results; Back or closing it takes
+  the entry away again. The frame the browser drew is kept in session storage by the search, so it
+  comes back too. While it is open it has the page's keys: the player's, the rating's and Delete,
+  and n and p, which would walk the set out from under it.
+- **Choose a face first**, so the hundred are about one person. The boxes are the buttons; numbered
+  buttons below do the same at a touch target's size.
+- **Kept as scratch.** `FaceSearch`, one row a press — the moment, the faces found, the 150 nearest
+  of each — kept a day so an item it found can be come back from, the old going as new ones come.
+  The extra fifty cover items in libraries the asker cannot see, which are left out when shown.
+  The frame and its vectors are temporary files outside the data directory. One `faceSearch` job an
+  item runs every search of it waiting, as the OCR bench's trials do; a worker stopped mid-search
+  gives it back to the next.
+- **Nothing is decided here.** It finds; tagging and confirming stay where they are.
+- **Administrators only**, as every face surface is; and films only — a photograph's faces were read
+  whole by the stage already, and Review and People in this item ask about them.
+
 ### What faces give back
 
 - **Performers on the untagged 88%**, which is the point.

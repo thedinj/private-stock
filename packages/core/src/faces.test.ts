@@ -14,6 +14,8 @@ import {
     autoTagTrusted,
     autoTags,
     bestMatch,
+    matchStrength,
+    nearestFaces,
     decodeFaceAnchors,
     encodeFaceAnchors,
     performerCentre,
@@ -23,7 +25,7 @@ import {
     writeFaceInput,
     type Point,
 } from "./faces.js";
-import { normaliseVector } from "./embedding.js";
+import { normaliseVector, quantize } from "./embedding.js";
 
 const ARCFACE: Point[] = [
     [38.2946, 51.6963],
@@ -315,5 +317,43 @@ describe("new people", () => {
         ]);
 
         expect(gathered).toEqual([0, 0, null, 0, null, 0]);
+    });
+});
+
+describe("searching the library's faces", () => {
+    const unit = (values: number[]) => normaliseVector(Float32Array.from(values));
+    // Stored as the stage stores them: a byte a dimension, at any length.
+    const stored = (values: number[]) => quantize(unit(values));
+    const library = new Map([
+        ["here", [stored([1, 0, 0])]],
+        ["near", [stored([0, 0, 1]), stored([1, 0.1, 0])]],
+        ["between", [stored([1, 1, 0])]],
+        ["far", [stored([0, 0, 1])]],
+        ["unread", null],
+        ["gap", [null]],
+    ]);
+
+    it("ranks items by their most alike face, leaving out the item asked from", () => {
+        const found = nearestFaces(unit([1, 0, 0]), library, { count: 3, exclude: "here" });
+
+        expect(found.map((match) => [match.mediaId, match.vectorIndex])).toEqual([
+            ["near", 1],
+            ["between", 0],
+            ["far", 0],
+        ]);
+        expect(found[0].score).toBeCloseTo(0.995, 2);
+    });
+
+    it("answers however weak the best match is", () => {
+        expect(
+            nearestFaces(unit([0, 1, 0]), new Map([["far", [stored([0, 0, 1])]]]), { count: 5 })
+        ).toHaveLength(1);
+    });
+
+    it("puts a likeness into words at the lines already drawn", () => {
+        expect(matchStrength(0.6)).toBe("strong");
+        expect(matchStrength(0.5)).toBe("likely");
+        expect(matchStrength(0.42)).toBe("possible");
+        expect(matchStrength(0.2)).toBe("weak");
     });
 });

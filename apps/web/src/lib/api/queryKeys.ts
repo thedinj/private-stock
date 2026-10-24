@@ -281,6 +281,16 @@ export const queryKeys = {
     },
 
     /**
+     * Who is this? (§5f): one search of the library's faces from a frame, and the items most like
+     * each face on it. Its own root, reached by nothing: a search is a snapshot of one moment, and
+     * a new press is a new search.
+     */
+    faceSearch: {
+        detail: (id: string) => ["faceSearch", id],
+        matches: (id: string, index: number) => ["faceSearch", id, "matches", index],
+    },
+
+    /**
      * The frames a video's face may really be, and the one its sprite tile looks like (§9 "What a
      * tile shows"). Its own root, reached by nothing: it is read from the file and the sheets,
      * which no mutation here changes.

@@ -23,6 +23,7 @@ export * as searchRepo from "./searchRepo.js";
 export * as mediaTextRepo from "./mediaTextRepo.js";
 export * as mediaAttributeRepo from "./mediaAttributeRepo.js";
 export * as ocrTrialRepo from "./ocrTrialRepo.js";
+export * as faceSearchRepo from "./faceSearchRepo.js";
 export * as ocrTuneRepo from "./ocrTuneRepo.js";
 export * as phashRepo from "./phashRepo.js";
 export * as dupeRepo from "./dupeRepo.js";

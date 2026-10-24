@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Anchor, Popover } from "@mantine/core";
+import { Anchor, Popover, UnstyledButton } from "@mantine/core";
 
 import type { FaceReviewFace } from "@private-stock/core";
 
@@ -23,7 +23,10 @@ export const LookButton: React.FC<{
     onPlay: (face: FaceReviewFace) => void;
     /** The performer it may be: their face from other items is shown to compare. */
     compare?: { tagId: string; name: string };
-}> = ({ face, others, peekState, onPlay, compare }) => {
+    /** What opens it, where that is more than the word: a whole card of search results. */
+    children?: React.ReactNode;
+    label?: string;
+}> = ({ face, others, peekState, onPlay, compare, children, label = "Look" }) => {
     const [peeking, setPeeking] = useState(false);
 
     useCloseOnBack(peeking, () => setPeeking(false));
@@ -38,16 +41,26 @@ export const LookButton: React.FC<{
             withinPortal
         >
             <Popover.Target>
-                <Anchor
-                    component="button"
-                    type="button"
-                    size="xs"
-                    c="dimmed"
-                    onClick={() => setPeeking((open) => !open)}
-                    style={{ minHeight: 44, minWidth: 44 }}
-                >
-                    Look
-                </Anchor>
+                {children ? (
+                    <UnstyledButton
+                        aria-label={label}
+                        onClick={() => setPeeking((open) => !open)}
+                        style={{ minWidth: 0, width: "100%" }}
+                    >
+                        {children}
+                    </UnstyledButton>
+                ) : (
+                    <Anchor
+                        component="button"
+                        type="button"
+                        size="xs"
+                        c="dimmed"
+                        onClick={() => setPeeking((open) => !open)}
+                        style={{ minHeight: 44, minWidth: 44 }}
+                    >
+                        {label}
+                    </Anchor>
+                )}
             </Popover.Target>
             <Popover.Dropdown
                 onClick={(event) => {

@@ -9,7 +9,13 @@
  */
 
 import type { MediaKind } from "./domain.js";
-import { normaliseVector, vectorSimilarity, type Rect } from "./embedding.js";
+import {
+    normaliseVector,
+    quantizedSimilarity,
+    vectorSimilarity,
+    type Quantized,
+    type Rect,
+} from "./embedding.js";
 import { ValidationError } from "./errors.js";
 
 /** The detector sees a region scaled so its long side is this, in multiples of 32 (§5f). */
@@ -645,6 +651,64 @@ export const bestMatch = (
 
     return best ? { tagId: best.tagId, score, second: second === -Infinity ? 0 : second } : null;
 };
+
+/** How many items a face search answers with (§5f "Who is this?"). */
+export const FACE_SEARCH_RESULTS = 100;
+
+/**
+ * The items whose faces are most like `query`, each by its most alike face, best first (§5f "Who
+ * is this?"). No line: the question is where somebody was seen before, and a weak answer is still
+ * an answer. Read straight from the stored bytes, a byte a dimension, as the look search does
+ * (`quantizedSimilarity`): unpacking 73,000 faces on every search would cost more than comparing
+ * them. A stored face was unit length before it was packed, so its scale gives back the cosine.
+ */
+export const nearestFaces = (
+    query: Float32Array,
+    library: ReadonlyMap<string, readonly (Quantized | null)[] | null>,
+    options: { count: number; exclude?: string }
+): { mediaId: string; vectorIndex: number; score: number }[] => {
+    const best: { mediaId: string; vectorIndex: number; score: number }[] = [];
+
+    for (const [mediaId, faces] of library) {
+        if (!faces || mediaId === options.exclude) continue;
+
+        let topIndex = -1;
+        let topScore = -Infinity;
+
+        for (let vectorIndex = 0; vectorIndex < faces.length; vectorIndex += 1) {
+            const face = faces[vectorIndex];
+
+            if (!face) continue;
+
+            const score = quantizedSimilarity(query, face.values, face.scale);
+
+            if (score > topScore) {
+                topIndex = vectorIndex;
+                topScore = score;
+            }
+        }
+
+        if (topIndex >= 0) best.push({ mediaId, vectorIndex: topIndex, score: topScore });
+    }
+
+    return best.sort((a, b) => b.score - a.score).slice(0, options.count);
+};
+
+/**
+ * How alike two faces are, in words rather than a number, which reads as a probability and is not
+ * one. The lines are the ones already drawn: what Suggestions puts forward, what "looks like them"
+ * meant, and the line under which a person matches nobody known.
+ */
+export type MatchStrength = "strong" | "likely" | "possible" | "weak";
+
+export const matchStrength = (score: number): MatchStrength =>
+    score >= SUGGEST_LINE
+        ? "strong"
+        : score >= LOOKS_LIKE
+          ? "likely"
+          : score >= NEW_PERSON_UNMATCHED
+            ? "possible"
+            : "weak";
 
 /**
  * Appearances (§5f "A person in a video"): one person in one item — what is shown and asked

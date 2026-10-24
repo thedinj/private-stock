@@ -100,6 +100,12 @@ interface VideoPlayerProps {
      */
     seekRef?: { current: ((ms: number) => void) | null };
     /**
+     * The element on screen, for a caller that needs the picture it is showing: "Who is this?"
+     * draws the frame somebody stopped on (§5f). Handed down like `seekRef`; kept pointing at
+     * whichever element is playing, the warmed one after a swap included.
+     */
+    elementRef?: { current: HTMLVideoElement | null };
+    /**
      * The item to warm in the background, or null (§8b).
      *
      * The player renders a second, hidden `<video>` for it, so that opening it is a swap of
@@ -368,6 +374,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     captureFailed = false,
     hotkeys = true,
     seekRef,
+    elementRef,
     preloadMediaId = null,
     preloadStartMs = null,
     span = null,
@@ -1070,6 +1077,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     if (seekRef) {
         seekRef.current = seekTo;
+    }
+
+    if (elementRef) {
+        elementRef.current = videoEl;
     }
 
     const togglePlay = useCallback(() => {

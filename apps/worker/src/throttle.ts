@@ -78,6 +78,8 @@ export const CONCURRENCY: Record<string, number> = {
     embed: 1,
     // The same child serves faces, one family at a time (§5f): a second slot would only wait.
     faces: 1,
+    // The same child again, for the frame somebody had on screen (§5f "Who is this?").
+    faceSearch: 1,
     // Library-wide and replaces every reference and match whole (§5f "One face, one score").
     // Not in `CPU_BOUND`: a pass is seconds of arithmetic and one read of every faces file, and in the
     // shared budget it waited behind every `faces` job of a first pass — hours — so nothing it
@@ -155,6 +157,7 @@ export const CPU_BOUND: ReadonlySet<string> = new Set([
     "embed",
     // Detection and recognition both saturate the threads they are given (§5f).
     "faces",
+    "faceSearch",
     // Decodes a frame of the original at full size, as `cover` does (§6 "A tag's picture").
     "tagPictures",
     "tagLookPictures",

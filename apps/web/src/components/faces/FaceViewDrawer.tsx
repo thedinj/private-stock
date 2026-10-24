@@ -24,7 +24,9 @@ const LEAD_MS = 1_000;
 export const FaceViewDrawer: React.FC<{
     face: FaceReviewFace | null;
     onClose: () => void;
-}> = ({ face, onClose }) => {
+    /** What is kept while it plays; a review's ticks unless said otherwise. */
+    note?: string;
+}> = ({ face, onClose, note = "Your ticks stay as they are while you look." }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
     const src = face ? `/api/media/${encodeURIComponent(face.mediaId)}/stream` : "";
 
@@ -67,7 +69,7 @@ export const FaceViewDrawer: React.FC<{
                         <img src={src} alt="The item" style={{ width: "100%", borderRadius: 6 }} />
                     )}
                     <Text size="xs" c="dimmed">
-                        Your ticks stay as they are while you look.
+                        {note}
                     </Text>
                     <Button
                         component={Link}

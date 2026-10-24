@@ -310,6 +310,29 @@ export const shownFaces = (faceIds: readonly string[]): ShownFace[] =>
         .all(JSON.stringify(faceIds)) as ShownFace[];
 
 /**
+ * Faces as a list shows them, by where their vectors are (§5f "Who is this?"): what a search of the
+ * library's faces found, with who each is confirmed as and which person in its item it is. A face
+ * gone since is left out.
+ */
+export const shownFacesAt = (
+    at: readonly { mediaId: string; vectorIndex: number }[]
+): (ShownFace & { vectorIndex: number; tagId: string | null; appearanceId: string | null })[] =>
+    db
+        .prepare(
+            `SELECT f."id", f."mediaId", m."kind", f."atMs", f."x", f."y", f."w", f."h",
+                    f."vectorIndex", f."tagId", f."appearanceId"
+               FROM json_each(?) j
+               JOIN "Face" f ON f."mediaId" = json_extract(j.value, '$.mediaId')
+                            AND f."vectorIndex" = json_extract(j.value, '$.vectorIndex')
+               JOIN "Media" m ON m."id" = f."mediaId"`
+        )
+        .all(JSON.stringify(at)) as (ShownFace & {
+        vectorIndex: number;
+        tagId: string | null;
+        appearanceId: string | null;
+    })[];
+
+/**
  * A performer's face from a few of their items, to set beside one that may be them (§5f
  * "Suggestions"): the largest, surest face confirmed as them on each item, the best items first.
  * `confirmed` false when nobody has confirmed one, and these are instead the person most like

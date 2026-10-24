@@ -201,6 +201,22 @@ describe('carrying a "can\'t tell"', () => {
     });
 });
 
+describe("faces by where their vectors are", () => {
+    it("finds each face searched for, with who it is confirmed as, and leaves out one gone", () => {
+        faceRepo.replaceForMedia("a", [face(0, 2000, 0.1), face(1, 4000, 0.5)]);
+        confirm(faces("a")[1].id, "jane");
+
+        const found = faceRepo.shownFacesAt([
+            { mediaId: "a", vectorIndex: 1 },
+            { mediaId: "a", vectorIndex: 7 },
+        ]);
+
+        expect(found.map((f) => [f.mediaId, f.vectorIndex, f.atMs, f.tagId])).toEqual([
+            ["a", 1, 4000, "jane"],
+        ]);
+    });
+});
+
 describe("borrowing an identical copy's faces", () => {
     it("copies the faces and what was said about them", () => {
         faceRepo.replaceForMedia("a", [face(0, 2000, 0.1), face(1, 4000, 0.5)]);
