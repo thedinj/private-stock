@@ -37,6 +37,7 @@ const faces = (n: number): string => `${n.toLocaleString()} ${n === 1 ? "face" :
 
 const WHERE: Record<string, string> = {
     review: "Review",
+    search: "Who is this?",
     performer: "Their page",
     item: "Item page",
     wouldTag: "Would tag",

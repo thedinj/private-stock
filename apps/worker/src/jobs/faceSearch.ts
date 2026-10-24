@@ -4,6 +4,7 @@ import * as path from "node:path";
 
 import {
     FACE_SEARCH_RESULTS,
+    SAME_PERSON_IN_ITEM,
     decodeVectorFile,
     findStage,
     nearestFaces,
@@ -87,19 +88,35 @@ export const searchFrame = async (
 
         const vectors = decodeVectorFile(new Uint8Array(await readFile(vectorsPath))).vectors;
         const library = await libraryFaces();
+        const own = library.get(search.mediaId);
+        const round = (score: number) => Math.round(score * 1000) / 1000;
 
         return (
             result.faces
-                .map((face) => ({
-                    x: face.x,
-                    y: face.y,
-                    w: face.w,
-                    h: face.h,
-                    matches: nearestFaces(unitFace(vectors[face.vectorIndex]!.vector), library, {
-                        count: KEPT_PER_FACE,
-                        exclude: search.mediaId,
-                    }).map((match) => ({ ...match, score: Math.round(match.score * 1000) / 1000 })),
-                }))
+                .map((face) => {
+                    const query = unitFace(vectors[face.vectorIndex]!.vector);
+                    // Which of the item's own stored faces this is, so naming it confirms that
+                    // person there too. The faces of one video share its light and grain, so the
+                    // within-an-item line is the one to hold it to.
+                    const [self] = own
+                        ? nearestFaces(query, new Map([[search.mediaId, own]]), { count: 1 })
+                        : [];
+
+                    return {
+                        x: face.x,
+                        y: face.y,
+                        w: face.w,
+                        h: face.h,
+                        self:
+                            self && self.score >= SAME_PERSON_IN_ITEM
+                                ? { vectorIndex: self.vectorIndex, score: round(self.score) }
+                                : null,
+                        matches: nearestFaces(query, library, {
+                            count: KEPT_PER_FACE,
+                            exclude: search.mediaId,
+                        }).map((match) => ({ ...match, score: round(match.score) })),
+                    };
+                })
                 // Left to right, so the numbers on the frame read in order.
                 .sort((a, b) => a.x - b.x)
         );

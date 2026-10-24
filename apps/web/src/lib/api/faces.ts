@@ -24,6 +24,7 @@ import type {
     FaceReviewFace,
     FaceSearch,
     FaceSearchMatches,
+    FaceSearchName,
     FaceSearchStart,
     NewPeopleDecision,
     NewPeoplePage,
@@ -190,6 +191,30 @@ export const useFaceSearchMatches = (id: string | null, index: number | null) =>
         enabled: id !== null && index !== null,
         staleTime: Infinity,
     });
+
+/**
+ * Say who one face on the frame is (§5f "Who is this?"). Tagging is a tag edit like any other, so it
+ * moves what any does, and the decision joins History; the candidates are read again for the names
+ * their faces are now confirmed as — same scores, so the same order.
+ */
+export const useNameFromSearch = (id: string, index: number) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (decision: FaceSearchName) =>
+            api<{ tagId: string; name: string; tagged: number; refused: number }>(
+                `/api/faces/search/${encodeURIComponent(id)}/faces/${index}`,
+                { method: "POST", body: JSON.stringify(decision) }
+            ),
+        onSuccess: () => {
+            invalidateVocabulary(queryClient);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.faceHistory.all() });
+            void queryClient.invalidateQueries({
+                queryKey: queryKeys.faceSearch.matches(id, index),
+            });
+        },
+    });
+};
 
 /**
  * "No single face", or taken back: the performer's face section, their "Likely" and the review

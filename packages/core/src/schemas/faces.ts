@@ -467,6 +467,11 @@ const faceBoxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h:
 /** What the worker stores: each face on the frame, and the stored faces nearest it. */
 export const storedFaceSearchSchema = z.array(
     faceBoxSchema.extend({
+        /**
+         * The stored face in the item asked from that is this one, if any is near enough: whose
+         * person naming it confirms there. Absent from searches made before it was kept.
+         */
+        self: z.object({ vectorIndex: z.number(), score: z.number() }).nullable().optional(),
         matches: z.array(
             z.object({ mediaId: z.string(), vectorIndex: z.number(), score: z.number() })
         ),
@@ -495,7 +500,32 @@ export const faceSearchMatchesSchema = z.object({
             performers: z.array(z.string()),
             /** The same person's other moments in the item, for the closer look. */
             others: z.array(faceReviewFaceSchema),
+            /** Every face of that person in the item: what saying who they are is about. */
+            faceIds: z.array(z.string()),
         })
     ),
 });
 export type FaceSearchMatches = z.infer<typeof faceSearchMatchesSchema>;
+
+/**
+ * Who is this?, named (§5f): the person on the frame is this performer — picked, or coined with the
+ * typo check — and so is each candidate said to be them; those said not to be them are refused for
+ * the performer. The video asked from is always tagged.
+ */
+export const faceSearchNameSchema = z.object({
+    performer: z.discriminatedUnion("by", [
+        z.object({ by: z.literal("name"), name: tagNameSchema }),
+        z.object({ by: z.literal("id"), tagId: z.string().min(1).max(64) }),
+    ]),
+    people: z
+        .array(
+            z.object({
+                mediaId: z.string().min(1).max(64),
+                faceIds: z.array(z.string().min(1).max(64)).min(1).max(24),
+                shownFaceId: z.string().min(1).max(64),
+                verdict: z.enum(["is", "isNot"]),
+            })
+        )
+        .max(100),
+});
+export type FaceSearchName = z.infer<typeof faceSearchNameSchema>;

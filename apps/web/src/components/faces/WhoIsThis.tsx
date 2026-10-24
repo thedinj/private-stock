@@ -2,21 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Box, Button, Group, Loader, Modal, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Box, Button, Group, Loader, Modal, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import {
     matchStrength,
+    type FaceCrop,
     type FaceReviewFace,
     type FaceSearch,
+    type FaceSearchName,
     type MatchStrength,
 } from "@private-stock/core";
 
 import { FaceCropView } from "@/components/faces/FaceCropView";
 import { FaceViewDrawer } from "@/components/faces/FaceViewDrawer";
-import { LookButton } from "@/components/faces/LookButton";
+import { MARKS, PersonCardView } from "@/components/faces/PersonCardView";
+import { NameBox, type TickState } from "@/components/faces/faceControls";
 import { SomebodyGlyph } from "@/components/media/Glyph";
-import { useFaceSearch, useFaceSearchMatches, useStartFaceSearch } from "@/lib/api/faces";
+import {
+    useFaceSearch,
+    useFaceSearchMatches,
+    useNameFromSearch,
+    useStartFaceSearch,
+} from "@/lib/api/faces";
 import { faceSquare } from "@/lib/faceSquare";
 import { parseAtParam } from "@/lib/resumePoint";
 import { formatTimecode } from "@/lib/timecode";
@@ -229,10 +237,102 @@ const Comparing: React.FC<{
     );
 };
 
-/** The items whose faces are most like the one chosen, best first, each looked at in place. */
-const Matches: React.FC<{ searchId: string; index: number }> = ({ searchId, index }) => {
+/** What is said of a candidate: nothing yet, that they are the person, or that they are not. */
+type Said = "open" | "them" | "notThem";
+
+/** A press moves on: nothing said, them, not them, and back to nothing said. */
+const NEXT_SAID: Record<Said, Said> = { open: "them", them: "notThem", notThem: "open" };
+
+/** The closer look's switch says the same three things in its own words. */
+const TICK_OF: Record<Said, TickState> = { open: "unsure", them: "in", notThem: "out" };
+const SAID_OF: Record<TickState, Said> = { unsure: "open", in: "them", out: "notThem" };
+
+/** Who face `index` of a search was named as, kept for the visit: one search names one person. */
+const namedKey = (searchId: string, index: number) => `ps:whoIsThis:${searchId}:${index}:named`;
+
+const keptNamed = (searchId: string, index: number): { tagId: string; name: string } | null => {
+    try {
+        const kept = sessionStorage.getItem(namedKey(searchId, index));
+
+        return kept ? (JSON.parse(kept) as { tagId: string; name: string }) : null;
+    } catch {
+        return null;
+    }
+};
+
+const items = (n: number): string => `${n} ${n === 1 ? "item" : "items"}`;
+
+const CARD = 96;
+
+/** The video asked from: always tagged, so a card that says so and takes no press. */
+const SourceCard: React.FC<{ crop: FaceCrop | null; atMs: number }> = ({ crop, atMs }) => (
+    <Paper withBorder radius="md" p={4}>
+        <Stack gap={0} align="center">
+            <Box
+                pos="relative"
+                style={{
+                    borderRadius: 8,
+                    padding: 2,
+                    outline: "2px solid var(--mantine-color-brass-6)",
+                }}
+            >
+                {crop ? (
+                    <FaceCropView crop={crop} size={CARD} />
+                ) : (
+                    <Box
+                        w={CARD}
+                        h={CARD}
+                        style={{ borderRadius: 6, background: "var(--ps-well)" }}
+                    />
+                )}
+                <Box
+                    aria-hidden
+                    style={{
+                        position: "absolute",
+                        right: 6,
+                        top: 6,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: MARKS.them.ink,
+                        background: MARKS.them.color,
+                    }}
+                >
+                    {MARKS.them.symbol}
+                </Box>
+            </Box>
+            <Group h={44} px={4} w="100%" justify="center">
+                <Text size="xs" c="dimmed" truncate>
+                    This video, at {formatTimecode(atMs)}
+                </Text>
+            </Group>
+        </Stack>
+    </Paper>
+);
+
+/**
+ * The items whose faces are most like the one chosen, best first, each looked at in place — and
+ * saying who the person is: the video asked from always, and each candidate pressed as them. One
+ * search names one person: after the first save the name is fixed, and later saves add to it.
+ */
+const Matches: React.FC<{
+    searchId: string;
+    index: number;
+    sourceCrop: FaceCrop | null;
+    atMs: number;
+}> = ({ searchId, index, sourceCrop, atMs }) => {
     const { data, isPending, isError, error } = useFaceSearchMatches(searchId, index);
+    const name = useNameFromSearch(searchId, index);
     const [viewing, setViewing] = useState<FaceReviewFace | null>(null);
+    /** What is said and not yet saved, by face. */
+    const [said, setSaid] = useState<ReadonlyMap<string, Said>>(new Map());
+    /** What was saved this visit, by face: "not them" is not on the cards when they are read again. */
+    const [saved, setSaved] = useState<ReadonlyMap<string, Said>>(new Map());
+    const [named, setNamed] = useState(() => keptNamed(searchId, index));
 
     if (isPending) {
         return (
@@ -250,64 +350,212 @@ const Matches: React.FC<{ searchId: string; index: number }> = ({ searchId, inde
         );
     }
 
-    if (data.matches.length === 0) {
-        return (
-            <Text size="sm" c="dimmed">
-                Nobody else in the library has a face to compare with yet.
-            </Text>
+    const pending = data.matches.filter((match) => (said.get(match.face.id) ?? "open") !== "open");
+    const them = pending.filter((match) => said.get(match.face.id) === "them").length;
+    const notThem = pending.length - them;
+    // Names the candidates are already confirmed as: who this may well be, one press away.
+    const seenAs = [
+        ...data.matches
+            .flatMap((match) => (match.confirmed ? [match.confirmed] : []))
+            .reduce(
+                (counts, tag) =>
+                    counts.set(tag.tagId, {
+                        ...tag,
+                        count: (counts.get(tag.tagId)?.count ?? 0) + 1,
+                    }),
+                new Map<string, { tagId: string; name: string; count: number }>()
+            )
+            .values(),
+    ]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+    const save = (performer: FaceSearchName["performer"]) =>
+        name.mutate(
+            {
+                performer,
+                people: pending.map((match) => ({
+                    mediaId: match.face.mediaId,
+                    faceIds: match.faceIds,
+                    shownFaceId: match.face.id,
+                    verdict: said.get(match.face.id) === "them" ? "is" : "isNot",
+                })),
+            },
+            {
+                onSuccess: (result) => {
+                    const fixed = { tagId: result.tagId, name: result.name };
+
+                    setSaved((current) => new Map([...current, ...said]));
+                    setSaid(new Map());
+                    setNamed(fixed);
+
+                    try {
+                        sessionStorage.setItem(namedKey(searchId, index), JSON.stringify(fixed));
+                    } catch {
+                        // Without it, coming back asks for the name again; nothing else is lost.
+                    }
+                },
+            }
         );
-    }
+
+    const press = (faceId: string, next: Said) =>
+        setSaid((current) => new Map(current).set(faceId, next));
 
     return (
         <Stack gap="xs">
             <Text size="xs" c="dimmed">
-                The {data.matches.length} most alike, best first. Tap one for a closer look.
+                The {data.matches.length} most alike, best first. Press a face that is them; press
+                again for not them. &ldquo;Look&rdquo; shows where it was seen.
             </Text>
-            <SimpleGrid cols={{ base: 2, xs: 3, sm: 4, md: 6 }} spacing="sm" verticalSpacing="md">
+            <SimpleGrid cols={{ base: 2, xs: 3, sm: 4, md: 6 }} spacing="sm" verticalSpacing="sm">
+                <SourceCard crop={sourceCrop} atMs={atMs} />
                 {data.matches.map((match) => {
-                    const named = match.confirmed?.name ?? match.performers.join(", ");
+                    const id = match.face.id;
+                    const strength = STRENGTH_LABEL[matchStrength(match.score)];
+                    const known = match.performers.join(", ");
+                    const done =
+                        saved.get(id) ??
+                        (named && match.confirmed?.tagId === named.tagId ? "them" : undefined);
+
+                    if (done && done !== "open") {
+                        return (
+                            <PersonCardView
+                                key={id}
+                                face={match.face}
+                                others={match.others}
+                                size={CARD}
+                                mark={done === "them" ? MARKS.them : MARKS.notThem}
+                                look={done === "them" ? "chosen" : "faded"}
+                                caption={`${done === "them" ? "Tagged" : "Not"} ${named?.name ?? ""}`}
+                                label={`${match.title}: saved`}
+                                onPlay={setViewing}
+                            />
+                        );
+                    }
+
+                    // Somebody else's already: said elsewhere, and corrected there.
+                    if (match.confirmed) {
+                        return (
+                            <PersonCardView
+                                key={id}
+                                face={match.face}
+                                others={match.others}
+                                size={CARD}
+                                mark={MARKS.open}
+                                look="plain"
+                                caption={match.confirmed.name}
+                                label={`${match.title}: confirmed as ${match.confirmed.name}`}
+                                onPlay={setViewing}
+                            />
+                        );
+                    }
+
+                    const state = said.get(id) ?? "open";
 
                     return (
-                        <LookButton
-                            key={match.face.id}
+                        <PersonCardView
+                            key={id}
                             face={match.face}
                             others={match.others}
+                            size={CARD}
+                            mark={
+                                state === "them"
+                                    ? MARKS.them
+                                    : state === "notThem"
+                                      ? MARKS.notThem
+                                      : MARKS.open
+                            }
+                            look={
+                                state === "them"
+                                    ? "chosen"
+                                    : state === "notThem"
+                                      ? "faded"
+                                      : "plain"
+                            }
+                            caption={known ? `${strength} · ${known}` : strength}
+                            label={`${match.title}: ${
+                                state === "them"
+                                    ? "them"
+                                    : state === "notThem"
+                                      ? "not them"
+                                      : "nothing said"
+                            }`}
+                            onPress={() => press(id, NEXT_SAID[state])}
+                            peekState={{
+                                state: TICK_OF[state],
+                                threeWay: true,
+                                onSet: (tick) => press(id, SAID_OF[tick]),
+                            }}
                             onPlay={setViewing}
-                            label={`A closer look: ${match.title}`}
-                        >
-                            <Stack gap={2} align="center">
-                                <FaceCropView crop={match.face.crop} size={96} />
-                                <Text size="xs" c="dimmed">
-                                    {STRENGTH_LABEL[matchStrength(match.score)]}
-                                </Text>
-                                {named && (
-                                    <Text
-                                        size="sm"
-                                        fw={match.confirmed ? 600 : 400}
-                                        lineClamp={1}
-                                        ta="center"
-                                        title={named}
-                                    >
-                                        {named}
-                                    </Text>
-                                )}
-                                <Text
-                                    size="xs"
-                                    c="dimmed"
-                                    lineClamp={2}
-                                    ta="center"
-                                    title={match.title}
-                                    style={{ wordBreak: "break-word" }}
-                                >
-                                    {match.title}
-                                    {match.face.atMs !== null &&
-                                        ` · ${formatTimecode(match.face.atMs)}`}
-                                </Text>
-                            </Stack>
-                        </LookButton>
+                        />
                     );
                 })}
             </SimpleGrid>
+
+            <Stack
+                gap={6}
+                py="xs"
+                style={{
+                    position: "sticky",
+                    bottom: 0,
+                    zIndex: 2,
+                    background: "var(--ps-surface)",
+                }}
+            >
+                <Text size="sm">
+                    {named && saved.size > 0 && pending.length === 0
+                        ? `Saved as ${named.name}.`
+                        : `This video${them > 0 ? ` and ${items(them)} more` : ""}${
+                              notThem > 0 ? `; ${notThem} not them` : ""
+                          }`}
+                </Text>
+                {named ? (
+                    <Button
+                        color="brass"
+                        h={44}
+                        style={{ alignSelf: "flex-start" }}
+                        loading={name.isPending}
+                        disabled={pending.length === 0}
+                        onClick={() => save({ by: "id", tagId: named.tagId })}
+                    >
+                        Save as {named.name}
+                    </Button>
+                ) : (
+                    <>
+                        {seenAs.length > 0 && (
+                            <Group gap={6} wrap="wrap">
+                                <Text size="xs" c="dimmed">
+                                    Seen here as:
+                                </Text>
+                                {seenAs.map((tag) => (
+                                    <Button
+                                        key={tag.tagId}
+                                        size="compact-sm"
+                                        variant="light"
+                                        color="brass"
+                                        disabled={name.isPending}
+                                        onClick={() => save({ by: "id", tagId: tag.tagId })}
+                                    >
+                                        {tag.name}
+                                    </Button>
+                                ))}
+                            </Group>
+                        )}
+                        <NameBox
+                            busy={name.isPending}
+                            disabled={false}
+                            action={(typed) => `Tag ${items(them + 1)} as ${typed}`}
+                            onName={(typed) => save({ by: "name", name: typed })}
+                        />
+                    </>
+                )}
+                {name.isError && (
+                    <Text size="xs" c="oxblood">
+                        {name.error.message}
+                    </Text>
+                )}
+            </Stack>
+
             <FaceViewDrawer
                 face={viewing}
                 onClose={() => setViewing(null)}
@@ -325,7 +573,8 @@ const Asked: React.FC<{
     onChoose: (index: number) => void;
     failedToStart: string | null;
     onRetry: () => void;
-}> = ({ searchId, picture, chosen, onChoose, failedToStart, onRetry }) => {
+    atMs: number;
+}> = ({ searchId, picture, chosen, onChoose, failedToStart, onRetry, atMs }) => {
     const { data: search } = useFaceSearch(searchId);
 
     const done = search?.state === "done";
@@ -378,7 +627,30 @@ const Asked: React.FC<{
                         onSelect={onChoose}
                     />
                     {selected !== null && searchId && (
-                        <Matches searchId={searchId} index={selected} />
+                        <Matches
+                            // Each face is its own question, with its own name and marks.
+                            key={selected}
+                            searchId={searchId}
+                            index={selected}
+                            sourceCrop={
+                                picture
+                                    ? {
+                                          url: picture.url,
+                                          rect: faceSquare(
+                                              faces[selected]!,
+                                              picture.width,
+                                              picture.height
+                                          ),
+                                          frame: faceSquare(
+                                              faces[selected]!,
+                                              picture.width,
+                                              picture.height
+                                          ),
+                                      }
+                                    : null
+                            }
+                            atMs={atMs}
+                        />
                     )}
                 </>
             )}
@@ -531,6 +803,7 @@ export const WhoIsThis: React.FC<{
                         }
                         failedToStart={start.isError ? start.error.message : null}
                         onRetry={() => ask(atMs, picture)}
+                        atMs={atMs}
                     />
                 )}
             </Modal>

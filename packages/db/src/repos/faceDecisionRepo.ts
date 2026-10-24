@@ -22,6 +22,8 @@ export type DecisionSurface =
     | "untag"
     | "findUntagged"
     | "auto"
+    // "Who is this?" in the viewer (§5f).
+    | "search"
     | "history"
     | "earlier";
 

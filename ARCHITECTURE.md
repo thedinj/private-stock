@@ -2813,7 +2813,21 @@ lightbox, matched to performers' references — answered a different question:
   The frame and its vectors are temporary files outside the data directory. One `faceSearch` job an
   item runs every search of it waiting, as the OCR bench's trials do; a worker stopped mid-search
   gives it back to the next.
-- **Nothing is decided here.** It finds; tagging and confirming stay where they are.
+- **Naming them** (decided with the owner 2026-10-24). The results are the review's person cards
+  (`PersonCardView`): a press says them, again not them, again nothing; "Look" says the same.
+  **The video asked from is always tagged** — a fixed first card, ticked, taking no press — and
+  its person confirmed when the search found which of its stored people the frame's face is
+  (`self`, the nearest of its own faces at `SAME_PERSON_IN_ITEM`; none near enough, and the video
+  is tagged with nothing confirmed). Name them with the coining box and its typo check, or one
+  press on a name the candidates are already confirmed as ("Seen here as"). One save is one
+  decision in History, undone there: the video and those said to be them tagged as one batch
+  ("Jane on 6 items, from Who is this?"), every face of each one's person confirmed — the face
+  shown `shown`, the rest `inferred` — and those said not to be them refused for the performer,
+  the person and not the item. **Nothing said is nothing**: a card left alone refuses nobody.
+- **One search names one person.** After the first save the name is fixed for that face, kept
+  for the visit, and later saves add to it; the workflow does not tag anybody else. A candidate
+  already confirmed as somebody shows their name and takes no press — that is corrected where it
+  was said. Saved cards stay where they were, saying what they became.
 - **Administrators only**, as every face surface is; and films only — a photograph's faces were read
   whole by the stage already, and Review and People in this item ask about them.
 

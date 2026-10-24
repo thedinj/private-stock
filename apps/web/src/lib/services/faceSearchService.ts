@@ -3,16 +3,27 @@ import {
     FACE_SEARCH_RESULTS,
     NotFoundError,
     ValidationError,
+    normalizeName,
     storedFaceSearchSchema,
     type FaceSearch,
     type FaceSearchMatches,
+    type FaceSearchName,
     type FaceSearchStart,
     type StoredFaceSearch,
 } from "@private-stock/core";
-import { appearanceRepo, faceRepo, faceSearchRepo, tagRepo } from "@private-stock/db";
+import {
+    appearanceRepo,
+    db,
+    faceDecisionRepo,
+    faceRepo,
+    faceSearchRepo,
+    searchRepo,
+    tagBatchRepo,
+    tagRepo,
+} from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
-import { reviewFace } from "./faceService";
+import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 
 /**
@@ -123,11 +134,18 @@ export const faceSearchMatches = (
     // The person each matched face is in its item, and their clearest few faces there: one query
     // for the page rather than one as each closer look opens.
     const others = new Map<string, FaceSearchMatches["matches"][number]["others"]>();
+    // And every face of theirs there, which is what saying who they are is about.
+    const everyFace = new Map<string, string[]>();
 
     for (const theirs of appearanceRepo.appearanceFaces(
         found.flatMap((shown) => (shown.appearanceId ? [shown.appearanceId] : []))
     )) {
         const kept = others.get(theirs.appearanceId) ?? [];
+
+        everyFace.set(theirs.appearanceId, [
+            ...(everyFace.get(theirs.appearanceId) ?? []),
+            theirs.id,
+        ]);
 
         // One more than shown: the face matched may be among them, and is left out below.
         if (kept.length <= OTHERS) {
@@ -158,8 +176,141 @@ export const faceSearchMatches = (
                     others: ((shown.appearanceId ? others.get(shown.appearanceId) : null) ?? [])
                         .filter((other) => other.id !== shown.id)
                         .slice(0, OTHERS),
+                    // A face seen once is nobody's person, and is itself all there is to say.
+                    faceIds: (shown.appearanceId ? everyFace.get(shown.appearanceId) : null) ?? [
+                        shown.id,
+                    ],
                 };
             })
         ),
     };
+};
+
+/**
+ * The person on the frame, in the item asked from: the stored face the search found to be them,
+ * and every face of their person there. Null when none was near enough, or the faces have been read
+ * again since — the item is then tagged and nothing in it confirmed.
+ */
+const sourcePerson = (
+    mediaId: string,
+    self: StoredFaceSearch[number]["self"]
+): { faceIds: string[]; shownFaceId: string } | null => {
+    if (!self) return null;
+
+    const [shown] = faceRepo.shownFacesAt([{ mediaId, vectorIndex: self.vectorIndex }]);
+
+    if (!shown) return null;
+
+    const faceIds = shown.appearanceId
+        ? appearanceRepo.appearanceFaces([shown.appearanceId]).map((face) => face.id)
+        : [];
+
+    return { faceIds: faceIds.length > 0 ? faceIds : [shown.id], shownFaceId: shown.id };
+};
+
+/**
+ * Say who face `index` of the frame is (§5f "Who is this?"): one decision, in History and undone
+ * there. The video asked from is always tagged, and the person on its frame confirmed when the
+ * search found which of its stored people that is; the candidates said to be them are tagged and
+ * their faces confirmed; those said not to be are refused for the performer — the person, not the
+ * item. Only candidates this viewer can see, and only faces on their items.
+ */
+export const nameFromSearch = (
+    id: string,
+    index: number,
+    decision: FaceSearchName,
+    auth: AuthContext
+): { tagId: string; name: string; tagged: number; refused: number } => {
+    const row = visibleSearch(id, auth);
+    const face = storedOf(row.resultJson)[index];
+
+    if (!face) {
+        throw new NotFoundError("That face is not on the frame");
+    }
+
+    if (decision.performer.by === "name" && !normalizeName(decision.performer.name)) {
+        throw new ValidationError("A name needs at least one letter or digit");
+    }
+
+    const visible = new Set(
+        lookupMedia(
+            decision.people.map((person) => person.mediaId),
+            auth
+        ).items.map((item) => item.id)
+    );
+    const people = decision.people.flatMap((person) => {
+        if (!visible.has(person.mediaId) || person.mediaId === row.mediaId) return [];
+
+        const faceIds = appearanceRepo.facesOnItem(person.mediaId, person.faceIds);
+
+        return faceIds.length > 0 ? [{ ...person, faceIds }] : [];
+    });
+    const source = sourcePerson(row.mediaId, face.self);
+    const them = people.filter((person) => person.verdict === "is");
+    const notThem = people.filter((person) => person.verdict === "isNot");
+
+    const { result } = faceDecisionRepo.record(
+        {
+            actor: "user",
+            userId: auth.userId,
+            verdict: "is",
+            tagId: decision.performer.by === "id" ? decision.performer.tagId : null,
+            surface: "search",
+        },
+        () =>
+            db.transaction(() => {
+                const tagId =
+                    decision.performer.by === "id"
+                        ? decision.performer.tagId
+                        : tagRepo.ensureTag(
+                              "performer",
+                              decision.performer.name,
+                              null,
+                              auth.userId
+                          );
+                const tag = tagRepo.findById(tagId);
+
+                if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+                    throw new NotFoundError("Performer not found");
+                }
+
+                faceDecisionRepo.nameActive(tag.id);
+
+                for (const person of [...(source ? [source] : []), ...them]) {
+                    appearanceRepo.confirmPerson(
+                        person.faceIds,
+                        person.shownFaceId,
+                        tag.id,
+                        auth.userId
+                    );
+                }
+
+                for (const person of notThem) {
+                    appearanceRepo.refusePerson(
+                        person.faceIds,
+                        person.shownFaceId,
+                        tag.id,
+                        auth.userId
+                    );
+                }
+
+                const mediaIds = [row.mediaId, ...new Set(them.map((person) => person.mediaId))];
+                const { assigned } = tagBatchRepo.applyAssignments({
+                    userId: auth.userId,
+                    scope: null,
+                    summary: `${tag.name} on ${mediaIds.length} ${
+                        mediaIds.length === 1 ? "item" : "items"
+                    }, from Who is this?`,
+                    assignments: mediaIds.map((mediaId) => ({ mediaId, tagId: tag.id })),
+                });
+
+                searchRepo.requestReindex(mediaIds);
+
+                return { tagId: tag.id, name: tag.name, tagged: assigned, refused: notThem.length };
+            })()
+    );
+
+    confirmationsChanged();
+
+    return result;
 };
