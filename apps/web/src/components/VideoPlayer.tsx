@@ -293,6 +293,25 @@ const BackTenGlyph = () => (
     </Glyph>
 );
 
+/** Forward ten seconds: the back glyph mirrored, matching `l` and a double-tap on the right third. */
+const ForwardTenGlyph = () => (
+    <Glyph>
+        <path d="M18.5 9.5A7.5 7.5 0 1 0 19.5 13" />
+        <path d="M18.5 5v4.5H14" />
+        <text
+            x="11.5"
+            y="15.5"
+            textAnchor="middle"
+            fontSize="7.5"
+            fontWeight="600"
+            fill="currentColor"
+            stroke="none"
+        >
+            10
+        </text>
+    </Glyph>
+);
+
 /**
  * A camera, for grabbing the frame on screen (§13).
  *
@@ -1806,6 +1825,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             aria-label="Back 10 seconds (j)"
                         >
                             <BackTenGlyph />
+                        </ActionIcon>
+
+                        <ActionIcon
+                            variant="subtle"
+                            color="brass"
+                            size="lg"
+                            onClick={() => {
+                                // In reel time too, so it can cross into the next span.
+                                if (timeline) {
+                                    timeline.onSeek(
+                                        Math.min(timeline.totalMs, reelPositionMs + 10_000)
+                                    );
+
+                                    return;
+                                }
+
+                                const video = videoRef.current;
+                                if (video) {
+                                    seekTo(
+                                        Math.min(
+                                            (video.duration || 0) * 1000,
+                                            video.currentTime * 1000 + 10_000
+                                        )
+                                    );
+                                }
+                            }}
+                            aria-label="Forward 10 seconds (l)"
+                        >
+                            <ForwardTenGlyph />
                         </ActionIcon>
 
                         <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
