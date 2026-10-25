@@ -12,7 +12,11 @@ const state = vi.hoisted(() => ({
     decisions: [] as Record<string, unknown>[],
     calls: [] as unknown[][],
     self: { vectorIndex: 0, score: 0.6 } as { vectorIndex: number; score: number } | null,
+    performers: [] as { tagId: string; score: number }[],
+    ownTag: null as string | null,
 }));
+
+const NAMES: Record<string, string> = { jane: "Jane", ann: "Ann", coined: "Jane Doe" };
 
 vi.mock("@private-stock/db", () => ({
     db: { transaction: <T>(fn: () => T) => fn },
@@ -33,7 +37,15 @@ vi.mock("@private-stock/db", () => ({
                       state: "done",
                       error: null,
                       resultJson: JSON.stringify([
-                          { x: 0.1, y: 0.1, w: 0.2, h: 0.3, self: state.self, matches: [] },
+                          {
+                              x: 0.1,
+                              y: 0.1,
+                              w: 0.2,
+                              h: 0.3,
+                              self: state.self,
+                              performers: state.performers,
+                              matches: [],
+                          },
                       ]),
                   }
                 : undefined,
@@ -41,7 +53,13 @@ vi.mock("@private-stock/db", () => ({
     },
     faceRepo: {
         shownFacesAt: (at: { mediaId: string; vectorIndex: number }[]) =>
-            at.map((face) => ({ ...face, id: "own", kind: "video", appearanceId: "ownPerson" })),
+            at.map((face) => ({
+                ...face,
+                id: "own",
+                kind: "video",
+                appearanceId: "ownPerson",
+                tagId: state.ownTag,
+            })),
     },
     appearanceRepo: {
         appearanceFaces: () => [
@@ -61,7 +79,9 @@ vi.mock("@private-stock/db", () => ({
     },
     tagRepo: {
         ensureTag: () => "coined",
-        findById: (id: string) => ({ id, kind: "performer", name: "Jane", ownerId: null }),
+        findById: (id: string) =>
+            NAMES[id] ? { id, kind: "performer", name: NAMES[id], ownerId: null } : undefined,
+        listForMediaIds: () => [],
     },
 }));
 
@@ -76,7 +96,7 @@ vi.mock("./mediaService", () => ({
     }),
 }));
 
-const { nameFromSearch } = await import("./faceSearchService");
+const { faceSearchMatches, nameFromSearch } = await import("./faceSearchService");
 
 const admin: AuthContext = {
     userId: "u1",
@@ -98,6 +118,8 @@ beforeEach(() => {
     state.decisions = [];
     state.calls = [];
     state.self = { vectorIndex: 0, score: 0.6 };
+    state.performers = [];
+    state.ownTag = null;
 });
 
 describe("naming the face on the frame", () => {
@@ -193,6 +215,20 @@ describe("naming the face on the frame", () => {
         expect(() =>
             nameFromSearch("s1", 0, { performer: { by: "name", name: "!!" }, people: [] }, admin)
         ).toThrow(/letter or digit/);
+    });
+
+    it("offers who the face most likely is: confirmed in the video first, then by reference", () => {
+        state.performers = [
+            { tagId: "ann", score: 0.6 },
+            { tagId: "jane", score: 0.5 },
+            { tagId: "gone", score: 0.4 },
+        ];
+        state.ownTag = "jane";
+
+        expect(faceSearchMatches("s1", 0, admin).likely).toEqual([
+            { tagId: "jane", name: "Jane", score: 0.5, here: true },
+            { tagId: "ann", name: "Ann", score: 0.6, here: false },
+        ]);
     });
 
     it("is for administrators only", () => {

@@ -752,22 +752,26 @@ export const runFaceAnchors = async (): Promise<void> => {
     }
 };
 
-/** What the last run kept of every item's faces, or null before the first. */
-const keptFaces = (): ReadonlyMap<string, readonly (Quantized | null)[] | null> | null =>
-    kept?.faces ?? null;
+/** What a search of the library's faces reads: every item's faces, and every reference. */
+interface LibraryFaces {
+    faces: ReadonlyMap<string, readonly (Quantized | null)[] | null>;
+    anchors: ReadonlyMap<string, FaceAnchor>;
+}
+
+/** What the last run kept for a search, or null before the first. */
+const keptForSearch = (): LibraryFaces | null =>
+    kept ? { faces: kept.faces, anchors: kept.anchors } : null;
 
 /**
- * Every item's face vectors, as the references run keeps them between runs (§5f "Who is this?"): a
- * search of the library's faces reads them from memory, not from 11,000 files on the NAS's disks.
- * Up to date as of the last run, a minute or two behind the faces stage. Before the first run —
- * which comes at start-up — one is made, and waited for.
+ * Every item's face vectors and every performer's reference, as the references run keeps them
+ * between runs (§5f "Who is this?"): a search of the library's faces reads them from memory, not
+ * from 11,000 files on the NAS's disks. Up to date as of the last run, a minute or two behind the
+ * faces stage. Before the first run — which comes at start-up — one is made, and waited for.
  */
-export const libraryFaces = async (): Promise<
-    ReadonlyMap<string, readonly (Quantized | null)[] | null>
-> => {
-    if (keptFaces() === null) {
+export const libraryFaces = async (): Promise<LibraryFaces> => {
+    if (keptForSearch() === null) {
         await runFaceAnchors();
     }
 
-    return keptFaces() ?? new Map();
+    return keptForSearch() ?? { faces: new Map(), anchors: new Map() };
 };

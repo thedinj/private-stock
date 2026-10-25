@@ -694,6 +694,24 @@ export const nearestFaces = (
     return best.sort((a, b) => b.score - a.score).slice(0, options.count);
 };
 
+/** How many performers a face search proposes by their references (§5f "Who is this?"). */
+export const FACE_SEARCH_PERFORMERS = 5;
+
+/**
+ * The performers whose references are most like `query`, best first (§5f "Who is this?"): who the
+ * face most likely is, asked directly of each performer's face rather than tallied from the items
+ * that happen to match. No line, for the same reason as `nearestFaces`.
+ */
+export const nearestPerformers = (
+    query: Float32Array,
+    anchors: Iterable<FaceAnchor>,
+    count: number
+): { tagId: string; score: number }[] =>
+    [...anchors]
+        .map((anchor) => ({ tagId: anchor.tagId, score: vectorSimilarity(anchor.centre, query) }))
+        .sort((a, b) => b.score - a.score || (a.tagId < b.tagId ? -1 : 1))
+        .slice(0, count);
+
 /**
  * How alike two faces are, in words rather than a number, which reads as a probability and is not
  * one. The lines are the ones already drawn: what Suggestions puts forward, what "looks like them"

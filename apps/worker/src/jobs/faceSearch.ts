@@ -3,11 +3,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import {
+    FACE_SEARCH_PERFORMERS,
     FACE_SEARCH_RESULTS,
     SAME_PERSON_IN_ITEM,
     decodeVectorFile,
     findStage,
     nearestFaces,
+    nearestPerformers,
     type StoredFaceSearch,
 } from "@private-stock/core";
 import { faceSearchRepo } from "@private-stock/db";
@@ -87,7 +89,7 @@ export const searchFrame = async (
         }
 
         const vectors = decodeVectorFile(new Uint8Array(await readFile(vectorsPath))).vectors;
-        const library = await libraryFaces();
+        const { faces: library, anchors } = await libraryFaces();
         const own = library.get(search.mediaId);
         const round = (score: number) => Math.round(score * 1000) / 1000;
 
@@ -111,6 +113,12 @@ export const searchFrame = async (
                             self && self.score >= SAME_PERSON_IN_ITEM
                                 ? { vectorIndex: self.vectorIndex, score: round(self.score) }
                                 : null,
+                        // Who it most likely is, asked of each performer's reference directly.
+                        performers: nearestPerformers(
+                            query,
+                            anchors.values(),
+                            FACE_SEARCH_PERFORMERS
+                        ).map((match) => ({ ...match, score: round(match.score) })),
                         matches: nearestFaces(query, library, {
                             count: KEPT_PER_FACE,
                             exclude: search.mediaId,

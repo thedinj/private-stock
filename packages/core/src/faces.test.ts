@@ -16,6 +16,7 @@ import {
     bestMatch,
     matchStrength,
     nearestFaces,
+    nearestPerformers,
     decodeFaceAnchors,
     encodeFaceAnchors,
     performerCentre,
@@ -348,6 +349,24 @@ describe("searching the library's faces", () => {
         expect(
             nearestFaces(unit([0, 1, 0]), new Map([["far", [stored([0, 0, 1])]]]), { count: 5 })
         ).toHaveLength(1);
+    });
+
+    it("ranks performers by how like their reference the face is", () => {
+        const anchor = (tagId: string, values: number[]) => ({
+            tagId,
+            items: 3,
+            confirmedItems: 3,
+            sharedItems: 0,
+            centre: unit(values),
+        });
+
+        expect(
+            nearestPerformers(
+                unit([1, 0, 0]),
+                [anchor("far", [0, 0, 1]), anchor("near", [1, 0.1, 0]), anchor("mid", [1, 1, 0])],
+                2
+            ).map((match) => match.tagId)
+        ).toEqual(["near", "mid"]);
     });
 
     it("puts a likeness into words at the lines already drawn", () => {

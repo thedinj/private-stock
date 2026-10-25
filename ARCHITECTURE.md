@@ -2819,11 +2819,21 @@ lightbox, matched to performers' references — answered a different question:
   its person confirmed when the search found which of its stored people the frame's face is
   (`self`, the nearest of its own faces at `SAME_PERSON_IN_ITEM`; none near enough, and the video
   is tagged with nothing confirmed). Name them with the coining box and its typo check, or one
-  press on a name the candidates are already confirmed as ("Seen here as"). One save is one
+  press on who they most likely are ("Most likely"). One save is one
   decision in History, undone there: the video and those said to be them tagged as one batch
   ("Jane on 6 items, from Who is this?"), every face of each one's person confirmed — the face
   shown `shown`, the rest `inferred` — and those said not to be them refused for the performer,
   the person and not the item. **Nothing said is nothing**: a card left alone refuses nobody.
+- **"Most likely" asks the references, not the crowd** (decided with the owner 2026-10-25). The
+  names offered began as the ones the matched faces were confirmed as, most often first. That
+  left out the one question that answers who this is — how like each performer's reference the
+  face is — and let a performer with many confirmed faces fill the list from weak matches while
+  the close one went unnamed; an item merely tagged with someone offered nothing. Now the worker
+  also scores each face on the frame against every reference the references run keeps in memory
+  (`nearestPerformers`, a few thousand dot products) and keeps the best five. Offered first is
+  whom the person on the frame is already confirmed as in the video asked from, then the
+  references' best, each with how alike in the cards' words; four in all. A search made before
+  this falls back on the old tally.
 - **One search names one person.** After the first save the name is fixed for that face, kept
   for the visit, and later saves add to it; the workflow does not tag anybody else. A candidate
   already confirmed as somebody shows their name and takes no press — that is corrected where it

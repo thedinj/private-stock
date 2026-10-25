@@ -472,6 +472,11 @@ export const storedFaceSearchSchema = z.array(
          * person naming it confirms there. Absent from searches made before it was kept.
          */
         self: z.object({ vectorIndex: z.number(), score: z.number() }).nullable().optional(),
+        /**
+         * The performers whose references are most like this face, best first. Absent from
+         * searches made before they were asked.
+         */
+        performers: z.array(z.object({ tagId: z.string(), score: z.number() })).optional(),
         matches: z.array(
             z.object({ mediaId: z.string(), vectorIndex: z.number(), score: z.number() })
         ),
@@ -502,6 +507,20 @@ export const faceSearchMatchesSchema = z.object({
             others: z.array(faceReviewFaceSchema),
             /** Every face of that person in the item: what saying who they are is about. */
             faceIds: z.array(z.string()),
+        })
+    ),
+    /**
+     * Who the face most likely is, best first: the performer the person on the frame is already
+     * confirmed as in the video asked from (`here`, and first), then the performers whose
+     * references are most like the face, with how alike (null for `here` where the reference was
+     * not among the closest).
+     */
+    likely: z.array(
+        z.object({
+            tagId: z.string(),
+            name: z.string(),
+            score: z.number().nullable(),
+            here: z.boolean(),
         })
     ),
 });

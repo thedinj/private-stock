@@ -353,23 +353,6 @@ const Matches: React.FC<{
     const pending = data.matches.filter((match) => (said.get(match.face.id) ?? "open") !== "open");
     const them = pending.filter((match) => said.get(match.face.id) === "them").length;
     const notThem = pending.length - them;
-    // Names the candidates are already confirmed as: who this may well be, one press away.
-    const seenAs = [
-        ...data.matches
-            .flatMap((match) => (match.confirmed ? [match.confirmed] : []))
-            .reduce(
-                (counts, tag) =>
-                    counts.set(tag.tagId, {
-                        ...tag,
-                        count: (counts.get(tag.tagId)?.count ?? 0) + 1,
-                    }),
-                new Map<string, { tagId: string; name: string; count: number }>()
-            )
-            .values(),
-    ]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
-
     const save = (performer: FaceSearchName["performer"]) =>
         name.mutate(
             {
@@ -522,12 +505,13 @@ const Matches: React.FC<{
                     </Button>
                 ) : (
                     <>
-                        {seenAs.length > 0 && (
+                        {/* Who this most likely is, best first, one press away. */}
+                        {data.likely.length > 0 && (
                             <Group gap={6} wrap="wrap">
                                 <Text size="xs" c="dimmed">
-                                    Seen here as:
+                                    Most likely:
                                 </Text>
-                                {seenAs.map((tag) => (
+                                {data.likely.map((tag) => (
                                     <Button
                                         key={tag.tagId}
                                         size="compact-sm"
@@ -537,6 +521,11 @@ const Matches: React.FC<{
                                         onClick={() => save({ by: "id", tagId: tag.tagId })}
                                     >
                                         {tag.name}
+                                        {tag.here
+                                            ? " · in this video"
+                                            : tag.score !== null
+                                              ? ` · ${STRENGTH_LABEL[matchStrength(tag.score)].toLowerCase()}`
+                                              : ""}
                                     </Button>
                                 ))}
                             </Group>

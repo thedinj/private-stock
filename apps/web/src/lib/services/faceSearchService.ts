@@ -96,6 +96,59 @@ export const faceSearch = (id: string, auth: AuthContext): FaceSearch => {
     };
 };
 
+/** How many names a search offers as who the face most likely is. */
+const LIKELY = 4;
+
+/**
+ * Who face `face` most likely is, best first: whom its person is already confirmed as in the video
+ * asked from, then the performers whose references are most like it. A search made before the
+ * references were asked falls back on the names the matches are confirmed as, most often first.
+ */
+const likelyPerformers = (
+    mediaId: string,
+    face: StoredFaceSearch[number],
+    found: readonly { tagId: string | null }[],
+    auth: AuthContext
+): FaceSearchMatches["likely"] => {
+    const [here] = face.self
+        ? faceRepo.shownFacesAt([{ mediaId, vectorIndex: face.self.vectorIndex }])
+        : [];
+    const tally = new Map<string, number>();
+
+    for (const shown of found) {
+        if (shown.tagId) tally.set(shown.tagId, (tally.get(shown.tagId) ?? 0) + 1);
+    }
+
+    const byReference: Pick<FaceSearchMatches["likely"][number], "tagId" | "score">[] =
+        face.performers ??
+        [...tally].sort((a, b) => b[1] - a[1]).map(([tagId]) => ({ tagId, score: null }));
+    const candidates = [
+        ...(here?.tagId
+            ? [
+                  {
+                      tagId: here.tagId,
+                      score: byReference.find((match) => match.tagId === here.tagId)?.score ?? null,
+                      here: true,
+                  },
+              ]
+            : []),
+        ...byReference
+            .filter((match) => match.tagId !== here?.tagId)
+            .map((match) => ({ ...match, here: false })),
+    ];
+
+    return candidates
+        .flatMap((candidate) => {
+            const tag = tagRepo.findById(candidate.tagId);
+
+            return tag?.kind === "performer" &&
+                (tag.ownerId === null || tag.ownerId === auth.userId)
+                ? [{ ...candidate, name: tag.name }]
+                : [];
+        })
+        .slice(0, LIKELY);
+};
+
 /** The items most like face `index` of the frame, best first, those the asker can see. */
 export const faceSearchMatches = (
     id: string,
@@ -163,6 +216,7 @@ export const faceSearchMatches = (
     }
 
     return {
+        likely: likelyPerformers(row.mediaId, face, found, auth),
         matches: found.flatMap((shown) =>
             reviewFace(shown).map((reviewed) => {
                 const name = shown.tagId ? confirmedTags.get(shown.tagId) : undefined;
