@@ -211,3 +211,36 @@
 .player[data-bare][data-fit="cover"] .video {
     object-fit: cover;
 }
+
+/** The time, which never wraps: a timecode broken over two lines reads as two numbers. */
+.time {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/** The scrubber between the two times on a phone, taking whatever they leave. */
+.scrubberSlot {
+    flex: 1;
+    min-width: 0;
+}
+
+/**
+ * Previous and next at the end of a set: dimmed, not filled.
+ *
+ * Mantine paints a disabled icon button with a grey plate, which over a film reads as a control
+ * that is pressed rather than one with nowhere to go.
+ */
+.step:disabled,
+.step[data-disabled] {
+    background: transparent;
+    border-color: transparent;
+    color: var(--mantine-color-brass-filled);
+    opacity: 0.3;
+}
+
+/** A menu row in the bar stands as tall as the bar's own targets under a finger (CLAUDE.md). */
+@media (pointer: coarse) {
+    .menuItem {
+        min-height: 44px;
+    }
+}

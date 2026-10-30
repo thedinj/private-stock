@@ -182,3 +182,18 @@
         transition: none;
     }
 }
+
+/** As the player's: the end of a set is a dimmed button, not a grey plate. */
+.step:disabled,
+.step[data-disabled] {
+    background: transparent;
+    border-color: transparent;
+    color: var(--mantine-color-brass-filled);
+    opacity: 0.3;
+}
+
+@media (pointer: coarse) {
+    .menuItem {
+        min-height: 44px;
+    }
+}

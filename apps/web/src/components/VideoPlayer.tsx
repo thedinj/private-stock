@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionIcon, Box, Group, Select, Text } from "@mantine/core";
+import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
@@ -21,11 +22,15 @@ import { PLAY_REFUSED_EVENT, useWarmReport, videoProbe } from "@/lib/useWarmRepo
 import type { WarmGate, WarmSource } from "@/lib/warmMonitor";
 
 import {
+    CheckGlyph,
     FullscreenGlyph,
     Glyph,
+    MoreGlyph,
     MutedGlyph,
+    NextGlyph,
     PauseGlyph,
     PlayGlyph,
+    PreviousGlyph,
     ScissorsGlyph,
     SoundGlyph,
 } from "./media/Glyph";
@@ -256,6 +261,21 @@ interface VideoPlayerProps {
      * work"). Absent, the player reports nothing.
      */
     warmSource?: WarmSource;
+    /**
+     * The way through the set, at the two ends of the bar (§14b).
+     *
+     * In the bar rather than above the player because the bar is the one thing on screen in
+     * fullscreen, where a phone otherwise had no way to the next item at all. A direction with
+     * nowhere to go is null and its button stays, disabled, so nothing shifts under a thumb at the
+     * end of a set. Absent -- a reel, a clip, an item opened outside a set -- and neither is drawn.
+     */
+    steps?: { previous: (() => void) | null; next: (() => void) | null } | null;
+    /**
+     * The page's own actions on the item, at the foot of the bar's "more" menu: the rating and
+     * the bin. Here so they can be reached in fullscreen without a keyboard; Menu items, since
+     * they are rendered inside the menu.
+     */
+    menuItems?: React.ReactNode;
 }
 
 /** Playback rates the speed control offers. The hotkeys can reach anything between. */
@@ -413,6 +433,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     muted: mutedProp,
     onPlayRefused,
     warmSource,
+    steps = null,
+    menuItems,
 }) => {
     /**
      * The element on screen, held in state as well as in a ref.
@@ -860,6 +882,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const [muted, setMuted] = useState(false);
     const [, rememberMuted] = usePlaybackPref("muted");
     const [speed, setSpeed] = useState("1");
+    /** Which page of the "more" menu is showing: its actions, or the speeds (phone only). */
+    const [moreView, setMoreView] = useState<"actions" | "speed">("actions");
+
+    /**
+     * A phone: the bar keeps the transport, fullscreen and the set, and the rest goes into the
+     * "more" menu. Seven targets of 44px are what fits across a 400px portrait screen.
+     */
+    const compact = useMediaQuery("(max-width: 48em)") ?? false;
+    /** A finger rather than a pointer: every target in the bar stands 44px (CLAUDE.md). */
+    const coarse = useMediaQuery("(pointer: coarse)") ?? false;
+    const iconSize = coarse ? "xl" : "lg";
     const [scrubbing, setScrubbing] = useState(false);
     const [mediaDurationMs, setMediaDurationMs] = useState(durationMs ?? 0);
 
@@ -882,7 +915,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      * Fullscreen only — in the page the bar sits under the picture and covers nothing. What
      * holds it open is everything that means the viewer is still using it: a paused video,
      * which is a decision rather than an idle moment; a scrub in progress; the pointer resting
-     * on the bar; the speed menu while it is open; and a viewer walking the controls by
+     * on the bar; a menu in it while it is open; and a viewer walking the controls by
      * keyboard, who has not moved the pointer and would otherwise lose the button under them.
      *
      * **Focus alone is not use.** Reading `bar.contains(activeElement)` was, and it meant that
@@ -893,8 +926,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      * focus, which is `:focus-visible` — the browser's own reading of the same distinction,
      * rather than a modality flag of ours that would have to be right about every input device.
      *
-     * The speed menu is asked separately, by `data-expanded` on its target, because Mantine's
-     * Select opens on a click and the focus it leaves behind is the kind we now ignore.
+     * The bar's menus are asked separately, by `data-expanded` on their targets, because a menu
+     * opens on a click and the focus it leaves behind is the kind we now ignore.
      *
      * **Hover is a pointer resting, not a finger that tapped.** Reading `:hover` was, and on a
      * tablet it wedged the bar open for good: a touch browser leaves `:hover` on whatever was
@@ -1684,6 +1717,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         }
     };
 
+    const scrubber = (
+        <SpriteScrubber
+            vttUrl={spriteVttUrl}
+            durationMs={timeline ? timeline.totalMs : mediaDurationMs}
+            positionMs={timeline ? reelPositionMs : positionMs}
+            /* Nothing meaningful to say about buffering against a reel's timeline: the spans
+               after this one are in files the element has not opened. */
+            bufferedMs={timeline ? 0 : bufferedMs}
+            clips={timeline ? [] : clipMarks}
+            selection={timeline ? null : selection}
+            onSeek={timeline ? timeline.onSeek : seekTo}
+            onScrubbingChange={timeline ? undefined : setScrubbing}
+        />
+    );
+
+    const toggleMute = () => {
+        const video = videoRef.current;
+        if (video) video.muted = !video.muted;
+    };
+
+    const speedLabel = `${Number(speed)}×`;
+    const speedItems = SPEEDS.map((rate) => (
+        <Menu.Item
+            key={rate}
+            onClick={() => {
+                const video = videoRef.current;
+                if (video) video.playbackRate = Number(rate);
+            }}
+            rightSection={Number(rate) === Number(speed) ? <CheckGlyph size={16} /> : null}
+        >
+            {rate}×
+        </Menu.Item>
+    ));
+
+    /** One control for both ends of a clip: the start, then -- past it -- the end (§14d). */
+    const clipPending = selection !== null && selection.endMs === null;
+    const markLabel = clipPending ? "Mark the clip's end (])" : "Mark a clip's start ([)";
+    const markClip =
+        onMarkIn && !timeline
+            ? () => {
+                  const video = videoRef.current;
+
+                  if (!video) return;
+
+                  const at = video.currentTime * 1000;
+
+                  if (selection && selection.endMs === null && at > selection.startMs) {
+                      onMarkOut?.(at);
+                  } else {
+                      onMarkIn(at);
+                  }
+              }
+            : null;
+
     return (
         <Box
             ref={attachContainer}
@@ -1782,34 +1869,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         barHoveredRef.current = false;
                     }}
                 >
-                    <SpriteScrubber
-                        vttUrl={spriteVttUrl}
-                        durationMs={timeline ? timeline.totalMs : mediaDurationMs}
-                        positionMs={timeline ? reelPositionMs : positionMs}
-                        /* Nothing meaningful to say about buffering against a reel's timeline: the
-                       spans after this one are in files the element has not opened. */
-                        bufferedMs={timeline ? 0 : bufferedMs}
-                        clips={timeline ? [] : clipMarks}
-                        selection={timeline ? null : selection}
-                        onSeek={timeline ? timeline.onSeek : seekTo}
-                        onScrubbingChange={timeline ? undefined : setScrubbing}
-                    />
+                    {compact ? (
+                        /* On a phone the time reads off the ends of the scrubber, which leaves the
+                           row below it to the targets. */
+                        <Group gap="xs" wrap="nowrap" align="center">
+                            <Text size="xs" c="dimmed" className={classes.time}>
+                                {formatTime(timeline ? reelPositionMs : positionMs)}
+                            </Text>
+                            <Box className={classes.scrubberSlot}>{scrubber}</Box>
+                            <Text size="xs" c="dimmed" className={classes.time}>
+                                {formatTime(timeline ? timeline.totalMs : mediaDurationMs)}
+                            </Text>
+                        </Group>
+                    ) : (
+                        scrubber
+                    )}
 
-                    <Group gap="xs" wrap="nowrap" align="center">
+                    <Group gap={compact ? 4 : "xs"} wrap="nowrap" align="center">
+                        {steps && (
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                className={classes.step}
+                                disabled={!steps.previous}
+                                onClick={steps.previous ?? undefined}
+                                aria-label="Previous item (p)"
+                                title="Previous item (p)"
+                            >
+                                <PreviousGlyph />
+                            </ActionIcon>
+                        )}
+
                         <ActionIcon
                             variant="subtle"
                             color="brass"
-                            size="lg"
-                            onClick={togglePlay}
-                            aria-label={atEnd ? "Play again" : playing ? "Pause" : "Play"}
-                        >
-                            {atEnd ? <ReplayGlyph /> : playing ? <PauseGlyph /> : <PlayGlyph />}
-                        </ActionIcon>
-
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
-                            size="lg"
+                            size={iconSize}
                             onClick={() => {
                                 // A reel seeks in reel time, so going back can cross into the
                                 // previous span rather than stopping at this one's start.
@@ -1827,10 +1922,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <BackTenGlyph />
                         </ActionIcon>
 
+                        {/* Play between the two jumps, so the button that leaves the item is
+                            never the one beside it. */}
                         <ActionIcon
                             variant="subtle"
                             color="brass"
-                            size="lg"
+                            size={iconSize}
+                            onClick={togglePlay}
+                            aria-label={atEnd ? "Play again" : playing ? "Pause" : "Play"}
+                        >
+                            {atEnd ? <ReplayGlyph /> : playing ? <PauseGlyph /> : <PlayGlyph />}
+                        </ActionIcon>
+
+                        <ActionIcon
+                            variant="subtle"
+                            color="brass"
+                            size={iconSize}
                             onClick={() => {
                                 // In reel time too, so it can cross into the next span.
                                 if (timeline) {
@@ -1856,38 +1963,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <ForwardTenGlyph />
                         </ActionIcon>
 
-                        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                            {formatTime(timeline ? reelPositionMs : positionMs)} /{" "}
-                            {formatTime(timeline ? timeline.totalMs : mediaDurationMs)}
-                        </Text>
+                        {!compact && (
+                            <Text size="xs" c="dimmed" className={classes.time}>
+                                {formatTime(timeline ? reelPositionMs : positionMs)} /{" "}
+                                {formatTime(timeline ? timeline.totalMs : mediaDurationMs)}
+                            </Text>
+                        )}
 
                         <Box style={{ flex: 1 }} />
-
-                        <Select
-                            value={speed}
-                            onChange={(value) => {
-                                const video = videoRef.current;
-                                if (video && value) video.playbackRate = Number(value);
-                            }}
-                            data={SPEEDS.map((rate) => ({ value: rate, label: `${rate}×` }))}
-                            allowDeselect={false}
-                            size="xs"
-                            w={78}
-                            aria-label="Playback speed"
-                        />
-
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
-                            size="lg"
-                            onClick={() => {
-                                const video = videoRef.current;
-                                if (video) video.muted = !video.muted;
-                            }}
-                            aria-label={muted ? "Unmute" : "Mute"}
-                        >
-                            {muted ? <MutedGlyph /> : <SoundGlyph />}
-                        </ActionIcon>
 
                         {/* Capturing belongs with the picture, not under it (§13). The title
                         row below the player is off-screen at ordinary window heights, which
@@ -1896,48 +1979,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             were the only way in, and nothing on the page said they existed.
                             One button for both ends: it marks the start, and once a start is
                             marked and the playhead is past it, the end. */}
-                        {onMarkIn && !timeline && (
+                        {!compact && markClip && (
                             <ActionIcon
                                 variant="subtle"
-                                color={selection && selection.endMs === null ? "brass" : "gray"}
-                                size="lg"
-                                onClick={() => {
-                                    const video = videoRef.current;
-
-                                    if (!video) return;
-
-                                    const at = video.currentTime * 1000;
-
-                                    if (
-                                        selection &&
-                                        selection.endMs === null &&
-                                        at > selection.startMs
-                                    ) {
-                                        onMarkOut?.(at);
-                                    } else {
-                                        onMarkIn(at);
-                                    }
-                                }}
-                                aria-label={
-                                    selection && selection.endMs === null
-                                        ? "Mark the clip's end (])"
-                                        : "Mark a clip's start ([)"
-                                }
-                                title={
-                                    selection && selection.endMs === null
-                                        ? "Mark the clip's end (])"
-                                        : "Mark a clip's start ([)"
-                                }
+                                color={clipPending ? "brass" : "gray"}
+                                size={iconSize}
+                                onClick={markClip}
+                                aria-label={markLabel}
+                                title={markLabel}
                             >
                                 <ScissorsGlyph />
                             </ActionIcon>
                         )}
 
-                        {onCapture && (
+                        {!compact && onCapture && (
                             <ActionIcon
                                 variant="subtle"
                                 color={captureFailed ? "oxblood" : "brass"}
-                                size="lg"
+                                size={iconSize}
                                 loading={capturing}
                                 onClick={captureHere}
                                 aria-label="Capture this frame (s)"
@@ -1947,15 +2006,160 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             </ActionIcon>
                         )}
 
+                        {/* The speed as a word that opens a menu, not a form field: the Select
+                            it replaces was too narrow on a phone to show its own value, and its
+                            list was as narrow as the field, so the labels wrapped. */}
+                        {!compact && (
+                            <Menu
+                                position="top-end"
+                                withinPortal
+                                classNames={{ item: classes.menuItem }}
+                            >
+                                <Menu.Target>
+                                    <Button
+                                        variant="subtle"
+                                        color="brass"
+                                        size="compact-sm"
+                                        h={coarse ? 44 : undefined}
+                                        aria-label="Playback speed (− and +)"
+                                        title="Playback speed (− and +)"
+                                    >
+                                        {speedLabel}
+                                    </Button>
+                                </Menu.Target>
+                                <Menu.Dropdown>{speedItems}</Menu.Dropdown>
+                            </Menu>
+                        )}
+
+                        {!compact && (
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                onClick={toggleMute}
+                                aria-label={muted ? "Unmute" : "Mute"}
+                            >
+                                {muted ? <MutedGlyph /> : <SoundGlyph />}
+                            </ActionIcon>
+                        )}
+
                         <ActionIcon
                             variant="subtle"
                             color="brass"
-                            size="lg"
+                            size={iconSize}
                             onClick={toggleFullscreen}
                             aria-label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
                         >
                             <FullscreenGlyph />
                         </ActionIcon>
+
+                        {/* On a phone, what did not fit; everywhere, the page's own actions --
+                            the rating and the bin, which fullscreen otherwise puts out of reach
+                            of anyone without a keyboard. */}
+                        {(compact || menuItems) && (
+                            <Menu
+                                position="top-end"
+                                withinPortal
+                                classNames={{ item: classes.menuItem }}
+                                onClose={() => setMoreView("actions")}
+                            >
+                                <Menu.Target>
+                                    <ActionIcon
+                                        variant="subtle"
+                                        color="brass"
+                                        size={iconSize}
+                                        aria-label="More"
+                                        title="More"
+                                    >
+                                        <MoreGlyph />
+                                    </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                    {moreView === "speed" ? (
+                                        <>
+                                            <Menu.Item
+                                                closeMenuOnClick={false}
+                                                onClick={() => setMoreView("actions")}
+                                            >
+                                                ‹ Speed
+                                            </Menu.Item>
+                                            <Menu.Divider />
+                                            {speedItems}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {compact && (
+                                                <>
+                                                    {/* A second page rather than a submenu:
+                                                        one speed per line, full width, and
+                                                        nothing opening sideways off a narrow
+                                                        screen. */}
+                                                    <Menu.Item
+                                                        closeMenuOnClick={false}
+                                                        onClick={() => setMoreView("speed")}
+                                                        rightSection={
+                                                            <Text size="xs" c="dimmed">
+                                                                {speedLabel} ›
+                                                            </Text>
+                                                        }
+                                                    >
+                                                        Speed
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        onClick={toggleMute}
+                                                        leftSection={
+                                                            muted ? (
+                                                                <MutedGlyph size={18} />
+                                                            ) : (
+                                                                <SoundGlyph size={18} />
+                                                            )
+                                                        }
+                                                    >
+                                                        {muted ? "Unmute" : "Mute"}
+                                                    </Menu.Item>
+                                                    {onCapture && (
+                                                        <Menu.Item
+                                                            onClick={captureHere}
+                                                            disabled={capturing}
+                                                            leftSection={<CaptureGlyph />}
+                                                        >
+                                                            Capture this frame
+                                                        </Menu.Item>
+                                                    )}
+                                                    {markClip && (
+                                                        <Menu.Item
+                                                            onClick={markClip}
+                                                            leftSection={<ScissorsGlyph />}
+                                                        >
+                                                            {clipPending
+                                                                ? "Mark the clip's end"
+                                                                : "Mark a clip's start"}
+                                                        </Menu.Item>
+                                                    )}
+                                                    {menuItems && <Menu.Divider />}
+                                                </>
+                                            )}
+                                            {menuItems}
+                                        </>
+                                    )}
+                                </Menu.Dropdown>
+                            </Menu>
+                        )}
+
+                        {steps && (
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                className={classes.step}
+                                disabled={!steps.next}
+                                onClick={steps.next ?? undefined}
+                                aria-label="Next item (n)"
+                                title="Next item (n)"
+                            >
+                                <NextGlyph />
+                            </ActionIcon>
+                        )}
                     </Group>
                 </Box>
             )}

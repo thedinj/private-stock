@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Button, Menu, Text, Tooltip } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 
 import { useIdleControls } from "@/lib/useIdleControls";
 import { usePlayerFullscreen } from "@/lib/usePlayerFullscreen";
@@ -9,7 +10,14 @@ import { useStillDwell } from "@/lib/useStillDwell";
 import { DWELL_CHOICES, type DwellSeconds } from "@/lib/stageDwell";
 import { isTypingTarget } from "@/lib/typingTarget";
 
-import { FullscreenGlyph, PauseGlyph, PlayGlyph } from "./Glyph";
+import {
+    FullscreenGlyph,
+    MoreGlyph,
+    NextGlyph,
+    PauseGlyph,
+    PlayGlyph,
+    PreviousGlyph,
+} from "./Glyph";
 import { StillSlots } from "./StillSlots";
 
 import classes from "./StillStage.module.scss";
@@ -55,6 +63,10 @@ interface StillStageProps {
      */
     dwellSeconds?: DwellSeconds;
     onDwellSeconds?: (seconds: DwellSeconds) => void;
+    /** The way through the set, at the two ends of the bar -- as the player's (`VideoPlayer`). */
+    steps?: { previous: (() => void) | null; next: (() => void) | null } | null;
+    /** The page's actions on the item, in a "more" menu: the rating and the bin. */
+    menuItems?: React.ReactNode;
 }
 
 export const StillStage: React.FC<StillStageProps> = ({
@@ -68,6 +80,8 @@ export const StillStage: React.FC<StillStageProps> = ({
     hotkeys,
     dwellSeconds,
     onDwellSeconds,
+    steps = null,
+    menuItems,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const {
@@ -79,6 +93,8 @@ export const StillStage: React.FC<StillStageProps> = ({
     const [failed, setFailed] = useState(false);
     const [aspect, setAspect] = useState<string | null>(null);
     const [pointerOnBar, setPointerOnBar] = useState(false);
+    /** A finger rather than a pointer: the bar's targets stand 44px (CLAUDE.md). */
+    const iconSize = (useMediaQuery("(pointer: coarse)") ?? false) ? "xl" : "lg";
 
     /**
      * A new picture. Both of these are the bug §8b warns about and the page shipped for real:
@@ -230,11 +246,29 @@ export const StillStage: React.FC<StillStageProps> = ({
                 onPointerEnter={() => setPointerOnBar(true)}
                 onPointerLeave={() => setPointerOnBar(false)}
             >
+                {/* In the same places as the player's, so the set is walked the same way
+                    whichever kind of item is on the stage. */}
+                {steps && (
+                    <Tooltip label="Previous item (p)">
+                        <ActionIcon
+                            size={iconSize}
+                            variant="subtle"
+                            color="brass"
+                            className={classes.step}
+                            disabled={!steps.previous}
+                            onClick={steps.previous ?? undefined}
+                            aria-label="Previous item (p)"
+                        >
+                            <PreviousGlyph />
+                        </ActionIcon>
+                    </Tooltip>
+                )}
+
                 {dwellMs !== null && (
                     <>
                         <Tooltip label={dwell.paused ? "Resume the show" : "Hold here"}>
                             <ActionIcon
-                                size="lg"
+                                size={iconSize}
                                 variant="subtle"
                                 color="brass"
                                 onClick={dwell.toggle}
@@ -292,7 +326,7 @@ export const StillStage: React.FC<StillStageProps> = ({
 
                 <Tooltip label={isFullscreen ? "Leave full screen (f)" : "Full screen (f)"}>
                     <ActionIcon
-                        size="lg"
+                        size={iconSize}
                         variant="subtle"
                         color="brass"
                         onClick={toggleFullscreen}
@@ -301,6 +335,39 @@ export const StillStage: React.FC<StillStageProps> = ({
                         <FullscreenGlyph />
                     </ActionIcon>
                 </Tooltip>
+
+                {menuItems && (
+                    <Menu position="top-end" withinPortal classNames={{ item: classes.menuItem }}>
+                        <Menu.Target>
+                            <ActionIcon
+                                size={iconSize}
+                                variant="subtle"
+                                color="brass"
+                                aria-label="More"
+                                title="More"
+                            >
+                                <MoreGlyph />
+                            </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>{menuItems}</Menu.Dropdown>
+                    </Menu>
+                )}
+
+                {steps && (
+                    <Tooltip label="Next item (n)">
+                        <ActionIcon
+                            size={iconSize}
+                            variant="subtle"
+                            color="brass"
+                            className={classes.step}
+                            disabled={!steps.next}
+                            onClick={steps.next ?? undefined}
+                            aria-label="Next item (n)"
+                        >
+                            <NextGlyph />
+                        </ActionIcon>
+                    </Tooltip>
+                )}
             </div>
         </div>
     );

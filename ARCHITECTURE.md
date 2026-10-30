@@ -8781,8 +8781,9 @@ where you are rather than who you are. The `prefs` API stays uncalled for now.
 
 Four tiers, top to bottom, each with a fixed place:
 
-1. **The way back, and the way through** — back on the left; on the right the position ("12 of
-   116"), Prev and Next, and a **Playback** menu.
+1. **The way back** — back on the left; on the right the position ("12 of 116") and a
+   **Playback** menu. Prev and Next were here until 2026-10-30; they are in the stage's bar now
+   (below).
 2. **The stage** — the player or the still, capped at `max(40dvh, min(75dvh, 100dvh − 17rem))`
    so the title row is on screen when the page opens on a laptop. Three quarters of the
    viewport plus the player's bar put it below the fold; the floor keeps a picture on a phone in
@@ -8792,6 +8793,22 @@ Four tiers, top to bottom, each with a fixed place:
    they go icon-only: labelled, they overflowed a 360px screen.
 4. **Its content** — Frames, the clip being marked, Clips, then each tag facet and the note,
    then Up next, under one label style.
+
+**The stage's bar, end to end** (2026-10-30). `|◀ ↺10 ▶ 10↻ time … ✂ ⌾ 1× 🔊 ⛶ ⋯ ▶|` for a
+film, and the same two ends around a still's hold and fullscreen. Previous and next sit at the
+ends because the bar is the one thing on screen in fullscreen, where the row above the stage is
+not painted — a phone there had no way to the next item at all. At the end of a set the button
+dims rather than vanishing, so nothing shifts under a thumb, and it does not wrap: a filtered set
+that wrapped would hide that you had finished it. Play sits between the two ten-second jumps, so
+the button that leaves the item is never the one beside it.
+
+On a phone (`max-width: 48em`) the bar keeps the transport, fullscreen, `⋯` and the set — seven
+44px targets, what fits across 400px — and speed, mute, capture and clip marking go into `⋯`,
+with the time at the two ends of the scrubber. Speed is a second page of that menu rather than a
+submenu, one rate per line. On a wider screen everything stays in the bar and speed is a "1×"
+that opens a menu: the `Select` it replaced was too narrow on a phone to show its own value, and
+its list wrapped. Every target is 44px under `pointer: coarse`, whatever the width. `⋯` also
+carries the rating and the bin, everywhere, because fullscreen otherwise leaves them to the keys.
 
 **What you write about an item is on the page, not in the drawer.** Tags and the note sat in
 the Details drawer below the facts, which meant describing a film with a panel covering it, and

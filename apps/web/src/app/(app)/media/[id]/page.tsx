@@ -13,6 +13,7 @@ import {
     Group,
     Kbd,
     Loader,
+    Menu,
     Popover,
     SegmentedControl,
     SimpleGrid,
@@ -800,6 +801,49 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         atMs: () => (data.kind === "video" ? Math.round(positionRef.current) : null),
     };
 
+    /**
+     * Previous and next, in the stage's bar (§14b).
+     *
+     * There rather than in the row above the stage, because the bar is what is on screen in
+     * fullscreen -- where a phone had no way to the next item at all. Only with a set behind the
+     * item, as the position is.
+     */
+    const steps =
+        sequence.position !== null
+            ? {
+                  previous: sequence.previousId ? () => go(sequence.previousId) : null,
+                  next: sequence.nextId ? () => go(sequence.nextId) : null,
+              }
+            : null;
+
+    /**
+     * The rating and the bin, in the bar's "more" menu: in fullscreen the row under the stage is
+     * gone, and without a keyboard these were out of reach there. The same save and the same
+     * confirmation as the row's.
+     */
+    const stageMenu = (
+        <>
+            <Menu.Label>This item</Menu.Label>
+            <Box px="sm" py={4}>
+                <RatingControl
+                    rating={shownRating}
+                    favorite={shownFavorite}
+                    onChange={setOpinion}
+                    celebration={null}
+                />
+            </Box>
+            {trashable === "allowed" && (
+                <Menu.Item
+                    color="oxblood"
+                    leftSection={<TrashGlyph size={16} />}
+                    onClick={trashDialog.open}
+                >
+                    Move to trash
+                </Menu.Item>
+            )}
+        </>
+    );
+
     return (
         <Stack gap="lg">
             {/* The way back to *where you were*, not to the front door.
@@ -844,7 +888,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     </Anchor>
                 )}
 
-                {/* Where you are in the set, and the way through it (§14b).
+                {/* Where you are in the set (§14b). The way through it is in the stage's own
+                    bar, at its two ends -- see `steps`.
 
                     Present only when there is a set: an item opened from a shared link or a
                     new tab has no filtered library behind it, and inventing one -- "the whole
@@ -854,39 +899,11 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     flight, and skipped entirely for a shuffled set, where the permutation
                     decides how many pages exist rather than the row count (§20). */}
                 <Group gap="xs" wrap="nowrap">
-                    {sequence.position !== null && (
-                        <>
-                            {sequence.total !== null && (
-                                <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                                    {sequence.position.toLocaleString()} of{" "}
-                                    {sequence.total.toLocaleString()}
-                                </Text>
-                            )}
-
-                            <Button
-                                size={narrow ? "sm" : "compact-sm"}
-                                variant="subtle"
-                                color="gray"
-                                disabled={!sequence.previousId}
-                                onClick={() => go(sequence.previousId)}
-                                aria-label="Previous item (p)"
-                                title="Previous item (p)"
-                            >
-                                ‹ Prev
-                            </Button>
-
-                            <Button
-                                size={narrow ? "sm" : "compact-sm"}
-                                variant="subtle"
-                                color="gray"
-                                disabled={!sequence.nextId}
-                                onClick={() => go(sequence.nextId)}
-                                aria-label="Next item (n)"
-                                title="Next item (n)"
-                            >
-                                Next ›
-                            </Button>
-                        </>
+                    {sequence.position !== null && sequence.total !== null && (
+                        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                            {sequence.position.toLocaleString()} of{" "}
+                            {sequence.total.toLocaleString()}
+                        </Text>
                     )}
 
                     {/* How this page behaves when you arrive and when the item ends (§14b).
@@ -1053,6 +1070,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // A file that claimed it could play and then could not. The stage
                             // shows its cover instead of nothing, and the show moves on (§8b).
                             onUnplayable={() => setPlayerFailed(true)}
+                            steps={steps}
+                            menuItems={stageMenu}
                         />
                     ) : (
                         <StillStage
@@ -1068,6 +1087,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // Released while the enlarged frame view or the trash confirmation
                             // is open, so nothing fights this stage for the same keystroke.
                             hotkeys={!overlayOpen && !trashOpen}
+                            steps={steps}
+                            menuItems={stageMenu}
                         />
                     )}
                 </Box>
