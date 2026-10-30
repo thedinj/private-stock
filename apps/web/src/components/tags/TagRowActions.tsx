@@ -20,6 +20,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 
 import { tagKinds, type Tag, type TagScope } from "@private-stock/core";
 
+import { MoreGlyph } from "@/components/media/Glyph";
 import { ApiError } from "@/lib/api/client";
 import { facetLabel } from "@/lib/facetLabels";
 import {
@@ -67,6 +68,18 @@ interface TagRowActionsProps {
      * picture of its own -- the menu can keep that one (§6 "A tag's picture").
      */
     onKeepPicture?: () => void;
+    /**
+     * The menu's own first items, where the page has some of its own to put away -- the tag's
+     * page puts its rarer actions here rather than in its row of buttons (§14, "house rules").
+     */
+    leading?: React.ReactNode;
+    /**
+     * "Open in library" -- on a tile, the way into the grid. Off on the tag's own page, whose
+     * See all is that already.
+     */
+    libraryLink?: boolean;
+    /** A thumb's worth on a phone (CLAUDE.md). */
+    touch?: boolean;
 }
 
 const FACETS = tagKinds.map((kind) => ({ value: kind, label: facetLabel(kind) }));
@@ -82,6 +95,9 @@ export const TagRowActions: React.FC<TagRowActionsProps> = ({
     onGone,
     onChoosePicture,
     onKeepPicture,
+    leading,
+    libraryLink = true,
+    touch = false,
 }) => {
     const [dialog, setDialog] = useState<"rename" | "merge" | "delete" | "publish" | null>(null);
     const [name, setName] = useState(tag.name);
@@ -188,18 +204,19 @@ export const TagRowActions: React.FC<TagRowActionsProps> = ({
                         <ActionIcon
                             variant="subtle"
                             color="gray"
-                            size="lg"
+                            size={touch ? 44 : "lg"}
                             aria-label={`Actions for ${tag.name}`}
                         >
-                            <Text span fw={700} lh={1}>
-                                ⋯
-                            </Text>
+                            <MoreGlyph size={18} />
                         </ActionIcon>
                     </Menu.Target>
                     <Menu.Dropdown>
-                        <Menu.Item component={Link} href={`/?view=grid&tags=${tag.id}`}>
-                            Open in library
-                        </Menu.Item>
+                        {leading}
+                        {libraryLink && (
+                            <Menu.Item component={Link} href={`/?view=grid&tags=${tag.id}`}>
+                                Open in library
+                            </Menu.Item>
+                        )}
                         {onChoosePicture && (
                             <Menu.Item onClick={onChoosePicture}>Choose a picture…</Menu.Item>
                         )}

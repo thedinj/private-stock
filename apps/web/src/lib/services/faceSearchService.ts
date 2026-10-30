@@ -25,6 +25,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
+import { vocabularyChanged } from "./ocrMatchHooks";
 
 /**
  * Who is this? (§5f "Who is this?"): the faces on the frame somebody had on screen, and for the one
@@ -286,6 +287,9 @@ export const nameFromSearch = (
         throw new ValidationError("A name needs at least one letter or digit");
     }
 
+    const coins =
+        decision.performer.by === "name" &&
+        !tagRepo.resolveName("performer", decision.performer.name, null);
     const visible = new Set(
         lookupMedia(
             decision.people.map((person) => person.mediaId),
@@ -365,6 +369,9 @@ export const nameFromSearch = (
     );
 
     confirmationsChanged();
+
+    // A new name: until the rematch, nothing names them, so their Find untagged is empty (§5b).
+    if (coins) vocabularyChanged("performer", null);
 
     return result;
 };

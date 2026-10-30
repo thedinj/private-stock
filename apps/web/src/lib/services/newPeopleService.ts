@@ -22,6 +22,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
+import { vocabularyChanged } from "./ocrMatchHooks";
 
 /**
  * New people (§5f "New people"): people in items who match nobody known, gathered across the
@@ -135,6 +136,9 @@ export const decideNewPeople = (
         throw new ValidationError("A name needs at least one letter or digit");
     }
 
+    const coins =
+        decision.action === "name" && !tagRepo.resolveName("performer", decision.name, null);
+
     const faceIds = people.flatMap((person) => person.faceIds);
     const verdict =
         decision.action === "name" ? "is" : decision.action === "later" ? "later" : "notOnePerson";
@@ -192,6 +196,8 @@ export const decideNewPeople = (
     // Their reference is built from what was confirmed; what was scattered leaves the gatherings.
     confirmationsChanged();
     if (decision.action !== "name") jobRepo.enqueueKind("faceAnchors", 200, 60);
+    // A new name: until the rematch, nothing names them, so their Find untagged is empty (§5b).
+    if (coins) vocabularyChanged("performer", null);
 
     return result;
 };

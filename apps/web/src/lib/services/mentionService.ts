@@ -1,5 +1,5 @@
 import { AuthorizationError, NotFoundError, type MentionRefusal } from "@private-stock/core";
-import { faceDecisionRepo, mentionRepo, tagRepo } from "@private-stock/db";
+import { faceDecisionRepo, jobRepo, mentionRepo, tagRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { lookupMedia } from "./mediaService";
@@ -41,4 +41,23 @@ export const refuseMentions = (
             () => mentionRepo.refuse(tag.id, visible, auth.userId)
         ).result,
     };
+};
+
+/**
+ * Whether what names this tag may still be moving (§5d "Still matching").
+ *
+ * A name is matched against the library by the worker's `mentionMatch` run, a few seconds after
+ * it is coined, so Find untagged opened straight after naming somebody -- the common way in --
+ * would otherwise show an empty grid that reads as "nothing to tag". The run is library-wide, so
+ * the answer is too: any run waiting or under way. Asked of a tag the viewer can see; somebody
+ * else's private tag is not found, as everywhere else.
+ */
+export const mentionsMatching = (tagId: string, auth: AuthContext): { matching: boolean } => {
+    const tag = tagRepo.findById(tagId);
+
+    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId)) {
+        throw new NotFoundError("Tag not found");
+    }
+
+    return { matching: jobRepo.isLive("mentionMatch") };
 };

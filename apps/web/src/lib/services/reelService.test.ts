@@ -216,6 +216,8 @@ vi.mock("@private-stock/db", () => ({
     },
 }));
 
+vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
+
 const { createReel, updateReel, deleteReel, getReel, addReelItems } = await import("./reelService");
 const {
     listClipsFor,

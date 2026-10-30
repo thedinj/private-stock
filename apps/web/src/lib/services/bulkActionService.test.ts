@@ -52,6 +52,7 @@ vi.mock("@private-stock/db", () => ({
 
             return `${kind}:${name}:${ownerId ?? "library"}`;
         },
+        resolveName: () => undefined,
         /**
          * The ids this fixture makes are `kind:name:owner`, so a lookup can read one back
          * without a second table -- and an id naming a tag nothing ever created resolves to
@@ -101,6 +102,8 @@ vi.mock("@private-stock/db", () => ({
         },
     },
 }));
+
+vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
 vi.mock("./trashService", () => ({
     trashMedia: (mediaId: string) => {

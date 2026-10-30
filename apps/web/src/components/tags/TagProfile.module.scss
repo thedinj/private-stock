@@ -14,7 +14,7 @@
     position: relative;
     overflow: hidden;
     background-color: var(--ps-well);
-    // Taller than the room's on a phone: the copy here is a name, counts and four controls,
+    // Taller than the room's on a phone: the copy here is a name, counts and a row of controls,
     // and 300px left the buttons sitting on the name.
     height: min(460px, max(380px, 62vw));
 }
@@ -125,6 +125,8 @@
 // whatever somebody typed and the window is a fixed height.
 .title {
     margin: 0;
+    // Beside the heart: without this a long name pushes the heart out of the window.
+    min-width: 0;
     font-family: var(--mantine-font-family-headings);
     font-weight: 400;
     font-size: clamp(32px, 7vw, 64px);

@@ -61,7 +61,6 @@ import {
     hasClearableFilters,
     hasLook,
     leaveViewIfEmpty,
-    PAGE_SIZE,
     parseView,
     viewToParams,
     viewToRequestParams,
@@ -73,11 +72,11 @@ import { readSelection, selectionOwner, writeSelection } from "@/lib/librarySele
 import { useLiveUpdates } from "@/lib/events/useLiveUpdates";
 import { refreshListPage } from "@/lib/events/patchList";
 import { useTagNames } from "@/lib/api/facets";
+import { useMentionsMatching } from "@/lib/api/tags";
 import { useLibraries, useLibraryStats } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
-import { useOpenItem } from "@/lib/openItem";
 import { rememberTagNames } from "@/lib/rememberedPages";
-import { rememberReturnTo } from "@/lib/returnTo";
+import { fetchLibraryPage, usePlayFromTop } from "@/lib/playFromTop";
 import { settling } from "@/lib/settling";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import { DIRECTION_LABELS, SORT_LABELS } from "@/lib/sortWords";
@@ -172,7 +171,6 @@ const NO_SELECTION: string[] = [];
 
 export const LibraryCellar: React.FC = () => {
     const router = useRouter();
-    const openItem = useOpenItem();
     const searchParams = useSearchParams();
 
     const urlView = parseView(new URLSearchParams(searchParams.toString()));
@@ -223,6 +221,12 @@ export const LibraryCellar: React.FC = () => {
     const view: LibraryView = { ...urlView, search: debouncedSearch };
     // Shared with the panel and the chips, so this costs no request of its own.
     const tagNames = useTagNames(view);
+    /**
+     * A Find untagged whose names are still being matched (§5d "Still matching"): said, so a
+     * grid opened straight after naming somebody does not read as "nothing to tag", and refreshed
+     * when the match lands.
+     */
+    const matching = useMentionsMatching(view.mentions).data?.matching ?? false;
     const gallery = view.mode === "gallery";
 
     // The names behind this search's tags, for the sidebar's "Last search" line, which cannot
@@ -317,14 +321,7 @@ export const LibraryCellar: React.FC = () => {
      */
     const filterParams = viewToRequestParams({ ...view, sort: effectiveSort(view) });
 
-    const fetchPage = (page: number) => {
-        const params = new URLSearchParams(filterParams);
-
-        params.set("limit", String(PAGE_SIZE));
-        params.set("page", String(page));
-
-        return api<MediaListResponse>(`/api/media?${params.toString()}`);
-    };
+    const fetchPage = (page: number) => fetchLibraryPage(filterParams, page);
 
     const pageQuery = useQuery({
         queryKey: queryKeys.media.page(filterParams.toString(), view.page),
@@ -442,38 +439,8 @@ export const LibraryCellar: React.FC = () => {
 
     const queryClient = useQueryClient();
 
-    /**
-     * Play from the top: the first item of the set, opened in the viewer with the set behind it.
-     *
-     * Page one of the set whichever page is on screen, under the grid's own key so it is a cache
-     * hit when page one is what is showing. The address recorded for the viewer is this view at
-     * page one, because that is where the item is -- recording the page on screen would have the
-     * viewer look for it there and find no neighbours. Back still lands on the grid: the viewer
-     * corrects the address to wherever playback got to (§14b).
-     *
-     * The first item, photo or not. The viewer's set is mixed and a photo is a still that
-     * advances after its dwell (see `stageDwell`), so skipping ahead to the first video would
-     * start somewhere other than the top -- which Showcase and Tasting never do.
-     */
-    const playFromTop = async () => {
-        const first = await queryClient.fetchQuery({
-            queryKey: queryKeys.media.page(filterParams.toString(), 0),
-            queryFn: () => fetchPage(0),
-            staleTime: 30_000,
-        });
-        const target = first.items[0];
-
-        if (!target) return;
-
-        rememberReturnTo(`/?${viewToParams({ ...view, page: 0 }).toString()}`);
-        // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
-        openItem({
-            id: target.id,
-            href: `/media/${encodeURIComponent(target.id)}`,
-            marker: null,
-            picture: target.coverUrl,
-        });
-    };
+    /** Play from the top (`usePlayFromTop`), from this view. */
+    const playFromTop = usePlayFromTop();
 
     /**
      * The page on screen, re-checked rather than refetched (§13b).
@@ -798,7 +765,7 @@ export const LibraryCellar: React.FC = () => {
                     <Group gap="xs" wrap="nowrap">
                         <PlayMenu
                             setParams={viewToParams(view)}
-                            onFromTop={() => void playFromTop().catch(() => undefined)}
+                            onFromTop={() => void playFromTop(view).catch(() => undefined)}
                             empty={total === 0}
                             height={touchHeight}
                         />
@@ -920,6 +887,16 @@ export const LibraryCellar: React.FC = () => {
                         />
                     )}
 
+                    {matching && items.length > 0 && (
+                        <Group gap="xs" mb="sm" wrap="nowrap">
+                            <Loader size="xs" color="brass" />
+                            <Text size="sm" c="dimmed">
+                                Still matching new names against the library — more may appear here
+                                by themselves.
+                            </Text>
+                        </Group>
+                    )}
+
                     {pageQuery.isLoading ? (
                         <Center h={200}>
                             <Loader color="brass" />
@@ -933,6 +910,15 @@ export const LibraryCellar: React.FC = () => {
                             what="this page"
                             onRetry={() => void pageQuery.refetch()}
                         />
+                    ) : items.length === 0 && matching ? (
+                        // Not the empty state: nothing has been looked for yet.
+                        <Stack align="center" gap="xs" py={60}>
+                            <Loader color="brass" />
+                            <Text size="sm" c="dimmed" ta="center">
+                                Still matching new names against the library. Files that name{" "}
+                                {mentioned?.name ?? "this tag"} will appear here by themselves.
+                            </Text>
+                        </Stack>
                     ) : items.length === 0 ? (
                         <LibraryEmptyState
                             stats={stats}

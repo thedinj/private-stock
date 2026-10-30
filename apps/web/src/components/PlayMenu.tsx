@@ -24,8 +24,8 @@ interface PlayMenuProps {
  *
  * Playing from the top, Showcase and Tasting are one decision -- "put this set on the screen"
  * -- and all leave the page, so they are one button with a choice behind it rather than three
- * among the page's own controls. Shared by every page that has a set to play -- the library and
- * a playlist -- so the choice reads the same wherever it is offered.
+ * among the page's own controls. Shared by every page that has a set to play -- the library, a
+ * playlist and a tag's own page -- so the choice reads the same wherever it is offered.
  *
  * The page's primary action, so the one filled brass button on it (§14, "house rules").
  */

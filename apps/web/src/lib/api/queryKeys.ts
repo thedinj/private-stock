@@ -198,6 +198,12 @@ export const queryKeys = {
          * `tags` so a rename reaches it through `invalidateVocabulary`.
          */
         names: (tagIds: string) => ["tags", "names", tagIds],
+        /**
+         * Whether the names are still being matched against the library, asked by Find untagged
+         * (§5d "Still matching"). Under `tags` so coining a name -- which queues the match --
+         * asks again through `invalidateVocabulary`.
+         */
+        matching: (tagId: string) => ["tags", "matching", tagId],
         /** The management table: one facet of one system, paged, searched, filtered. */
         list: (scope: string, params: string) => ["tags", "list", scope, params],
         /**

@@ -23,6 +23,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 import { notThem } from "./notThem";
+import { vocabularyChanged } from "./ocrMatchHooks";
 import { picturesFor } from "./tagPictureService";
 
 /**
@@ -213,6 +214,9 @@ export const decideItemPeople = (
         throw new ValidationError("A name needs at least one letter or digit");
     }
 
+    const coins =
+        decision.action === "name" && !tagRepo.resolveName("performer", decision.name, null);
+
     const press = (tagId: string | null, verdict: "is" | "isNot") => ({
         actor: "user" as const,
         userId: auth.userId,
@@ -264,6 +268,9 @@ export const decideItemPeople = (
     );
 
     confirmationsChanged();
+
+    // A new name: until the rematch, nothing names them, so their Find untagged is empty (§5b).
+    if (coins) vocabularyChanged("performer", null);
 
     return { changed };
 };

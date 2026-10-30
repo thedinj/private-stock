@@ -587,6 +587,21 @@ an aunt of nobody" is not her. It composes with everything else, the search box 
 "names Aunt Margaret, mentions beach" is one more word typed; and it starts from the tag's few
 mentions or walks the library, whichever is cheaper (§20), as the FTS form did.
 
+**Still matching** (2026-10-30). Being a stored fact, a new name names nothing until the
+worker's `mentionMatch` run has read the library for it — tens of seconds, after the few it
+waits to fold a burst of names into one run. That is exactly when it is most often asked:
+identify a performer, then see what else they are in. So a Find untagged grid asks
+(`GET /api/tags/<id>/mentions`) whether a run is waiting or under way, and while one is it says
+so — in place of the empty state, which would read as "nothing to tag", or above what has been
+found — asks again every few seconds, and refreshes its pages when the run lands. The question is
+library-wide because the run is; a rename elsewhere shows the line too, which costs nothing. A
+search of the name would answer at once, but it is the question the stored fact replaced (above).
+
+Every way a name is coined queues that run — the tag box, a bulk tag, the OCR review, a clip,
+and naming somebody from their face (Who is this?, an item's People, New people). The last
+three and the selection and clip paths did not until 2026-10-30, so a performer named from a face
+waited for some later change to the vocabulary before Find untagged knew them.
+
 Somebody else's private tag mentions nothing — an id in a shared address is not a reason to
 search for what that person privately calls something. The table holds every tag's mentions,
 private ones too; whether the viewer may ask about the tag is the query's rule.
@@ -2201,7 +2216,8 @@ faces".)
   two tabs, held in the address: **To check** — "Likely", then the performer's Matches rows
   (`FaceReviewSheet` narrowed to them, with its kind control and keys), then the name-only
   hand-off — and **Their face**. Any other tag, or anybody but an administrator, gets only "Find
-  untagged". Above the shelves they were asked for on every visit, since
+  untagged" — offered straight from the tag page's menu since 2026-10-30, rather than as an
+  Organise button opening a page with one link on it. Above the shelves they were asked for on every visit, since
   they were within reach of the viewport, and each read crosses every face in the library
   (`reviewPairs`) — synchronous SQLite on the web process's one thread, from pages the worker's
   commits keep evicting. With the worker busy that took over a minute, and held up the shelves'
@@ -9903,6 +9919,17 @@ not a query, so the showcase and the tasting carry it as `playlist=<id>` beside 
 page's own keys — so the viewer opened from either, and the playlist page behind it, find those
 pages cached. There is no count to size the wall from: a shuffled playlist's pages run past its
 item count, so the end is the page that says `hasMore: false`, as the tasting already reads it.
+
+**So does a tag's page** (2026-10-30). It had a filled Tasting and a Showcase of its own, and no
+From the top: the one surface where Play was two buttons, and a third of it missing. Now the same
+`PlayMenu`, and the row around it follows the house rule — Play filled; See all and, where it has
+work, Organise as the default-weight secondaries; everything rare behind `MoreGlyph`. Organise is
+a button only for an administrator on a library performer, where it opens suggestions and faces;
+anywhere else its page held a single link, so the menu offers **Find untagged** directly. The
+heart moved from leading the actions to beside the name — it is about who this is, not something
+done to the set — and on a phone the row is one line of 44px controls, See all without its count.
+"Open in library" left that menu (See all is the same grid), and "Choose a picture…" shows there
+only when there is no picture inset, whose own menu is otherwise the one place to choose.
 
 **From the top** is listed first, being the plainest reading of "Play": it opens the first item
 of the set — whichever page is on screen — in the viewer, with the set recorded at page one so

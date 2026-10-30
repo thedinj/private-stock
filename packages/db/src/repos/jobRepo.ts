@@ -33,6 +33,14 @@ export const enqueueKind = (kind: string, priority = 100, delaySeconds = 0): voi
     ).run(randomUUID(), kind, priority, delaySeconds, kind);
 };
 
+/** Whether a job of this kind is waiting or running -- `enqueueKind`'s own test, from the index. */
+export const isLive = (kind: string): boolean =>
+    !!db
+        .prepare(
+            `SELECT 1 FROM "Job" WHERE "kind" = ? AND "state" IN ('pending', 'claimed') LIMIT 1`
+        )
+        .get(kind);
+
 /**
  * Queues a scan of one library, ahead of ordinary work.
  *

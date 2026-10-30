@@ -6,7 +6,7 @@ import type { AuthContext } from "../auth/withAuth";
  * "Not them", from "Find untagged" (§5d): who may say it of which tag, and of which items.
  */
 
-const state = vi.hoisted(() => ({ refused: [] as [string, string[]][] }));
+const state = vi.hoisted(() => ({ refused: [] as [string, string[]][], live: false }));
 
 vi.mock("@private-stock/db", () => ({
     // A press runs its writes, as one decision (§5f "Decisions you can take back").
@@ -25,6 +25,7 @@ vi.mock("@private-stock/db", () => ({
                 theirs: { id, ownerId: "u2" },
             })[id],
     },
+    jobRepo: { isLive: (kind: string) => kind === "mentionMatch" && state.live },
     mentionRepo: {
         refuse: (tagId: string, mediaIds: string[]) => {
             state.refused.push([tagId, mediaIds]);
@@ -39,7 +40,7 @@ vi.mock("./mediaService", () => ({
     }),
 }));
 
-const { refuseMentions } = await import("./mentionService");
+const { mentionsMatching, refuseMentions } = await import("./mentionService");
 
 const viewer = (scopes: AuthContext["scopes"]): AuthContext => ({
     userId: "u1",
@@ -52,6 +53,22 @@ const viewer = (scopes: AuthContext["scopes"]): AuthContext => ({
 
 beforeEach(() => {
     state.refused = [];
+    state.live = false;
+});
+
+describe("still matching", () => {
+    it("says so while a match of the names is waiting or under way", () => {
+        expect(mentionsMatching("library", viewer([]))).toEqual({ matching: false });
+
+        state.live = true;
+
+        expect(mentionsMatching("library", viewer([]))).toEqual({ matching: true });
+        expect(mentionsMatching("mine", viewer([]))).toEqual({ matching: true });
+    });
+
+    it("does not answer for somebody else's private tag", () => {
+        expect(() => mentionsMatching("theirs", viewer(["admin"]))).toThrow(/not found/i);
+    });
 });
 
 describe("refusing name matches", () => {

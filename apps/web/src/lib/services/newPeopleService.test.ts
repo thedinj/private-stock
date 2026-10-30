@@ -59,9 +59,12 @@ vi.mock("@private-stock/db", () => ({
     },
     tagRepo: {
         ensureTag: () => "new",
+        resolveName: () => undefined,
         findById: (id: string) => ({ id, kind: "performer", name: "New One", ownerId: null }),
     },
 }));
+
+vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
 vi.mock("./faceService", () => ({
     confirmationsChanged: () => undefined,

@@ -51,8 +51,11 @@ vi.mock("@private-stock/db", () => ({
                 : undefined,
         listForMedia: () => state.carried,
         ensureTag: () => "new",
+        resolveName: () => undefined,
     },
 }));
+
+vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
 vi.mock("./faceService", () => ({
     confirmationsChanged: () => undefined,

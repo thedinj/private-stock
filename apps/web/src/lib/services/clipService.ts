@@ -31,6 +31,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { toTagBatch } from "./bulkTagService";
 import { mayAlterOwnWork } from "./collectionAccess";
+import { vocabularyChanged } from "./ocrMatchHooks";
 import { spriteThumbFor } from "./spriteThumb";
 import { writesTo } from "./tagService";
 
@@ -190,6 +191,10 @@ export const createClip = (mediaId: string, input: CreateClipInput, auth: AuthCo
         throw new ValidationError("That span falls outside the video");
     }
 
+    const coined = (input.tags ?? []).filter(
+        (tag) => !tagRepo.resolveName(tag.kind, tag.name, writesTo(tag.scope, auth))
+    );
+
     // One transaction, so a name the tag rules refuse does not leave an untagged clip behind.
     const id = db.transaction((): string => {
         const clipId = clipRepo.create({
@@ -216,6 +221,10 @@ export const createClip = (mediaId: string, input: CreateClipInput, auth: AuthCo
 
         return clipId;
     })();
+
+    for (const tag of coined) {
+        vocabularyChanged(tag.kind, writesTo(tag.scope, auth));
+    }
 
     const row = clipRepo.findSummary(id)!;
 
@@ -254,6 +263,9 @@ export const editClipTags = (
     ownClip(clipId, auth);
 
     const scope = writesTo(input.scope, auth);
+    const coins =
+        input.mode !== "remove" &&
+        input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
 
     db.transaction((): void => {
         if (input.mode === "remove") {
@@ -279,6 +291,10 @@ export const editClipTags = (
         });
     })();
 
+    if (coins) {
+        vocabularyChanged(input.kind, scope);
+    }
+
     return (clipTagRepo.listForClipIds([clipId]).get(clipId) ?? []).map(toClipTag);
 };
 
@@ -296,6 +312,7 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
     }
 
     const scope = writesTo(input.scope, auth);
+    const coins = input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
     const count = clipIds.length;
     const summary =
         `Tagged ${count} clip${count === 1 ? "" : "s"} ${input.kind}: ` + input.names.join(", ");
@@ -310,6 +327,10 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
             ),
         })
     )();
+
+    if (coins) {
+        vocabularyChanged(input.kind, scope);
+    }
 
     const batch = tagBatchRepo.findById(batchId, auth.userId);
 

@@ -3,20 +3,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Anchor, Box, Button, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import {
+    Alert,
+    Anchor,
+    Box,
+    Button,
+    Center,
+    Group,
+    Loader,
+    Menu,
+    Stack,
+    Text,
+} from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 
 import { tagProfileKind, type MediaListItem } from "@private-stock/core";
 
 import { FavoriteToggle } from "@/components/FavoriteToggle";
 import { LoadFailed } from "@/components/LoadFailed";
+import { PlayMenu } from "@/components/PlayMenu";
 import { SectionHead, TileGrid } from "@/components/library/LibraryRoom";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { useTagFavorite, useTagProfile } from "@/lib/api/tags";
 import { facetLabel, facetLabelPlural } from "@/lib/facetLabels";
-import { openFullScreenMode } from "@/lib/fullScreenEntry";
-import { SHOWCASE_PATH, TASTING_PATH } from "@/lib/showcase/set";
+import { parseView, untaggedMentionsHref } from "@/lib/libraryQuery";
+import { usePlayFromTop } from "@/lib/playFromTop";
 import { useRememberedHref } from "@/lib/rememberedPages";
-import { forgetTastingPosition } from "@/lib/tasting/restore";
 import { isTypingTarget } from "@/lib/typingTarget";
 import { useTagSeed } from "@/lib/useTagSeed";
 
@@ -38,9 +50,16 @@ import classes from "./TagProfile.module.scss";
  * For a performer, the people they appear with, because that is the next question -- below the
  * shelves, and fetched on its own once it nears the viewport (`CompanionsSection`).
  *
- * The heart leads the actions, and answers to `h` as an item's does (§6 "Favourite tags"):
- * one key for "I like this" wherever there is one thing on screen to like.
+ * The actions are the house plate's (§14, "house rules"): Play, the one filled button, with its
+ * three ways behind it as on the library; See all, the way into the grid where organising
+ * happens; Organise where it has work to offer; the rest behind the menu. The heart sits by the
+ * name -- it is about who this is, not something to do with the set -- and answers to `h` as an
+ * item's does (§6 "Favourite tags"): one key for "I like this" wherever there is one thing on
+ * screen to like.
  */
+
+/** A thumb's worth on a phone (CLAUDE.md). */
+const TOUCH_HEIGHT = "2.75rem";
 
 export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
     const router = useRouter();
@@ -49,6 +68,11 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
     const { data, error, isLoading, refetch } = useTagProfile(tagId, seed);
     const heart = useTagFavorite(tagId, data?.favorite ?? false);
     const [choosingPicture, setChoosingPicture] = useState(false);
+    const [done, setDone] = useState<string | null>(null);
+    const playFromTop = usePlayFromTop();
+    /** The scss's phone: the picture over the name, and the row of actions kept to one line. */
+    const touch = useMediaQuery("(max-width: 48em)") ?? false;
+    const touchHeight = touch ? TOUCH_HEIGHT : undefined;
     const { toggle } = heart;
     const loaded = data !== undefined;
 
@@ -127,6 +151,12 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
      * faces are confirmed for the library, and only administrators confirm them (§5f).
      */
     const facesToChoose = tag.kind === "performer" && !tag.private && hasScope("admin");
+    /**
+     * Organise is a button only where it opens real work -- a library performer's suggestions and
+     * faces, for an administrator, the same test as the faces above. Anywhere else its page held
+     * one link, Find untagged, so the menu offers that link directly (`TagOrganise`).
+     */
+    const organises = facesToChoose;
     /** With no picture of its own, the window's item stands in, as it did on the browse tile. */
     const standIn = !tag.picture && hero?.coverUrl ? { ...hero, coverUrl: hero.coverUrl } : null;
 
@@ -188,7 +218,18 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                                 ? `Your ${facetLabel(tag.kind).toLowerCase()}`
                                 : facetLabel(tag.kind)}
                         </Text>
-                        <h1 className={classes.title}>{tag.name}</h1>
+                        <Group gap="sm" wrap="nowrap" align="center">
+                            <h1 className={classes.title}>{tag.name}</h1>
+                            <FavoriteToggle
+                                favorite={heart.favorite}
+                                onToggle={toggle}
+                                burstKey={heart.burstKey}
+                                shortcut
+                                subject={tag.name}
+                                // A thumb's worth, and level with the name rather than lost in it.
+                                size="xl"
+                            />
+                        </Group>
                         {(tag.aliases?.length ?? 0) > 0 && (
                             <Text size="sm" c="oak.3">
                                 also {tag.aliases?.join(", ")}
@@ -201,73 +242,67 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                             size="lg"
                         />
 
-                        <Group gap="sm" wrap="wrap" mt={4}>
-                            <FavoriteToggle
-                                favorite={heart.favorite}
-                                onToggle={toggle}
-                                burstKey={heart.burstKey}
-                                shortcut
-                                // The height of the buttons beside it, and a thumb's worth.
-                                size="xl"
-                            />
-                            {/* The primary action, so the one filled brass button (§14). A tasting
-                            is the "show me" of a set, and it comes back here when it ends. */}
-                            <Button
-                                color="brass"
-                                size="md"
-                                disabled={total === 0}
-                                onClick={() => {
-                                    forgetTastingPosition();
-                                    openFullScreenMode(TASTING_PATH, setParams, (href) =>
-                                        router.push(href)
-                                    );
-                                }}
-                            >
-                                Tasting
-                            </Button>
-                            <Button
-                                variant="default"
-                                size="md"
-                                disabled={total === 0}
-                                onClick={() =>
-                                    openFullScreenMode(SHOWCASE_PATH, setParams, (href) =>
-                                        router.push(href)
-                                    )
+                        <Group gap="xs" wrap="wrap" mt={4}>
+                            {/* Play, See all and Organise in the open; on a phone they and the
+                                menu are one line, so See all drops its count there. */}
+                            <PlayMenu
+                                setParams={setParams}
+                                onFromTop={() =>
+                                    void playFromTop(parseView(setParams)).catch(() => undefined)
                                 }
-                            >
-                                Showcase
-                            </Button>
+                                empty={total === 0}
+                                height={touchHeight}
+                            />
                             <Button
                                 component={Link}
                                 href={allHref}
-                                variant="subtle"
-                                color="brass"
-                                size="md"
+                                variant="default"
+                                h={touchHeight}
                             >
-                                See all {shown.toLocaleString()}
+                                {touch ? "See all" : `See all ${shown.toLocaleString()}`}
                             </Button>
                             {/* Finding more of this tag is its own page: what it asks
                             reads faces across the library, and browsing must never wait on it
                             (§6 "Tags", §5f "Starting from the performer"). */}
-                            <Button
-                                component={Link}
-                                href={`/tags/${tag.id}/organise`}
-                                prefetch={false}
-                                variant="subtle"
-                                color="brass"
-                                size="md"
-                            >
-                                Organise
-                            </Button>
+                            {organises && (
+                                <Button
+                                    component={Link}
+                                    href={`/tags/${tag.id}/organise`}
+                                    prefetch={false}
+                                    variant="default"
+                                    h={touchHeight}
+                                >
+                                    Organise
+                                </Button>
+                            )}
                             <TagRowActions
                                 tag={{ ...tag, mediaCount: total }}
                                 scope={scope}
                                 curator={tag.private || hasScope("admin")}
+                                onDone={setDone}
                                 // An edit refreshes this page through the vocabulary cascade; a
                                 // delete or merge leaves no tag here, so it goes back to the list.
-                                onDone={() => undefined}
                                 onGone={() => router.push(back)}
-                                onChoosePicture={() => setChoosingPicture(true)}
+                                // Where the inset shows, its own menu is where a picture is
+                                // chosen: one place for it, not two menus offering the same.
+                                onChoosePicture={
+                                    tag.picture || standIn
+                                        ? undefined
+                                        : () => setChoosingPicture(true)
+                                }
+                                leading={
+                                    !organises && (
+                                        <Menu.Item
+                                            component={Link}
+                                            href={untaggedMentionsHref(tag.id)}
+                                            prefetch={false}
+                                        >
+                                            Find untagged
+                                        </Menu.Item>
+                                    )
+                                }
+                                libraryLink={false}
+                                touch={touch}
                                 variant="menu"
                             />
                         </Group>
@@ -288,6 +323,18 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                     (item, index, all) => all.findIndex((other) => other.id === item.id) === index
                 )}
             />
+
+            {done && (
+                <Alert
+                    variant="light"
+                    color="brass"
+                    mt="md"
+                    onClose={() => setDone(null)}
+                    withCloseButton
+                >
+                    {done}
+                </Alert>
+            )}
 
             <Stack gap={40} mt={40}>
                 {shelf("Recently added", shelves.recent, allHref)}

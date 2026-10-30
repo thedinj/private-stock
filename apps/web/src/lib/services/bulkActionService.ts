@@ -10,6 +10,7 @@ import {
 
 import type { AuthContext } from "../auth/withAuth";
 import { notThem } from "./notThem";
+import { vocabularyChanged } from "./ocrMatchHooks";
 import { writesTo } from "./tagService";
 import { trashMedia } from "./trashService";
 
@@ -90,6 +91,7 @@ export const applyBulkAction = async (
          * action rather than per item, so a selection cannot end up half in each.
          */
         const scope = writesTo(input.scope, auth);
+        const coins = input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
 
         const tagIds = input.names.map((name) =>
             tagRepo.ensureTag(input.kind, name, scope, auth.userId)
@@ -126,6 +128,10 @@ export const applyBulkAction = async (
         })();
 
         searchRepo.requestReindex(targets);
+
+        if (coins) {
+            vocabularyChanged(input.kind, scope);
+        }
 
         return { succeeded, failed };
     }

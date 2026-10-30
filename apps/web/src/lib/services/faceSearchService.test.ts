@@ -79,10 +79,18 @@ vi.mock("@private-stock/db", () => ({
     },
     tagRepo: {
         ensureTag: () => "coined",
+        resolveName: (_kind: string, name: string) =>
+            Object.entries(NAMES).some(([id, known]) => id !== "coined" && known === name)
+                ? { via: "name" }
+                : undefined,
         findById: (id: string) =>
             NAMES[id] ? { id, kind: "performer", name: NAMES[id], ownerId: null } : undefined,
         listForMediaIds: () => [],
     },
+}));
+
+vi.mock("./ocrMatchHooks", () => ({
+    vocabularyChanged: (kind: string) => state.calls.push(["vocabulary", kind]),
 }));
 
 vi.mock("./faceService", () => ({
@@ -212,6 +220,8 @@ describe("naming the face on the frame", () => {
         nameFromSearch("s1", 0, { performer: { by: "name", name: "Jane Doe" }, people: [] }, admin);
 
         expect(state.calls).toContainEqual(["named", "coined"]);
+        // A new name is owed a rematch, or their Find untagged stays empty until the next one.
+        expect(state.calls).toContainEqual(["vocabulary", "performer"]);
         expect(() =>
             nameFromSearch("s1", 0, { performer: { by: "name", name: "!!" }, people: [] }, admin)
         ).toThrow(/letter or digit/);

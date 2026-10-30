@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ActionIcon, Box, Menu, Text } from "@mantine/core";
+import { ActionIcon, Box, Menu } from "@mantine/core";
 
 import type { MediaListItem, Tag, TagPicture } from "@private-stock/core";
 
+import { MoreGlyph } from "@/components/media/Glyph";
 import { useClearTagPicture } from "@/lib/api/tags";
 
 import classes from "./TagPictureInset.module.scss";
@@ -84,9 +85,7 @@ export const TagPictureInset: React.FC<TagPictureInsetProps> = ({
                         className={classes.more}
                         aria-label={`${tag.name}'s picture`}
                     >
-                        <Text span fw={700} lh={1}>
-                            ⋯
-                        </Text>
+                        <MoreGlyph size={16} />
                     </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>

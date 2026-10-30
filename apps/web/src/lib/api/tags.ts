@@ -443,3 +443,39 @@ export const useRefuseMentions = (tagId: string | null) => {
         },
     });
 };
+
+/** How often to ask again while the names are being matched: a run takes tens of seconds. */
+const MATCHING_POLL_MS = 3_000;
+
+/**
+ * Whether the names are still being matched against the library (§5d "Still matching"), for a
+ * Find untagged grid: asked again every few seconds while they are, and when the run lands the
+ * grid's pages and counts are refreshed, so the list fills in without anybody reloading.
+ *
+ * The refresh is in the query function rather than an effect: it is the moment the answer turns
+ * from yes to no, which only the fetch that sees both sides knows.
+ */
+export const useMentionsMatching = (tagId: string | null) => {
+    const queryClient = useQueryClient();
+
+    return useQuery({
+        queryKey: queryKeys.tags.matching(tagId ?? ""),
+        queryFn: async () => {
+            const before = queryClient.getQueryData<{ matching: boolean }>(
+                queryKeys.tags.matching(tagId ?? "")
+            );
+            const now = await api<{ matching: boolean }>(
+                `/api/tags/${encodeURIComponent(tagId ?? "")}/mentions`
+            );
+
+            if (before?.matching && !now.matching) {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.media.facets() });
+            }
+
+            return now;
+        },
+        enabled: tagId !== null,
+        refetchInterval: (query) => (query.state.data?.matching ? MATCHING_POLL_MS : false),
+    });
+};
