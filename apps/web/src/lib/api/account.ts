@@ -1,8 +1,15 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { ChangePasswordInput, SessionUser, UpdateProfileInput } from "@private-stock/core";
+import type {
+    ChangePasswordInput,
+    PinStatus,
+    SessionUser,
+    SetPinInput,
+    UpdateProfileInput,
+    VerifyPinResult,
+} from "@private-stock/core";
 
 import { api } from "./client";
 import { useAuth } from "@/lib/api/AuthProvider";
@@ -49,3 +56,35 @@ export const useUpdateProfile = () => {
         },
     });
 };
+
+/**
+ * Whether your account has a screen-lock PIN (§12c). `enabled` lets the lock skip asking on the
+ * devices where it is off, which is most of them.
+ */
+export const usePinStatus = (enabled = true) =>
+    useQuery({
+        queryKey: queryKeys.account.pin(),
+        queryFn: () => api<PinStatus>("/api/auth/pin"),
+        enabled,
+    });
+
+/** Set, change or (with `pin: null`) remove your PIN. The answer is the new status. */
+export const useSetPin = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: SetPinInput) =>
+            api<PinStatus>("/api/auth/pin", {
+                method: "PUT",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: (status) => queryClient.setQueryData(queryKeys.account.pin(), status),
+    });
+};
+
+/** Ask the server whether a PIN is right. Not a mutation: nothing cached changes. */
+export const checkPin = (pin: string): Promise<VerifyPinResult> =>
+    api<VerifyPinResult>("/api/auth/pin/verify", {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+    });

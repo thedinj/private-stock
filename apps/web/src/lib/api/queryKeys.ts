@@ -70,6 +70,12 @@ export const queryKeys = {
         invitations: () => ["admin", "access", "invitations"],
     },
 
+    // --- Your own account ---
+    account: {
+        /** Whether the account has a screen-lock PIN (§12c). */
+        pin: () => ["account", "pin"],
+    },
+
     // --- The library, as a reader sees it ---
     library: {
         /** Enabled roots, ordered by name: the sidebar, the room and the cellar's switcher. */

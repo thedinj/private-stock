@@ -291,3 +291,37 @@ export const changePasswordSchema = z.object({
     newPassword: passwordSchema,
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/**
+ * The screen lock's PIN (§12c): four to eight digits. A convenience over a session that is
+ * already signed in, not a credential, which is why it is this short.
+ */
+export const pinSchema = z.string().regex(/^\d{4,8}$/, "Four to eight digits");
+
+/** Whether the account has a PIN. Which devices use it is each device's own setting. */
+export const pinStatusSchema = z.object({ set: z.boolean() });
+export type PinStatus = z.infer<typeof pinStatusSchema>;
+
+/**
+ * Setting, changing or (with `pin: null`) removing your PIN. Asks for your password, so a
+ * borrowed unlocked screen cannot be used to choose a PIN its owner does not know.
+ */
+export const setPinSchema = z.object({
+    currentPassword: z.string().min(1),
+    pin: pinSchema.nullable(),
+});
+export type SetPinInput = z.infer<typeof setPinSchema>;
+
+export const verifyPinSchema = z.object({ pin: z.string().max(8) });
+export type VerifyPinInput = z.infer<typeof verifyPinSchema>;
+
+/**
+ * The answer to a PIN. `remaining` counts the tries left before this device is signed out;
+ * `signedOut` says it just was.
+ */
+export const verifyPinResultSchema = z.object({
+    ok: z.boolean(),
+    remaining: z.number().int().nonnegative().optional(),
+    signedOut: z.boolean().optional(),
+});
+export type VerifyPinResult = z.infer<typeof verifyPinResultSchema>;

@@ -1081,6 +1081,7 @@ CREATE TABLE "User" (
             "invitationId" TEXT,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "pinHash" TEXT CHECK("pinHash" IS NULL OR length("pinHash") <= 255),
             FOREIGN KEY ("invitationId") REFERENCES "Invitation" ("id") ON DELETE SET NULL
         );
 

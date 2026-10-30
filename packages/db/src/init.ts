@@ -54,6 +54,10 @@ export function initializeDatabase(db: Database): void {
         );
 
         -- scopes: comma list drawn from "admin", "delete" (§18.1). Empty means view-only.
+        -- pinHash: the screen lock's PIN (§12c), hashed; NULL when none is set. Which devices
+        -- lock is each device's own choice and lives in its browser, not here. Out here rather
+        -- than beside the column because it was added by a migration, whose stored SQL has no
+        -- comment for the drift test to match.
         CREATE TABLE IF NOT EXISTS "User" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "email" TEXT NOT NULL UNIQUE CHECK(length("email") BETWEEN 3 AND 255),
@@ -76,6 +80,7 @@ export function initializeDatabase(db: Database): void {
             "invitationId" TEXT,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "pinHash" TEXT CHECK("pinHash" IS NULL OR length("pinHash") <= 255),
             FOREIGN KEY ("invitationId") REFERENCES "Invitation" ("id") ON DELETE SET NULL
         );
 

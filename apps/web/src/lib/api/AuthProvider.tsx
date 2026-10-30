@@ -6,6 +6,8 @@ import { Center, Loader } from "@mantine/core";
 
 import type { Scope, SessionUser } from "@private-stock/core";
 
+import { clearLockOnSignIn } from "@/lib/screenLock";
+
 import * as client from "./client";
 
 /**
@@ -64,7 +66,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => client.onSignedOut(() => setUser(null)), []);
 
     const signIn = useCallback(async (email: string, password: string) => {
-        setUser(await client.login(email, password));
+        const signedIn = await client.login(email, password);
+        // The password opens the screen lock too (§12c), or a device the lock signed out would
+        // ask for the PIN again the moment its owner got back in.
+        clearLockOnSignIn(signedIn.id);
+        setUser(signedIn);
     }, []);
 
     const signOut = useCallback(async () => {

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { WarmingHud } from "@/components/debug/WarmingHud";
 import { CandleLight } from "@/components/shell/CandleLight";
+import { ScreenLockProvider } from "@/components/shell/ScreenLock";
 import { AuthProvider } from "@/lib/api/AuthProvider";
 import { theme } from "@/theme";
 
@@ -92,7 +93,9 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
         >
             <QueryClientProvider client={queryClient}>
                 <AuthProvider>
-                    {children}
+                    {/* Here rather than in the app shell, so it covers the tasting and the
+                        showcase as well (§12c "The screen lock"). */}
+                    <ScreenLockProvider>{children}</ScreenLockProvider>
                     {/* Here rather than in the app shell, so it is over the tasting too. */}
                     <WarmingHud />
                     {/* Here too: the sign-in card has a gilt button to catch it. */}

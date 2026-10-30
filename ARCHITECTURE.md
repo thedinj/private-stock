@@ -6912,6 +6912,47 @@ touched.
   not: fifteen minutes later the refresh behind it failed, and the person who had just secured
   their account was signed out of the tab they did it in.
 
+### The screen lock
+
+Off by default and opt-in per device: after a stretch of downtime, the app is covered by a
+keypad until the account's PIN is entered. Asked for with a shared Samsung tablet in mind
+(decided 2026-10-30).
+
+- **The PIN is the account's; the lock is the device's.** `User.pinHash` holds one PIN per
+  account, so changing it reaches every device at once. Whether a device locks, and after how
+  long, lives in that browser's `localStorage` keyed by account (`lib/screenLock.ts`) and never
+  reaches the server, so a tablet two people share can lock for one and not the other.
+- **4 to 8 digits**, chosen by the person; the form suggests six. The keypad needs no fixed
+  length, so the range costs nothing.
+- **Setting, changing or removing the PIN asks for the password** — otherwise a borrowed unlocked
+  screen could set a PIN its owner does not know. Turning the lock _off_ on a device asks for
+  the PIN, for the same reason; turning it on asks for nothing.
+- **Downtime is measured from the last touch, key, wheel or scroll**, and is either the app in
+  the background (or the screen off) or the app in front, untouched, with nothing playing. A
+  video playing on a visible page counts as use, so a film watched hands-off does not lock
+  halfway. One delay covers both; an hour by default, five minutes to four hours offered. The
+  last-use time is shared by every tab and survives a reload, so a reload after an hour away
+  opens locked, and locking one tab locks the others.
+- **When hidden, the page is covered at once**, before the delay has run, so the app switcher's
+  thumbnail shows the cover rather than the library — as far as the browser gets a say; Android
+  may capture before the page reacts. Locking pauses every video and leaves fullscreen and
+  picture-in-picture, because a fullscreen element sits above anything the page can draw. The
+  provider sits in `providers.tsx`, not the app shell, so the tasting and the showcase are
+  covered too.
+- **The lock is drawn by the browser and is not a security boundary.** The page is still in the
+  document underneath (`inert`, and covered), and someone with developer tools can step past
+  it. That was the brief: it keeps out whoever picks the device up. What the server adds is
+  that guessing is bounded — `POST /api/auth/pin/verify` answers five wrong tries in a row,
+  counted per account in memory, and the fifth revokes _this device's_ refresh token and clears
+  its cookie. Getting back in takes the password, and signing in with the password clears the
+  lock, being the stronger proof. **Forgetting the PIN** is the same path: "Sign out" on the lock
+  screen.
+- **Hashed with `scrypt`, not bcrypt.** `bcryptjs` would hold the request thread for seconds on
+  the NAS (§20) to unlock a tablet; `scrypt` runs on the libuv pool. Neither resists offline
+  guessing of a few digits, so the hash is not tuned to — the miss limit is what holds.
+- **With no PIN on the account the lock stands down** on every device, and a verify against an
+  account with none answers yes: removing it took the password.
+
 ### What a new account can see, and what is still open
 
 Everything shared: every library, every public tag, every shared playlist. Their own ratings,

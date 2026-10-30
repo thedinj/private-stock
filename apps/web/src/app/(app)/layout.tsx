@@ -25,6 +25,7 @@ import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
 import { HeaderPlateTitle } from "@/components/shell/HeaderPlateTitle";
 import { HeaderSearch } from "@/components/shell/HeaderSearch";
 import { PageTurn } from "@/components/shell/PageTurn";
+import { useScreenLock } from "@/components/shell/ScreenLock";
 import { BusySeal } from "@/components/shell/BusySeal";
 import { UpdateNotice } from "@/components/shell/UpdateNotice";
 import { RequireAuth, useAuth } from "@/lib/api/AuthProvider";
@@ -51,6 +52,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [aboutOpened, about] = useDisclosure();
     const isMobile = useMediaQuery("(max-width: 48em)");
     const { user, signOut } = useAuth();
+    const { lockAfter, lockNow } = useScreenLock();
     const pathname = usePathname();
 
     // For the "Scanning" badge only. One shared query rather than a copy here: `useLibraryStats`
@@ -223,6 +225,18 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                     >
                                         About
                                     </Menu.Item>
+                                    {/* Only where this device locks (§12c). */}
+                                    {lockAfter !== null && (
+                                        <Menu.Item
+                                            onClick={() => {
+                                                close();
+                                                lockNow();
+                                            }}
+                                            mih={44}
+                                        >
+                                            Lock now
+                                        </Menu.Item>
+                                    )}
                                     <Menu.Item onClick={() => void signOut()} mih={44}>
                                         Sign out
                                     </Menu.Item>

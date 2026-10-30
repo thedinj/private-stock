@@ -19,6 +19,8 @@ export interface UserRow {
     invitationId: string | null;
     createdAt: string;
     updatedAt: string;
+    /** The screen lock's PIN, hashed (§12c); NULL when none is set. */
+    pinHash: string | null;
 }
 
 /** A row as the admin screen reads it, with the invitation resolved to something readable. */
@@ -207,4 +209,16 @@ export const setPassword = (id: string, passwordHash: string): void => {
                 "updatedAt" = CURRENT_TIMESTAMP
           WHERE "id" = ?`
     ).run(passwordHash, id);
+};
+
+/**
+ * Set or clear the screen lock's PIN.
+ *
+ * Neither the epoch nor any session is touched: the PIN unlocks a screen this device is already
+ * signed in on, and is no credential for anything the server hands out.
+ */
+export const setPin = (id: string, pinHash: string | null): void => {
+    db.prepare(
+        `UPDATE "User" SET "pinHash" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`
+    ).run(pinHash, id);
 };
