@@ -246,8 +246,8 @@ export const StillStage: React.FC<StillStageProps> = ({
                 onPointerEnter={() => setPointerOnBar(true)}
                 onPointerLeave={() => setPointerOnBar(false)}
             >
-                {/* In the same places as the player's, so the set is walked the same way
-                    whichever kind of item is on the stage. */}
+                {/* Beside the transport, as the player's are, so the set is walked the same
+                    way whichever kind of item is on the stage. */}
                 {steps && (
                     <Tooltip label="Previous item (p)">
                         <ActionIcon
@@ -277,7 +277,27 @@ export const StillStage: React.FC<StillStageProps> = ({
                                 {dwell.paused ? <PlayGlyph /> : <PauseGlyph />}
                             </ActionIcon>
                         </Tooltip>
+                    </>
+                )}
 
+                {steps && (
+                    <Tooltip label="Next item (n)">
+                        <ActionIcon
+                            size={iconSize}
+                            variant="subtle"
+                            color="brass"
+                            className={classes.step}
+                            disabled={!steps.next}
+                            onClick={steps.next ?? undefined}
+                            aria-label="Next item (n)"
+                        >
+                            <NextGlyph />
+                        </ActionIcon>
+                    </Tooltip>
+                )}
+
+                {dwellMs !== null && (
+                    <>
                         <div
                             /*
                              * Remounted per picture and per dwell length, which is what
@@ -351,22 +371,6 @@ export const StillStage: React.FC<StillStageProps> = ({
                         </Menu.Target>
                         <Menu.Dropdown>{menuItems}</Menu.Dropdown>
                     </Menu>
-                )}
-
-                {steps && (
-                    <Tooltip label="Next item (n)">
-                        <ActionIcon
-                            size={iconSize}
-                            variant="subtle"
-                            color="brass"
-                            className={classes.step}
-                            disabled={!steps.next}
-                            onClick={steps.next ?? undefined}
-                            aria-label="Next item (n)"
-                        >
-                            <NextGlyph />
-                        </ActionIcon>
-                    </Tooltip>
                 )}
             </div>
         </div>

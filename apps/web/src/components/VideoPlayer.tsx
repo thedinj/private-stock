@@ -1963,6 +1963,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <ForwardTenGlyph />
                         </ActionIcon>
 
+                        {steps && (
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                className={classes.step}
+                                disabled={!steps.next}
+                                onClick={steps.next ?? undefined}
+                                aria-label="Next item (n)"
+                                title="Next item (n)"
+                            >
+                                <NextGlyph />
+                            </ActionIcon>
+                        )}
+
                         {!compact && (
                             <Text size="xs" c="dimmed" className={classes.time}>
                                 {formatTime(timeline ? reelPositionMs : positionMs)} /{" "}
@@ -2144,21 +2159,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                     )}
                                 </Menu.Dropdown>
                             </Menu>
-                        )}
-
-                        {steps && (
-                            <ActionIcon
-                                variant="subtle"
-                                color="brass"
-                                size={iconSize}
-                                className={classes.step}
-                                disabled={!steps.next}
-                                onClick={steps.next ?? undefined}
-                                aria-label="Next item (n)"
-                                title="Next item (n)"
-                            >
-                                <NextGlyph />
-                            </ActionIcon>
                         )}
                     </Group>
                 </Box>

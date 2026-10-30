@@ -8810,15 +8810,16 @@ Four tiers, top to bottom, each with a fixed place:
 4. **Its content** — Frames, the clip being marked, Clips, then each tag facet and the note,
    then Up next, under one label style.
 
-**The stage's bar, end to end** (2026-10-30). `|◀ ↺10 ▶ 10↻ time … ✂ ⌾ 1× 🔊 ⛶ ⋯ ▶|` for a
-film, and the same two ends around a still's hold and fullscreen. Previous and next sit at the
-ends because the bar is the one thing on screen in fullscreen, where the row above the stage is
-not painted — a phone there had no way to the next item at all. At the end of a set the button
+**The stage's bar** (2026-10-30). `|◀ ↺10 ▶ 10↻ ▶| time … ✂ ⌾ 1× 🔊 ⛶ ⋯` for a film, and
+`|◀ ❚❚ ▶| … ⛶ ⋯` for a still. Previous and next are in the bar because it is the one thing on
+screen in fullscreen, where the row above the stage is not painted — a phone there had no way to
+the next item at all. They bracket the transport: next was first at the far right end, which put
+the most frequent step of weeding a hand's width from the rest of it. At the end of a set the button
 dims rather than vanishing, so nothing shifts under a thumb, and it does not wrap: a filtered set
 that wrapped would hide that you had finished it. Play sits between the two ten-second jumps, so
 the button that leaves the item is never the one beside it.
 
-On a phone (`max-width: 48em`) the bar keeps the transport, fullscreen, `⋯` and the set — seven
+On a phone (`max-width: 48em`) the bar keeps the transport with the set, fullscreen and `⋯` — seven
 44px targets, what fits across 400px — and speed, mute, capture and clip marking go into `⋯`,
 with the time at the two ends of the scrubber. Speed is a second page of that menu rather than a
 submenu, one rate per line. On a wider screen everything stays in the bar and speed is a "1×"
