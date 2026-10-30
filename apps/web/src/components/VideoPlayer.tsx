@@ -550,10 +550,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     // Where the elements stood before this arrival, for the warming overlay's account of it.
     const previousSlots = slotsRef.current;
 
+    // Nothing is warmed while the item is on a TV: the next one will play there too, from the
+    // TV's own request, and a copy downloading here would be NAS reads for nobody (§17).
     slotsRef.current = assignSlots(
         slotsRef.current,
         mediaId,
-        mayWarm && settled ? preloadMediaId : null
+        mayWarm && settled && !cast?.active ? preloadMediaId : null
     );
 
     const slots = slotsRef.current;
@@ -1425,6 +1427,56 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, [reportView]);
 
     /**
+     * The same thirty seconds, counted off the TV's clock while this item is cast (§11).
+     *
+     * The element here is held paused, so the run above never moves. The TV reports its position
+     * about once a second, which is the tick; a step backwards or one far larger than a second is
+     * a seek, and a pause is an interruption, so both start the run again -- the rule is the
+     * element's, applied to the TV. Only while the phone is awake to hear it: a TV that played on
+     * through a queue with the phone asleep still has each item it finished counted, by the cast
+     * hook, as played to the end.
+     */
+    const remoteTickRef = useRef<number | null>(null);
+    const remotePositionMs = remote?.positionMs ?? null;
+    const remoteDurationMs = remote?.durationMs ?? 0;
+    const remoteCounts = remote !== null && remote.playing && remote.mediaId === mediaId;
+
+    useEffect(() => {
+        if (!remoteCounts || remotePositionMs === null || announcedRef.current) {
+            remoteTickRef.current = null;
+            watchedRunRef.current = 0;
+
+            return;
+        }
+
+        const previous = remoteTickRef.current;
+
+        remoteTickRef.current = remotePositionMs;
+
+        if (previous === null) return;
+
+        const advanced = remotePositionMs - previous;
+
+        if (advanced <= 0 || advanced > 4000) {
+            watchedRunRef.current = 0;
+
+            return;
+        }
+
+        watchedRunRef.current += advanced;
+
+        const threshold =
+            remoteDurationMs > 0
+                ? Math.min(WATCHED_AFTER_MS, remoteDurationMs * 0.9)
+                : WATCHED_AFTER_MS;
+
+        if (watchedRunRef.current >= threshold) {
+            announcedRef.current = true;
+            reportView(false, true);
+        }
+    }, [remoteCounts, remotePositionMs, remoteDurationMs, reportView]);
+
+    /**
      * Return to where the item was left earlier in this visit, if it was.
      *
      * The rule itself lives in `lib/resumePoint.ts`, because the page asks it too — what gets
@@ -1558,8 +1610,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         const video = videoRef.current;
         if (!video) return;
 
-        return () => keepPosition(video);
-    }, [keepPosition]);
+        const leaving = mediaId;
+
+        return () => {
+            // Cast: the place is the TV's, if the TV is still on the item being left. When the
+            // TV moved on first, the item was played to its end and there is nothing to resume.
+            const tv = remoteRef.current;
+
+            if (tv) {
+                if (reportProgress && tv.mediaId === leaving) {
+                    rememberPosition(leaving, Math.floor(tv.positionMs));
+                }
+
+                return;
+            }
+
+            keepPosition(video);
+        };
+    }, [keepPosition, mediaId, reportProgress]);
 
     /**
      * Keyboard control (§14).

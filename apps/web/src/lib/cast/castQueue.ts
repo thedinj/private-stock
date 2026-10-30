@@ -66,3 +66,22 @@ export const idsToQueue = (
 
     return upcomingIds.filter((id) => id !== currentId && !queued.has(id) && !refused.has(id));
 };
+
+/**
+ * The items the TV played to the end on its way from `agreedId` to `tvId`, in queue order.
+ *
+ * A queue only advances when an item ends, so everything from the item the two last agreed on
+ * up to -- not including -- the one the TV is on now was played through. That is how the views
+ * of a run the phone slept through are still counted when it wakes. Nothing when either end is
+ * not in the queue this tab built: the TV is playing something it was not sent from here.
+ */
+export const playedThrough = (
+    queuedIds: readonly string[],
+    agreedId: string | null,
+    tvId: string | null
+): string[] => {
+    const from = agreedId === null ? -1 : queuedIds.indexOf(agreedId);
+    const to = tvId === null ? -1 : queuedIds.indexOf(tvId);
+
+    return from !== -1 && to > from ? queuedIds.slice(from, to) : [];
+};

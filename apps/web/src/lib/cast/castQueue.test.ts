@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { castSync, idsToQueue, QUEUE_LOW_WATER } from "./castQueue";
+import { castSync, idsToQueue, playedThrough, QUEUE_LOW_WATER } from "./castQueue";
 
 describe("castSync", () => {
     it("loads the page's item at the start of a session", () => {
@@ -52,5 +52,27 @@ describe("idsToQueue", () => {
 
     it("treats a current item missing from the queue as nothing ahead", () => {
         expect(idsToQueue(["b"], ["x", "y", "z", "w"], "a", none)).toEqual(["b"]);
+    });
+});
+
+describe("playedThrough", () => {
+    const queue = ["a", "b", "c", "d"];
+
+    it("counts the item the TV moved on from", () => {
+        expect(playedThrough(queue, "a", "b")).toEqual(["a"]);
+    });
+
+    /** The phone slept through two items; they still count when it wakes. */
+    it("counts everything passed while nobody was looking", () => {
+        expect(playedThrough(queue, "a", "d")).toEqual(["a", "b", "c"]);
+    });
+
+    it("counts nothing for a TV playing something it was not sent from here", () => {
+        expect(playedThrough(queue, "a", "x")).toEqual([]);
+        expect(playedThrough(queue, null, "b")).toEqual([]);
+    });
+
+    it("counts nothing when the TV went back rather than on", () => {
+        expect(playedThrough(queue, "c", "b")).toEqual([]);
     });
 });

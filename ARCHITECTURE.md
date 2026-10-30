@@ -6121,6 +6121,14 @@ moved -- the page by Next, or the TV by its queue -- is decided in `lib/cast/cas
 the item both last agreed on. Videos only; a picture in a TV's queue would never end. An item
 with nothing playable says so instead of casting (`requireCastReady`, §12d).
 
+**What plays on the TV counts as it would here** (§14b). The thirty-second watched run is
+counted off the TV's reported clock while the phone is awake, with the element's rules: a seek or
+a pause starts it again. A finish is reported when the queue moves past an item -- and on waking,
+for every item between the one the two last agreed on and the one the TV is on now, since a
+queue only advances when an item ends -- and when the last item ends. Once per item per queue,
+because a finish counts a view. Nothing is warmed here while casting: the next item will be
+fetched by the TV, and a copy downloading to the phone is NAS reads for nobody (§17).
+
 The session lives in the `(app)` layout (`CastProvider`), not the player, so it survives Next
 and Prev moving to another page and is rejoined when a sleeping phone's tab comes back.
 

@@ -37,6 +37,8 @@ export interface TvState {
     positionMs: number;
     durationMs: number;
     muted: boolean;
+    /** The item played to its end and the TV stopped there -- the end of a queue, or of one item. */
+    finished: boolean;
 }
 
 /**
@@ -46,12 +48,15 @@ export interface TvState {
  * the queue as this tab built it. `refused` is what the server declined to cast, so it is not
  * asked again. `leaving` is the item the TV was just told to leave: for a moment after a load
  * the TV still reports it, and that must not read as the TV having moved there by itself.
+ * `finished` is what has been reported as played to the end since the queue was loaded -- a
+ * finish counts a view, so each is reported once.
  */
 export interface CastBook {
     agreedId: string | null;
     queuedIds: string[];
     refused: Set<string>;
     leaving: string | null;
+    finished: Set<string>;
 }
 
 interface CastValue {
@@ -85,6 +90,7 @@ const IDLE_TV: TvState = {
     positionMs: 0,
     durationMs: 0,
     muted: false,
+    finished: false,
 };
 
 const emptyBook = (): CastBook => ({
@@ -92,6 +98,7 @@ const emptyBook = (): CastBook => ({
     queuedIds: [],
     refused: new Set(),
     leaving: null,
+    finished: new Set(),
 });
 
 const CastContext = createContext<CastValue | null>(null);
@@ -159,18 +166,25 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const read = () => {
                 const session = context.getCurrentSession();
+                // The media session, for what the remote player does not carry: why it went idle,
+                // and which item it was on when it did -- the player can drop its media info then.
+                const media = session?.getMediaSession() ?? null;
+                const finished =
+                    media?.playerState === chrome.cast.media.PlayerState.IDLE &&
+                    media.idleReason === chrome.cast.media.IdleReason.FINISHED;
 
                 setDeviceName(session?.getCastDevice().friendlyName ?? null);
                 setTv(
                     player.isConnected
                         ? {
-                              mediaId: mediaIdOf(player.mediaInfo),
+                              mediaId: mediaIdOf(player.mediaInfo) ?? mediaIdOf(media?.media),
                               playing:
                                   !player.isPaused &&
                                   player.playerState !== chrome.cast.media.PlayerState.IDLE,
                               positionMs: player.currentTime * 1000,
                               durationMs: player.duration * 1000,
                               muted: player.isMuted,
+                              finished,
                           }
                         : IDLE_TV
                 );
@@ -242,6 +256,8 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         await call((done, fail) => session.getSessionObj().queueLoad(request, done, fail));
         book.current.queuedIds = links.map((link) => link.mediaId);
+        // A new queue: the same item may be played to the end again, and that is another view.
+        book.current.finished = new Set();
     }, []);
 
     const append = useCallback(async (links: CastLink[]) => {

@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { api } from "@/lib/api/client";
 import { useCastLinks } from "@/lib/api/media";
 
-import { castSync, idsToQueue } from "./castQueue";
-import { useCast } from "./CastProvider";
+import { castSync, idsToQueue, playedThrough } from "./castQueue";
+import { useCast, type CastBook } from "./CastProvider";
 
 /** The TV, as the player bar drives it. */
 export interface CastRemote {
+    /** The item the TV is on -- for a moment after a move, not yet the page's. */
+    mediaId: string | null;
     playing: boolean;
     positionMs: number;
     durationMs: number;
@@ -45,6 +48,26 @@ interface CastItemOptions {
     /** Move the page to the item the TV has moved on to. */
     follow: (mediaId: string) => void;
 }
+
+/**
+ * Played to the end on the TV: a view, as the end of a film played here is one (§14b).
+ *
+ * Once per item per queue (`CastBook.finished`), since a finish counts a view and an item can be
+ * reached by more than one route here -- the queue moving on while the phone watched, the phone
+ * waking to find it had, the last item ending. Fire-and-forget like the player's own report.
+ */
+const recordFinished = (book: CastBook, ids: readonly string[]) => {
+    for (const id of ids) {
+        if (book.finished.has(id)) continue;
+
+        book.finished.add(id);
+        void api(`/api/media/${encodeURIComponent(id)}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({ finished: true }),
+            keepalive: true,
+        }).catch(() => undefined);
+    }
+};
 
 /**
  * One item page's half of casting (§11): keeping the TV and the page on the same item, and the
@@ -142,10 +165,29 @@ export const useCastItem = ({
         if (action.kind === "load") {
             void load(0);
         } else if (action.kind === "follow" && action.mediaId !== book.leaving) {
+            // The queue moved on, so what it passed was played through -- including whatever
+            // went by while the phone was asleep.
+            recordFinished(book, playedThrough(book.queuedIds, book.agreedId, action.mediaId));
             book.agreedId = action.mediaId;
             latest.current.follow(action.mediaId);
         }
     }, [connected, busy, tvId, mediaId, load]);
+
+    // The last item of a queue -- or the only one -- played to its end, and the TV stopped there.
+    const tvFinished = cast?.tv.finished ?? false;
+
+    useEffect(() => {
+        const session = latest.current.cast;
+
+        if (!session || !connected || !tvFinished) return;
+
+        const book = session.book.current;
+        const ended = tvId ?? book.agreedId;
+
+        if (ended) {
+            recordFinished(book, [ended]);
+        }
+    }, [connected, tvFinished, tvId]);
 
     // Keep enough queued that the TV carries on while the phone sleeps.
     const upcomingKey = upcomingIds.join(",");
@@ -212,6 +254,7 @@ export const useCastItem = ({
         blocked,
         message,
         remote: {
+            mediaId: cast.tv.mediaId,
             playing: cast.tv.playing,
             positionMs: cast.tv.positionMs,
             durationMs: cast.tv.durationMs,
