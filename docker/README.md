@@ -300,9 +300,25 @@ means Let's Encrypt's rate limits are not spent on changing your mind.
 
 ### What this path gives up, and what it avoids
 
-It gives up **casting**, and that is not fixable from here: a Chromecast fetches the media
-itself, with its own TLS stack and no way to add a certificate authority (§11). It also stays
-inside the house -- there is no public name and nothing is reachable from outside.
+It stays inside the house -- there is no public name and nothing is reachable from outside.
+
+It does **not** give up casting, though this section used to say it did. A Chromecast fetches
+the media itself and cannot be told about Caddy's CA, so it cannot fetch from the HTTPS site --
+but it does play plain HTTP. The LAN overlay therefore also publishes a **cast port**: plain
+HTTP, serving signed media URLs and nothing else. Set two values in `docker/.env`:
+
+```
+PS_CAST_HOST=192.168.1.10   # the NAS's LAN IP, as the TV reaches it -- reserve it in DHCP
+PS_CAST_PORT=8843           # optional; 8843 is the default
+```
+
+**Never forward the cast port on the router.** It is plain HTTP by design. Everything but
+`/api/media/<id>/stream?t=...` is a 404 on it, so what crosses the LAN in clear is a day's access
+to one item -- but it belongs on the LAN.
+
+The phone you cast from still needs Caddy's root installed, as every browsing device does: the
+Cast SDK only loads on a page the browser trusts. On Android: Settings -> Security -> Encryption
+& credentials -> Install a certificate -> CA certificate, then pick `root.crt`.
 
 What it avoids is most of the work. No DDNS, no Let's Encrypt, no challenge relay on the Pi, and
 **no fight with QTS over ports 80 and 443** -- without ACME nothing needs a well-known port, so
@@ -527,13 +543,16 @@ in.
 
 ## Casting, and why it needs split-horizon DNS
 
+This section is about the **public** path. On the LAN path the TV is sent to the cast port by IP
+instead, and none of it applies -- see "What this path gives up, and what it avoids" above.
+
 A Chromecast or Android TV does not receive a stream from your phone. Your phone hands it a
 **URL**, and the TV fetches the bytes itself — its own DNS, its own TLS stack, no cookies.
 That is what signed media tokens are for (§12d), and it has two consequences for this setup:
 
 1. **The certificate must be publicly trusted.** A self-signed certificate, or Caddy's
-   `internal` CA, fails with a black screen and no error. This is the reason the LAN-only
-   deployment cannot cast, even though everything else about it works.
+   `internal` CA, fails with a black screen and no error -- which is why the LAN path sends the
+   TV to a plain-HTTP port instead of its HTTPS site.
 2. **The name the app hands out must be reachable from the TV.** If `PS_DOMAIN` resolves to
    your public address, the TV in the next room fetches the video out through your upstream
    and back in again — or, on the many consumer routers that do not hairpin NAT, not at all.
@@ -616,12 +635,13 @@ and the ufw rule are all pinned to it.
 ### Android TV first
 
 Of the three receivers, Android TV and Chromecast take the same path — the Cast sender SDK —
-and Roku does not. When the sender is built it will load the SDK from `https://www.gstatic.com`,
-which needs adding to `script-src` in the app's Content Security Policy; the comment in
-`next.config.ts` says so at the place it has to change.
+and Roku does not. The sender is built: in Chrome, an item's player bar has a cast control (in
+the "more" menu on a phone). It loads the SDK from `https://www.gstatic.com`, which the app's
+Content Security Policy allows.
 
-The sender page must itself be HTTPS, because the Cast SDK only runs in a secure context. So
-casting needs everything above, in order: certificate, then split DNS, then the sender.
+The sender page must itself be HTTPS, because the Cast SDK only runs in a secure context. So on
+the public path casting needs everything above, in order: certificate, then split DNS. On the
+LAN path it needs Caddy's root on the phone and `PS_CAST_HOST` set.
 
 ## Updating
 

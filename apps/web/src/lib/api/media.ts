@@ -1,6 +1,6 @@
 import { queryOptions, useMutation } from "@tanstack/react-query";
 
-import type { MediaDetail, MediaToken } from "@private-stock/core";
+import type { MediaDetail, MediaToken, MediaTokens } from "@private-stock/core";
 
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
@@ -32,5 +32,21 @@ export const useOriginalLink = (mediaId: string) =>
             api<MediaToken>(`/api/media/${encodeURIComponent(mediaId)}/token`, {
                 method: "POST",
                 body: JSON.stringify({ original: true }),
+            }),
+    });
+
+/**
+ * Links a TV can play, for an item and the ones after it (§11, casting).
+ *
+ * A mutation for the reason `useOriginalLink` is one: each call mints credentials. The answer
+ * leaves out whatever cannot be cast, in the order asked, so the first link is the item asked
+ * for only if that item can be cast at all.
+ */
+export const useCastLinks = () =>
+    useMutation({
+        mutationFn: (ids: string[]) =>
+            api<MediaTokens>("/api/media/tokens", {
+                method: "POST",
+                body: JSON.stringify({ ids }),
             }),
     });

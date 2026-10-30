@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 
 import { corsHeadersFor, requireMediaAuth, type MediaAuthVia } from "@/lib/auth/withAuth";
 import { parseRange, STREAM_CHUNK_BYTES } from "@/lib/byteRange";
+import { contentTypeFor, PLAYLIST_TYPE } from "@/lib/contentTypes";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { toWebStream } from "@/lib/fileStream";
 import { fileEtag, isNotModified, lastModified, rangeStillValid } from "@/lib/httpValidators";
@@ -44,32 +45,6 @@ export const fetchCache = "force-no-store";
  * -- the original or a rendition -- and the player keeps not knowing which. `?raw=1` is the
  * stored file's bytes whatever else exists, which is also what a player outside the browser wants.
  */
-
-const CONTENT_TYPES: Record<string, string> = {
-    mp4: "video/mp4",
-    m4v: "video/mp4",
-    mov: "video/quicktime",
-    webm: "video/webm",
-    mkv: "video/x-matroska",
-    ts: "video/mp2t",
-    m2ts: "video/mp2t",
-    mpg: "video/mpeg",
-    mpeg: "video/mpeg",
-    avi: "video/x-msvideo",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    webp: "image/webp",
-    gif: "image/gif",
-};
-
-const contentTypeFor = (relPath: string): string => {
-    const ext = relPath.slice(relPath.lastIndexOf(".") + 1).toLowerCase();
-
-    return CONTENT_TYPES[ext] ?? "application/octet-stream";
-};
-
-const PLAYLIST_TYPE = "application/vnd.apple.mpegurl";
 
 /**
  * The playlist for a file that plays as segments, or null to serve its bytes.

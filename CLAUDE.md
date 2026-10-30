@@ -229,7 +229,7 @@ parenthesize arrow parameters. Don't hand-maintain it — run `pnpm format`.
 ## Configuration
 
 `config.json` holds only what is needed to start the process or find the database: `port`,
-`dataDir`, `mediaDir`, `logLevel`, `trustedProxyHops`, `secret`. Each has a `PRIVATE_STOCK_*`
+`dataDir`, `mediaDir`, `logLevel`, `trustedProxyHops`, `castOrigin`, `secret`. Each has a `PRIVATE_STOCK_*`
 env override; **env wins over file wins over default**. Keys beginning with `//` are ignored,
 which is how the example file is annotated.
 
@@ -240,7 +240,9 @@ enough to block the worker on its own stdout (§15).
 `trustedProxyHops` is the one key that is not about starting up, and §12 explains why it is
 here anyway: it describes the deployment rather than a preference, it is read before anyone is
 authenticated, and it decides how a caller is identified for rate limiting — so it must not be
-editable from inside the app.
+editable from inside the app. `castOrigin` -- the LAN cast port a TV is sent to -- is the other,
+for the same reasons: it describes the deployment, must match a port the compose file
+publishes, and decides where a credential is sent.
 
 Everything an admin might change at runtime is a `Setting` row edited in the UI — scan
 interval, transcode profiles, hwaccel, artifact quality, trash retention, dupe thresholds.

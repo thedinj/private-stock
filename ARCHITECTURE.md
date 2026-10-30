@@ -6110,6 +6110,20 @@ Two different protocols; there is no single mechanism that hits both.
   (see §2 — Capacitor), or the TV browser with a trimmed "TV mode" layout.
 - Order: Cast SDK first, DLNA push second, TV-browser mode as a cheap fallback.
 
+**The Cast sender is built** (phase 9's first slice). From an item page in Chrome -- Android or
+desktop -- the player bar casts the item to Google's Default Media Receiver, which plays a URL
+it is given, so there is no receiver app of ours to host. While a session is up the bar is the
+TV's remote (play, the jumps, the scrubber, mute, Prev and Next) and the picture here holds
+still under a cover naming the TV. With "Play the next one" on, the TV is given a **queue**: the
+item plus the set's look-ahead, topped up whenever the phone is awake, so it carries on with
+the phone asleep; when the phone wakes the page moves to whatever the TV is playing. Which side
+moved -- the page by Next, or the TV by its queue -- is decided in `lib/cast/castQueue.ts` from
+the item both last agreed on. Videos only; a picture in a TV's queue would never end. An item
+with nothing playable says so instead of casting (`requireCastReady`, §12d).
+
+The session lives in the `(app)` layout (`CastProvider`), not the player, so it survives Next
+and Prev moving to another page and is rejoined when a sleeping phone's tab comes back.
+
 Both force the `websafe` variant rather than the original wherever the original failed
 playback assessment — Samsung and Chromecast disagree about HEVC, subtitles, and HLS variants.
 An original that passed assessment is already the profile receivers want, and is served as-is;
@@ -6170,8 +6184,10 @@ internet-facing one, which is where a shared machine is likeliest, does.
 The CSP keeps `'unsafe-inline'` for now. Next inlines its own bootstrap and Mantine injects
 styles at runtime, so removing it needs nonce plumbing through the document — the UI rewrite's
 work. What is there still closes the cheap holes: no cross-origin loads, no plugins, no
-injected `<base>`, no framing. The Cast sender SDK (§11) will need `https://www.gstatic.com`
-in `script-src`, and the comment in `next.config.ts` says so where it has to change.
+injected `<base>`, no framing. The one exception is the Cast sender SDK (§11), which Google
+ships only from `https://www.gstatic.com`; that origin is in `script-src` and nothing else
+widens for it -- the SDK reaches the TV through the browser's media router, not over
+`connect-src`.
 
 ### Trusted proxies are config, not a Setting
 
@@ -6190,6 +6206,10 @@ account by forging an address, or evade their own by rotating one.
 
 Setting it _higher_ than the number of proxies present is the dangerous direction, and the
 reason the value is written down in both compose files rather than defaulted optimistically.
+
+`castOrigin` is config for the same reasons: it describes the deployment (the LAN cast port
+below), it must match a port the compose file publishes -- the LAN overlay builds both from the
+same two values, so they cannot drift -- and it decides where a credential is sent.
 
 ### Login rate limiting: a delay for the account, a refusal for the address
 
@@ -6383,11 +6403,30 @@ the internet at all.
 ### Casting decides the certificate
 
 A Cast receiver fetches the URL itself and will not accept a certificate that is not publicly
-trusted — so `tls internal` and self-signed certificates are out, and this is why the
-otherwise complete LAN-only deployment cannot cast. It also means the hostname the app hands
-out has to resolve to the NAS _from the TV_: without split-horizon DNS the receiver fetches
-the video out through the upstream and back, or fails outright on a router that will not
-hairpin.
+trusted — so an HTTPS URL behind `tls internal` or a self-signed certificate fails with a black
+screen. This section used to conclude that the LAN-only deployment cannot cast. **It can**, and
+the reason was measured rather than assumed: on 2026-10-30 the TV this was built for fetched and
+played a plain `http://` LAN URL handed to the Default Media Receiver. The receiver refuses an
+untrusted certificate; it does not insist on a certificate at all.
+
+What does need a secure context is the **sender**: the Cast SDK will not load on a plain-HTTP
+page (`http://localhost` aside). So the two halves are split. The page stays on the main HTTPS
+site, which the phone trusts because Caddy's root is installed on it, and the bytes the TV
+fetches come from a second, plain-HTTP port (`cast_on` in the Caddyfile; `PS_CAST_PORT`, 8843 by
+default). The app hands the TV that address because `castOrigin` names it (§12d).
+
+That port is narrow by construction: one path shape -- `/api/media/<id>/stream` -- with a token
+in `?t=`, read-only methods, `Cookie` and `Authorization` stripped, and a 404 for everything
+else. Login, the API, the art routes and the pages are unreachable on it. What crosses the LAN
+in clear is a day's access to one item, and nothing that can sign in. It is never to be
+forwarded on the router.
+
+On the public path none of this applies: the certificate is publicly trusted, `castOrigin` is
+left unset, and the TV fetches from the page's own origin. That path still needs the hostname
+to resolve to the NAS _from the TV_: without split-horizon DNS the receiver fetches the video
+out through the upstream and back, or fails outright on a router that will not hairpin. The
+LAN path sidesteps that by handing out an IP (`PS_CAST_HOST`), which is why it wants a DHCP
+reservation.
 
 **The Pi that fronts the sibling apps is not in the media path**, having proved unable to carry
 video — a proxy sends and receives on one NIC, so whatever its throughput is, proxying halves
@@ -7065,6 +7104,18 @@ fail2ban.
 `Host` or `X-Forwarded-Host` to name an address the TV can reach, and behind a reverse proxy
 those are whatever the proxy was configured to send. The browser knows the origin it loaded
 from and joins the two.
+
+The one exception is configured, not inferred: when `castOrigin` is set -- the LAN install's
+token-only HTTP port, "Casting decides the certificate" -- a cast link also carries `url`,
+that origin joined to the path. It comes from a file the operator wrote, never from a request
+header, so the rule above stands. An outside player's link (`raw=1`) never gets it: that player
+runs on the device that already trusts the page's origin.
+
+**Links for a queue come in batches.** `POST /api/media/tokens` mints up to twenty, each through
+the same gate, and leaves out what cannot be cast -- not playable, not visible, or a picture --
+without saying which, so the answer reveals nothing about items in a library the caller cannot
+reach. Each link also says what the TV is loading (`contentType`): a Cast load request names
+the type up front, and an MPEG-TS file is served as an HLS playlist (§8).
 
 ## 14c. Collections: one idea, two mechanics
 
@@ -9693,9 +9744,9 @@ a better one two seconds later.
 
 ### Casting
 
-Not built, and not in this round. `/api/media/[id]/token` (§12d) is complete and tested, so
-what is missing is the sender SDK, a `script-src` entry for `https://www.gstatic.com` (§11)
-and a device picker. It was considered and deferred rather than forgotten.
+Built for Chromecast and Google TV (§11): a cast control in the player bar -- in the "more"
+menu on a phone -- that makes the bar the TV's remote, and a queue on the TV when "Play the next
+one" is on. The device picker is Chrome's own. DLNA and the `tv-safe` profile are still to come.
 
 ### Order of work
 
@@ -10574,7 +10625,7 @@ every other check in the repo.
 | 6     | ~~pHash, duplicate clustering, review UI, recycle-bin trash, restore and purge~~ — complete                                                                          |
 | 7     | ~~Clips, the clip browser, and reels that play virtually (§14d)~~ — rendering and export deferred                                                                    |
 | 8     | ~~Signed media tokens (§12d)~~, per-root access, reverse-proxy docs, backup + sidecar export                                                                         |
-| 9     | Cast SDK, then DLNA push, TV-safe profile                                                                                                                            |
+| 9     | Cast SDK (built: remote, TV-side queue), then DLNA push, TV-safe profile                                                                                             |
 | 10    | Watching by look (§5e): CLIP B/32 8-bit over sprite frames, on the NAS — look sets by words, tag and moment; tasting from the match; Find untagged by look           |
 | 11    | OCR of burned-in text, feeding search and bulk tagging (§5d) — cost and quality unproven; then matching what was read to performers and sources                      |
 | 12    | Faces (§5f): performer suggestions confirmed in a review shaped like OCR's queue — after a bake-off                                                                  |

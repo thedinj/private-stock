@@ -35,6 +35,25 @@ describe("resolveConfig", () => {
         expect(() => resolveConfig({ port: 70000 }, {})).toThrow(/port/);
     });
 
+    it("takes a cast origin from the environment and normalises it", () => {
+        const env = { PRIVATE_STOCK_CAST_ORIGIN: "http://192.168.1.10:8843/" };
+
+        expect(resolveConfig({}, {}).castOrigin).toBeNull();
+        expect(resolveConfig({}, env).castOrigin).toBe("http://192.168.1.10:8843");
+    });
+
+    it("refuses a cast origin that is not just an origin", () => {
+        for (const castOrigin of [
+            "192.168.1.10:8843",
+            "ftp://nas:21",
+            "http://nas:8843/api",
+            "http://nas:8843?x=1",
+            "http://user@nas:8843",
+        ]) {
+            expect(() => resolveConfig({ castOrigin }, {})).toThrow(/castOrigin/);
+        }
+    });
+
     it("rejects a secret too short to be worth signing with", () => {
         expect(() => resolveConfig({ secret: "short" }, {})).toThrow(/secret/);
     });

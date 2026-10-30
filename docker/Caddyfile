@@ -70,11 +70,89 @@
 # `/data/caddy/pki/authorities/local/root.crt` on each machine that browses the library.
 #
 # **Cast receivers cannot be told.** A Chromecast or Android TV fetches media itself, with its
-# own TLS stack and no way to add a CA, so casting fails with a black screen while this is on
-# (§11). That is the one thing the public path buys that this one cannot.
+# own TLS stack and no way to add a CA, so a cast URL on this site's origin fails with a black
+# screen. The LAN overlay therefore also turns on `cast_on` below, a plain-HTTP port the TV
+# fetches from instead (§11).
 (tls_lan) {
 	tls internal
 }
+
+# The access log, shared by both sites. The argument is the file name.
+#
+# A signed media URL carries its credential in `?t=` (§12d) -- a day's access to one item, and a
+# cast session makes dozens of these requests. The access log is read by fail2ban and kept for
+# five rolls; it is not somewhere that credential should sit. The parameter stays so a log reader
+# can still tell a token request from a cookie one.
+#
+# `wrap json` explicitly: fail2ban's filter reads the JSON fields, and the default encoder is not
+# guaranteed to be JSON.
+(access_log) {
+	log {
+		output file /var/log/caddy/{args[0]} {
+			roll_size 10mb
+			roll_keep 5
+		}
+
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace t redacted
+				}
+			}
+		}
+	}
+}
+
+# Which cast port this deployment has. `PS_CAST` names `cast_on` (docker-compose.lan.yml) or
+# defaults to `cast_off` -- the public path's TV trusts the main site's certificate and needs
+# nothing extra.
+(cast_off) {
+}
+
+# A plain-HTTP port that serves signed media URLs and nothing else (§11, "Casting decides the
+# certificate").
+#
+# A Cast receiver fetches a URL itself and cannot be told about Caddy's CA -- but it does play
+# plain HTTP, measured on the TV this was built for. The sender page must still be HTTPS (the
+# Cast SDK only loads in a secure context), so the page stays on the main site and only the
+# bytes the TV fetches come through here. The app hands the TV this address because
+# `PRIVATE_STOCK_CAST_ORIGIN` names it.
+#
+# Narrow by construction: one path shape, read-only methods, and only with a token in `?t=`.
+# Login, the API, art, the pages themselves -- every other request is a 404, so the credential
+# that crosses the LAN in clear is a day's access to one item and nothing that could sign in.
+# Cookies and Authorization are stripped as a second lock; the session cookie is `Secure` and a
+# browser would not send it over plain HTTP in the first place.
+#
+# **LAN only. Never forward this port on the router.**
+(cast_on) {
+	http://:{$PS_CAST_PORT} {
+		@stream {
+			method GET HEAD OPTIONS
+			path_regexp ^/api/media/[^/]+/stream$
+			query t=*
+		}
+
+		handle @stream {
+			request_header -Cookie
+			request_header -Authorization
+
+			reverse_proxy {$PS_UPSTREAM} {
+				# As on the main site: exactly one entry, the peer Caddy saw.
+				header_up X-Forwarded-For {remote_host}
+			}
+		}
+
+		handle {
+			respond 404
+		}
+
+		import access_log private-stock-cast.log
+	}
+}
+
+import {$PS_CAST:cast_off}
 
 {$PS_DOMAIN} {
 	# The site address. `PS_DOMAIN` carries a port when the front door is not on 443, which is
@@ -155,26 +233,5 @@
 	# sibling Pi apps ended up serving two different `Strict-Transport-Security` lifetimes and
 	# an `X-Frame-Options` that says SAMEORIGIN in one header and DENY in another.
 
-	log {
-		output file /var/log/caddy/private-stock-access.log {
-			roll_size 10mb
-			roll_keep 5
-		}
-
-		# A signed media URL carries its credential in `?t=` (§12d) -- a day's access to one
-		# item, and a cast session makes dozens of these requests. The access log is read by
-		# fail2ban and kept for five rolls; it is not somewhere that credential should sit. The
-		# parameter stays so a log reader can still tell a token request from a cookie one.
-		#
-		# `wrap json` explicitly: fail2ban's filter reads the JSON fields, and the default
-		# encoder is not guaranteed to be JSON.
-		format filter {
-			wrap json
-			fields {
-				request>uri query {
-					replace t redacted
-				}
-			}
-		}
-	}
+	import access_log private-stock-access.log
 }

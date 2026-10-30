@@ -7,6 +7,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
 import { api } from "@/lib/api/client";
+import type { CastControl } from "@/lib/cast/useCastItem";
 import { readPlaybackPref, usePlaybackPref } from "@/lib/playbackPrefs";
 import { effectiveRate, spanRunMs } from "@private-stock/core";
 
@@ -276,7 +277,29 @@ interface VideoPlayerProps {
      * they are rendered inside the menu.
      */
     menuItems?: React.ReactNode;
+    /**
+     * Casting this item to a TV (§11), from the item page only. Null or absent -- no Cast here,
+     * no TV on the network, or a player that is not the item page's -- and no control is drawn.
+     *
+     * While a session is up the bar is the TV's remote: play, the jumps, the scrubber, mute and
+     * the time all read and drive the TV, and the picture here holds still under a cover saying
+     * where it went.
+     */
+    cast?: CastControl | null;
 }
+
+/**
+ * Cast: a screen with the waves of a signal reaching its corner -- the mark every Cast sender
+ * uses, so it is recognised without a label.
+ */
+const CastGlyph: React.FC<{ size?: number }> = ({ size }) => (
+    <Glyph size={size}>
+        <path d="M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+        <path d="M3 12a8 8 0 0 1 8 8" />
+        <path d="M3 16a4 4 0 0 1 4 4" />
+        <path d="M3 20h.01" />
+    </Glyph>
+);
 
 /** Playback rates the speed control offers. The hotkeys can reach anything between. */
 const ReplayGlyph = () => (
@@ -435,6 +458,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     warmSource,
     steps = null,
     menuItems,
+    cast = null,
 }) => {
     /**
      * The element on screen, held in state as well as in a ref.
@@ -895,6 +919,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const iconSize = coarse ? "xl" : "lg";
     const [scrubbing, setScrubbing] = useState(false);
     const [mediaDurationMs, setMediaDurationMs] = useState(durationMs ?? 0);
+
+    /**
+     * The TV, while this item is being cast (§11), or null.
+     *
+     * The ref is for the key handler, which is bound once. The local element is kept paused for
+     * as long as it lasts -- whatever asks it to play: autoplay on opening the next item, a
+     * click, a key -- because two copies of the same film, one of them on a phone speaker, is
+     * the thing nobody wants.
+     */
+    const remote = cast?.active ? cast.remote : null;
+    const remoteRef = useRef(remote);
+
+    remoteRef.current = remote;
+
+    const casting = remote !== null;
+    /** Set when casting is stopped from here, so the film carries on here once it has. */
+    const resumeHereRef = useRef(false);
+
+    useEffect(() => {
+        const video = videoEl;
+
+        if (!video) return;
+
+        if (!casting) {
+            if (resumeHereRef.current) {
+                resumeHereRef.current = false;
+                void video.play().catch(() => undefined);
+            }
+
+            return;
+        }
+
+        const hush = () => video.pause();
+
+        hush();
+        video.addEventListener("play", hush);
+
+        return () => video.removeEventListener("play", hush);
+    }, [casting, videoEl]);
 
     // Keeps the scrubber from fighting the drag: `timeupdate` fires while seeking, and
     // applying it would snap the handle back to wherever playback currently is.
@@ -1573,6 +1636,41 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
             const step = event.shiftKey ? 30 : 5;
 
+            // Casting: the keys drive the TV, and only those that mean the same thing there.
+            const tv = remoteRef.current;
+
+            if (tv) {
+                const by = (ms: number) =>
+                    tv.seekTo(Math.min(Math.max(0, tv.positionMs + ms), tv.durationMs));
+
+                switch (event.key) {
+                    case " ":
+                    case "k":
+                        event.preventDefault();
+                        tv.togglePlay();
+                        break;
+                    case "ArrowLeft":
+                        event.preventDefault();
+                        by(-step * 1000);
+                        break;
+                    case "ArrowRight":
+                        event.preventDefault();
+                        by(step * 1000);
+                        break;
+                    case "j":
+                        by(-10_000);
+                        break;
+                    case "l":
+                        by(10_000);
+                        break;
+                    case "m":
+                        tv.toggleMute();
+                        break;
+                }
+
+                return;
+            }
+
             switch (event.key) {
                 case " ":
                 case "k":
@@ -1694,7 +1792,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     const onTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
         const video = videoRef.current;
-        if (!video) return;
+        // Casting: the cover takes taps as play and pause, and the bar does the rest.
+        if (!video || casting) return;
 
         const touch = event.changedTouches[0];
         if (!touch) return;
@@ -1717,24 +1816,67 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         }
     };
 
+    const shownPositionMs = timeline ? reelPositionMs : remote ? remote.positionMs : positionMs;
+    const shownDurationMs = timeline
+        ? timeline.totalMs
+        : remote
+          ? remote.durationMs
+          : mediaDurationMs;
+    const shownPlaying = remote ? remote.playing : playing;
+    // A reel's "again" is about this player's own timeline; the TV has none.
+    const shownAtEnd = atEnd && !remote;
+
     const scrubber = (
         <SpriteScrubber
             vttUrl={spriteVttUrl}
-            durationMs={timeline ? timeline.totalMs : mediaDurationMs}
-            positionMs={timeline ? reelPositionMs : positionMs}
+            durationMs={shownDurationMs}
+            positionMs={shownPositionMs}
             /* Nothing meaningful to say about buffering against a reel's timeline: the spans
-               after this one are in files the element has not opened. */
-            bufferedMs={timeline ? 0 : bufferedMs}
+               after this one are in files the element has not opened. Nor about the TV's. */
+            bufferedMs={timeline || remote ? 0 : bufferedMs}
             clips={timeline ? [] : clipMarks}
             selection={timeline ? null : selection}
-            onSeek={timeline ? timeline.onSeek : seekTo}
-            onScrubbingChange={timeline ? undefined : setScrubbing}
+            onSeek={timeline ? timeline.onSeek : remote ? remote.seekTo : seekTo}
+            onScrubbingChange={timeline || remote ? undefined : setScrubbing}
         />
     );
 
     const toggleMute = () => {
+        if (remote) {
+            remote.toggleMute();
+
+            return;
+        }
+
         const video = videoRef.current;
         if (video) video.muted = !video.muted;
+    };
+
+    const shownMuted = remote ? remote.muted : muted;
+
+    /**
+     * Cast, or stop casting and carry on here from where the TV had got to.
+     *
+     * Starting hands over this player's position, so the TV picks the film up rather than
+     * starting it again.
+     */
+    const castLabel = remote
+        ? `Stop casting to ${cast?.deviceName ?? "the TV"}`
+        : (cast?.blocked ?? "Cast to a TV");
+    const castOff = !remote && cast?.blocked != null;
+    const toggleCast = () => {
+        if (!cast) return;
+
+        if (cast.active) {
+            resumeHereRef.current = true;
+            seekTo(cast.stop());
+
+            return;
+        }
+
+        const video = videoRef.current;
+
+        cast.start(video ? video.currentTime * 1000 : positionMs);
     };
 
     const speedLabel = `${Number(speed)}×`;
@@ -1755,7 +1897,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const clipPending = selection !== null && selection.endMs === null;
     const markLabel = clipPending ? "Mark the clip's end (])" : "Mark a clip's start ([)";
     const markClip =
-        onMarkIn && !timeline
+        onMarkIn && !timeline && !remote
             ? () => {
                   const video = videoRef.current;
 
@@ -1807,6 +1949,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
              * before the element that had it may cease to exist.
              */}
             <canvas ref={freezeRef_} className={classes.freeze} hidden={!frozen} aria-hidden />
+
+            {/* Casting: the picture is on the TV, and this says which -- or what went wrong on
+                the way. A tap on it is play and pause, as a tap on the picture is here. */}
+            {cast && casting && !bare && (
+                <Box className={classes.castCover} onClick={remote?.togglePlay}>
+                    <CastGlyph size={40} />
+                    <Text size="sm">
+                        {cast.message ?? `Playing on ${cast.deviceName ?? "the TV"}`}
+                    </Text>
+                </Box>
+            )}
 
             {slots.ids.map((slotId, index) => {
                 if (slotId === null) return null;
@@ -1874,11 +2027,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                            row below it to the targets. */
                         <Group gap="xs" wrap="nowrap" align="center">
                             <Text size="xs" c="dimmed" className={classes.time}>
-                                {formatTime(timeline ? reelPositionMs : positionMs)}
+                                {formatTime(shownPositionMs)}
                             </Text>
                             <Box className={classes.scrubberSlot}>{scrubber}</Box>
                             <Text size="xs" c="dimmed" className={classes.time}>
-                                {formatTime(timeline ? timeline.totalMs : mediaDurationMs)}
+                                {formatTime(shownDurationMs)}
                             </Text>
                         </Group>
                     ) : (
@@ -1914,6 +2067,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                     return;
                                 }
 
+                                if (remote) {
+                                    remote.seekTo(Math.max(0, remote.positionMs - 10_000));
+
+                                    return;
+                                }
+
                                 const video = videoRef.current;
                                 if (video) seekTo(Math.max(0, video.currentTime * 1000 - 10_000));
                             }}
@@ -1928,10 +2087,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             variant="subtle"
                             color="brass"
                             size={iconSize}
-                            onClick={togglePlay}
-                            aria-label={atEnd ? "Play again" : playing ? "Pause" : "Play"}
+                            onClick={remote ? remote.togglePlay : togglePlay}
+                            aria-label={shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play"}
                         >
-                            {atEnd ? <ReplayGlyph /> : playing ? <PauseGlyph /> : <PlayGlyph />}
+                            {shownAtEnd ? (
+                                <ReplayGlyph />
+                            ) : shownPlaying ? (
+                                <PauseGlyph />
+                            ) : (
+                                <PlayGlyph />
+                            )}
                         </ActionIcon>
 
                         <ActionIcon
@@ -1943,6 +2108,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                 if (timeline) {
                                     timeline.onSeek(
                                         Math.min(timeline.totalMs, reelPositionMs + 10_000)
+                                    );
+
+                                    return;
+                                }
+
+                                if (remote) {
+                                    remote.seekTo(
+                                        Math.min(remote.durationMs, remote.positionMs + 10_000)
                                     );
 
                                     return;
@@ -1980,8 +2153,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
                         {!compact && (
                             <Text size="xs" c="dimmed" className={classes.time}>
-                                {formatTime(timeline ? reelPositionMs : positionMs)} /{" "}
-                                {formatTime(timeline ? timeline.totalMs : mediaDurationMs)}
+                                {formatTime(shownPositionMs)} / {formatTime(shownDurationMs)}
                             </Text>
                         )}
 
@@ -2007,7 +2179,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             </ActionIcon>
                         )}
 
-                        {!compact && onCapture && (
+                        {!compact && onCapture && !remote && (
                             <ActionIcon
                                 variant="subtle"
                                 color={captureFailed ? "oxblood" : "brass"}
@@ -2024,7 +2196,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         {/* The speed as a word that opens a menu, not a form field: the Select
                             it replaces was too narrow on a phone to show its own value, and its
                             list was as narrow as the field, so the labels wrapped. */}
-                        {!compact && (
+                        {!compact && !remote && (
                             <Menu
                                 position="top-end"
                                 withinPortal
@@ -2052,10 +2224,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                 color="brass"
                                 size={iconSize}
                                 onClick={toggleMute}
-                                aria-label={muted ? "Unmute" : "Mute"}
+                                aria-label={shownMuted ? "Unmute" : "Mute"}
                             >
-                                {muted ? <MutedGlyph /> : <SoundGlyph />}
+                                {shownMuted ? <MutedGlyph /> : <SoundGlyph />}
                             </ActionIcon>
+                        )}
+
+                        {/* Cast, beside fullscreen: both send the picture somewhere bigger. On a
+                            phone it is in the "more" menu -- the row is full. The title sits on
+                            a wrapper because a disabled button shows none, and an item that
+                            cannot be cast has to say why. */}
+                        {cast && !compact && (
+                            <span title={castLabel}>
+                                <ActionIcon
+                                    variant={remote ? "light" : "subtle"}
+                                    color="brass"
+                                    size={iconSize}
+                                    disabled={castOff}
+                                    onClick={toggleCast}
+                                    aria-label={castLabel}
+                                >
+                                    <CastGlyph />
+                                </ActionIcon>
+                            </span>
                         )}
 
                         <ActionIcon
@@ -2105,34 +2296,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                         <>
                                             {compact && (
                                                 <>
+                                                    {cast && (
+                                                        <Menu.Item
+                                                            onClick={toggleCast}
+                                                            disabled={castOff}
+                                                            leftSection={<CastGlyph size={18} />}
+                                                        >
+                                                            {remote ? castLabel : "Cast to a TV"}
+                                                            {/* Said in the item, not a tooltip:
+                                                                a phone has no hover. */}
+                                                            {castOff && (
+                                                                <Text size="xs" c="dimmed">
+                                                                    {cast.blocked}
+                                                                </Text>
+                                                            )}
+                                                        </Menu.Item>
+                                                    )}
                                                     {/* A second page rather than a submenu:
                                                         one speed per line, full width, and
                                                         nothing opening sideways off a narrow
                                                         screen. */}
-                                                    <Menu.Item
-                                                        closeMenuOnClick={false}
-                                                        onClick={() => setMoreView("speed")}
-                                                        rightSection={
-                                                            <Text size="xs" c="dimmed">
-                                                                {speedLabel} ›
-                                                            </Text>
-                                                        }
-                                                    >
-                                                        Speed
-                                                    </Menu.Item>
+                                                    {!remote && (
+                                                        <Menu.Item
+                                                            closeMenuOnClick={false}
+                                                            onClick={() => setMoreView("speed")}
+                                                            rightSection={
+                                                                <Text size="xs" c="dimmed">
+                                                                    {speedLabel} ›
+                                                                </Text>
+                                                            }
+                                                        >
+                                                            Speed
+                                                        </Menu.Item>
+                                                    )}
                                                     <Menu.Item
                                                         onClick={toggleMute}
                                                         leftSection={
-                                                            muted ? (
+                                                            shownMuted ? (
                                                                 <MutedGlyph size={18} />
                                                             ) : (
                                                                 <SoundGlyph size={18} />
                                                             )
                                                         }
                                                     >
-                                                        {muted ? "Unmute" : "Mute"}
+                                                        {shownMuted ? "Unmute" : "Mute"}
                                                     </Menu.Item>
-                                                    {onCapture && (
+                                                    {onCapture && !remote && (
                                                         <Menu.Item
                                                             onClick={captureHere}
                                                             disabled={capturing}

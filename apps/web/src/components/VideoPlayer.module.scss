@@ -244,3 +244,24 @@
         min-height: 44px;
     }
 }
+
+/**
+ * Casting (§11): the picture is on the TV, and this stands where it was, saying so.
+ *
+ * Over the held frame and the element, under the bar, which stays live as the TV's remote.
+ */
+.castCover {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-md);
+    text-align: center;
+    background: #0d0a08;
+    color: var(--mantine-color-brass-4);
+    cursor: pointer;
+}

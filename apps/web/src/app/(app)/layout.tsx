@@ -30,6 +30,7 @@ import { BusySeal } from "@/components/shell/BusySeal";
 import { UpdateNotice } from "@/components/shell/UpdateNotice";
 import { RequireAuth, useAuth } from "@/lib/api/AuthProvider";
 import { useLibraryStats } from "@/lib/api/libraries";
+import { CastProvider } from "@/lib/cast/CastProvider";
 
 // The page turn and the morph's pseudo-elements (§14, "Motion"). Global, because
 // `::view-transition-*` hangs off the document root, which no module class can reach.
@@ -266,7 +267,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             "calc(var(--app-shell-footer-offset, 0rem) + var(--app-shell-padding) + var(--ps-safe-bottom))",
                     }}
                 >
-                    {children}
+                    {/* Here rather than on the item page, so a cast survives Next and Prev
+                        moving to another one (§11). */}
+                    <CastProvider>{children}</CastProvider>
                 </AppShell.Main>
             </AppShell>
 

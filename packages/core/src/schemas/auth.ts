@@ -275,9 +275,47 @@ export const mediaTokenSchema = z.object({
      * loaded from; the caller joins the two.
      */
     path: z.string(),
+    /**
+     * The whole URL, when the deployment names one a TV can reach: `castOrigin` + `path`.
+     *
+     * The exception to the paragraph above, and not a contradiction of it — the address comes
+     * from configuration the operator wrote, never from a request header. A LAN install's TV
+     * cannot use the page's own origin (its certificate is private), so it is sent to the
+     * token-only HTTP port instead. Null means: join `path` to the page's origin.
+     */
+    url: z.string().nullable(),
+    /**
+     * What a receiver is told it is loading. A Cast load request names the type up front, and
+     * an MPEG-TS file is served as an HLS playlist rather than as its bytes (§8).
+     */
+    contentType: z.string(),
     expiresAt: z.string(),
 });
 export type MediaToken = z.infer<typeof mediaTokenSchema>;
+
+/**
+ * What `POST /api/media/tokens` is asked for: the items a TV will play next (§11).
+ *
+ * Capped, because a queue is topped up a few at a time — a request for hundreds would be a
+ * long synchronous walk of the playability check for a queue nobody will reach the end of.
+ */
+export const MEDIA_TOKENS_MAX = 20;
+export const mediaTokensRequestSchema = z.object({
+    ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_TOKENS_MAX),
+});
+export type MediaTokensRequest = z.infer<typeof mediaTokensRequestSchema>;
+
+/**
+ * One link per item that can be cast, in the order asked for.
+ *
+ * Items that cannot — not playable yet, or not visible to the caller — are left out without
+ * saying which reason applied, so the answer never tells a user that something exists in a
+ * library they cannot reach.
+ */
+export const mediaTokensSchema = z.object({
+    links: z.array(mediaTokenSchema.extend({ mediaId: z.string() })),
+});
+export type MediaTokens = z.infer<typeof mediaTokensSchema>;
 
 /**
  * Changing your own password.

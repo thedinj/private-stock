@@ -9,11 +9,14 @@
 # 854 seconds of browser queueing against 93 seconds of server time (§20). TLS is the only way
 # to HTTP/2, and Caddy's own CA is the only way to TLS without a domain.
 #
-# What it gives up against the public path: casting, which needs a certificate a TV will trust,
-# and reachability from outside the house. What it avoids: DDNS, Let's Encrypt, the challenge
-# relay, and the fight with QTS over ports 80 and 443.
+# What it gives up against the public path: reachability from outside the house. What it
+# avoids: DDNS, Let's Encrypt, the challenge relay, and the fight with QTS over ports 80 and 443.
 #
-# Values come from `docker/.env` (copy `.env.example`), except the two set here.
+# Casting works anyway, through a second, plain-HTTP port that serves signed media URLs and
+# nothing else: a TV will not trust Caddy's CA but does play plain HTTP (§11). `PS_CAST_HOST` is
+# the NAS's LAN address as the TV reaches it -- an IP, with a DHCP reservation behind it.
+#
+# Values come from `docker/.env` (copy `.env.example`), except the ones set here.
 
 services:
     private-stock:
@@ -29,6 +32,11 @@ services:
             # `X-Forwarded-Proto` for the cookie's Secure flag, and believes neither unless
             # this says how many hops to count back.
             PRIVATE_STOCK_TRUSTED_PROXY_HOPS: "1"
+
+            # Where the app sends a TV: Caddy's cast port below. Built here from the same two
+            # values the port is published from, so the address handed out and the port that
+            # answers it cannot drift apart.
+            PRIVATE_STOCK_CAST_ORIGIN: "http://${PS_CAST_HOST:?set PS_CAST_HOST in docker/.env -- the NAS's LAN IP}:${PS_CAST_PORT:-8843}"
 
     caddy:
         image: caddy:2-alpine
@@ -53,6 +61,10 @@ services:
             # for one commit, which is a port the NAS would have refused to bind.
             - "${PS_HTTPS_PORT:-9443}:${PS_HTTPS_PORT:-9443}"
 
+            # The cast port: plain HTTP, signed media URLs only (`cast_on` in the Caddyfile).
+            # LAN only -- never forward it on the router.
+            - "${PS_CAST_PORT:-8843}:${PS_CAST_PORT:-8843}"
+
         environment:
             # Must include the port, e.g. `mediaserver:9443`, and must be the name typed into
             # the browser: it is both the site address Caddy answers on and the name on the
@@ -62,6 +74,10 @@ services:
 
             # Caddy's own CA. See the snippet of this name in the Caddyfile.
             PS_TLS: "tls_lan"
+
+            # The plain-HTTP port a TV fetches cast media from. See `cast_on` in the Caddyfile.
+            PS_CAST: "cast_on"
+            PS_CAST_PORT: "${PS_CAST_PORT:-8843}"
 
             # Never used — `tls_lan` asks nobody for a certificate — but the Caddyfile's global
             # options block names it, and an empty value there is a parse error rather than an

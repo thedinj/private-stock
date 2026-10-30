@@ -10,6 +10,8 @@
     "logLevel": "info",
     "//trustedProxyHops": "Reverse proxies of your own in front. 0 trusts no forwarded header.",
     "trustedProxyHops": 0,
+    "//castOrigin": "Token-only HTTP port a TV fetches cast media from, e.g. http://192.168.1.10:8843. Null: same origin.",
+    "castOrigin": null,
     "//secret": "JWT and media-URL signing key. Leave null to generate <dataDir>/secret.key.",
     "secret": null
 }

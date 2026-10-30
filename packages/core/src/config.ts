@@ -38,6 +38,40 @@ export const configSchema = z.object({
     trustedProxyHops: z.coerce.number().int().min(0).max(10).default(0),
 
     /**
+     * Where a TV fetches a cast item from (§11, "Casting decides the certificate").
+     *
+     * A Cast receiver fetches the URL itself and cannot be told about a private certificate
+     * authority, but it does play plain HTTP. So the LAN install publishes a second, token-only
+     * port that serves nothing but `stream?t=`, and this names it: `http://<nas-ip>:<port>`.
+     * Null — the public install, whose certificate a TV already trusts — hands out the path
+     * alone and the browser joins it to the origin it loaded from.
+     *
+     * Config rather than a `Setting` for the reason `trustedProxyHops` is: it describes the
+     * deployment, it has to match a port the compose file publishes, and it decides where a
+     * credential is sent, which is not a thing to leave editable from inside the app.
+     */
+    castOrigin: z
+        .string()
+        .refine((value) => {
+            try {
+                const url = new URL(value);
+
+                return (
+                    (url.protocol === "http:" || url.protocol === "https:") &&
+                    url.pathname === "/" &&
+                    !url.search &&
+                    !url.hash &&
+                    !url.username
+                );
+            } catch {
+                return false;
+            }
+        }, "An origin like http://192.168.1.10:8843 — scheme, host and port, no path")
+        .transform((value) => new URL(value).origin)
+        .nullable()
+        .default(null),
+
+    /**
      * JWT and media-URL signing key. Generated into `<dataDir>/secret.key` on first boot
      * when neither the file nor the environment supplies one, so nobody has to invent a
      * key and nobody accidentally ships a default.
@@ -54,6 +88,7 @@ export const CONFIG_ENV_KEYS: Record<keyof Config, string> = {
     mediaDir: "PRIVATE_STOCK_MEDIA_DIR",
     logLevel: "PRIVATE_STOCK_LOG_LEVEL",
     trustedProxyHops: "PRIVATE_STOCK_TRUSTED_PROXY_HOPS",
+    castOrigin: "PRIVATE_STOCK_CAST_ORIGIN",
     secret: "PRIVATE_STOCK_SECRET",
 };
 

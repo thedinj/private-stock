@@ -56,10 +56,11 @@ const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
  * is here still closes the cheap holes: nothing loads from another origin, no plugins run, no
  * injected `<base>` can redirect relative URLs, and the app cannot be framed.
  *
- * Two future edits are worth knowing about before they cost somebody an afternoon of silent
- * failures. The Cast sender SDK (§11) loads from `https://www.gstatic.com` and will need it
- * in `script-src`. And `connect-src` must stay wide enough for the SSE change feed (§13b),
- * which is same-origin and so is already covered.
+ * The Cast sender SDK (§11) is the one script from another origin: Google ships it only from
+ * `https://www.gstatic.com`, as a loader that pulls in the framework from the same place. It
+ * talks to the TV through the browser's own media router, not over the network, so nothing else
+ * here widens for it. `connect-src` must stay wide enough for the SSE change feed (§13b), which
+ * is same-origin and so is already covered.
  *
  * `'unsafe-eval'` is development only. React's dev build and Fast Refresh evaluate strings;
  * nothing in a production build does, and granting it there turns any injected string that
@@ -67,8 +68,8 @@ const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
  */
 const SCRIPT_SRC =
     process.env.NODE_ENV === "development"
-        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-        : "script-src 'self' 'unsafe-inline'";
+        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com"
+        : "script-src 'self' 'unsafe-inline' https://www.gstatic.com";
 
 const CONTENT_SECURITY_POLICY = [
     "default-src 'self'",

@@ -62,6 +62,8 @@ import { leaveViewer } from "@/lib/viewerReturn";
 import { openingPicture } from "@/lib/openItem";
 import { morphOutOfStage } from "@/lib/viewTransitions";
 import { useViewerSequence } from "@/lib/useViewerSequence";
+import { castBlocked } from "@/lib/cast/castBlocked";
+import { useCastItem } from "@/lib/cast/useCastItem";
 import { parseAtParam, resumeTarget, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
 import { useSpillLight } from "@/lib/useSpillLight";
@@ -743,6 +745,21 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     ]);
 
     /**
+     * Casting this item to a TV, and following the TV when its queue moves on (§11).
+     *
+     * Above the loading return because it is a hook; it waits for the details only to know
+     * whether the item can be cast. "Play the next one" is what turns a cast into a queue on the
+     * TV, the same consent it is for playing on here.
+     */
+    const castControl = useCastItem({
+        mediaId: id,
+        blocked: castBlocked(data?.playbackSource),
+        upcomingIds: sequence.upcomingIds,
+        autoplayNext,
+        follow: go,
+    });
+
+    /**
      * The item's picture at once, while its details are still on their way (§14, "Waiting").
      *
      * Opening an item waits for the details before navigating, so this is only seen when that
@@ -1072,6 +1089,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             onUnplayable={() => setPlayerFailed(true)}
                             steps={steps}
                             menuItems={stageMenu}
+                            cast={castControl}
                         />
                     ) : (
                         <StillStage
