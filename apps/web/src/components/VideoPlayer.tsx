@@ -5,10 +5,17 @@ import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
+import { SkipButton } from "@/components/SkipButton";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
 import { api } from "@/lib/api/client";
 import type { CastControl } from "@/lib/cast/useCastItem";
-import { readPlaybackPref, usePlaybackPref } from "@/lib/playbackPrefs";
+import {
+    readPlaybackPref,
+    usePlaybackPref,
+    useSkipBackSeconds,
+    useSkipForwardSeconds,
+} from "@/lib/playbackPrefs";
+import { SKIP_BACK_CHOICES, SKIP_FORWARD_CHOICES } from "@/lib/skipLengths";
 import { effectiveRate, spanRunMs } from "@private-stock/core";
 
 import { assignSlots, initialSlots } from "@/lib/videoSlots";
@@ -309,49 +316,6 @@ const ReplayGlyph = () => (
             fill="currentColor"
             stroke="none"
         />
-    </Glyph>
-);
-
-/**
- * Back ten seconds: an arrow turning backwards around the number it goes back by.
- *
- * Ten rather than five because it is the same distance as `j` and a double-tap on the left
- * third, so the bar, the keys and the thumb all agree on what "back a bit" means.
- */
-const BackTenGlyph = () => (
-    <Glyph>
-        <path d="M5.5 9.5A7.5 7.5 0 1 1 4.5 13" />
-        <path d="M5.5 5v4.5H10" />
-        <text
-            x="12.5"
-            y="15.5"
-            textAnchor="middle"
-            fontSize="7.5"
-            fontWeight="600"
-            fill="currentColor"
-            stroke="none"
-        >
-            10
-        </text>
-    </Glyph>
-);
-
-/** Forward ten seconds: the back glyph mirrored, matching `l` and a double-tap on the right third. */
-const ForwardTenGlyph = () => (
-    <Glyph>
-        <path d="M18.5 9.5A7.5 7.5 0 1 0 19.5 13" />
-        <path d="M18.5 5v4.5H14" />
-        <text
-            x="11.5"
-            y="15.5"
-            textAnchor="middle"
-            fontSize="7.5"
-            fontWeight="600"
-            fill="currentColor"
-            stroke="none"
-        >
-            10
-        </text>
     </Glyph>
 );
 
@@ -907,6 +871,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const [bufferedMs, setBufferedMs] = useState(0);
     const [muted, setMuted] = useState(false);
     const [, rememberMuted] = usePlaybackPref("muted");
+    /** How far the two jumps go -- the bar's buttons, `j`/`l` and a double-tap alike (§14b). */
+    const [backSeconds, setBackSeconds] = useSkipBackSeconds();
+    const [forwardSeconds, setForwardSeconds] = useSkipForwardSeconds();
     const [speed, setSpeed] = useState("1");
     /** Which page of the "more" menu is showing: its actions, or the speeds (phone only). */
     const [moreView, setMoreView] = useState<"actions" | "speed">("actions");
@@ -1726,10 +1693,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         by(step * 1000);
                         break;
                     case "j":
-                        by(-10_000);
+                        by(-backSeconds * 1000);
                         break;
                     case "l":
-                        by(10_000);
+                        by(forwardSeconds * 1000);
                         break;
                     case "m":
                         tv.toggleMute();
@@ -1755,10 +1722,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     video.currentTime = Math.min(video.duration || 0, video.currentTime + step);
                     break;
                 case "j":
-                    video.currentTime = Math.max(0, video.currentTime - 10);
+                    video.currentTime = Math.max(0, video.currentTime - backSeconds);
                     break;
                 case "l":
-                    video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
+                    video.currentTime = Math.min(
+                        video.duration || 0,
+                        video.currentTime + forwardSeconds
+                    );
                     break;
                 case ",":
                     // Frame stepping only makes sense while paused.
@@ -1848,7 +1818,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         return () => document.removeEventListener("keydown", onKeyDown);
         // `captureHere` is stable, so listing it re-binds nothing and keeps the one
         // conversion from being inlined back into this handler.
-    }, [captureHere, onMarkIn, onMarkOut]);
+    }, [captureHere, onMarkIn, onMarkOut, backSeconds, forwardSeconds]);
 
     /**
      * Touch: double-tap the left or right third to seek.
@@ -1878,9 +1848,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         const relative = (touch.clientX - bounds.left) / bounds.width;
 
         if (relative < 0.33) {
-            video.currentTime = Math.max(0, video.currentTime - 10);
+            video.currentTime = Math.max(0, video.currentTime - backSeconds);
         } else if (relative > 0.67) {
-            video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
+            video.currentTime = Math.min(video.duration || 0, video.currentTime + forwardSeconds);
         }
     };
 
@@ -2122,32 +2092,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             </ActionIcon>
                         )}
 
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
+                        <SkipButton
+                            direction="back"
+                            seconds={backSeconds}
+                            choices={SKIP_BACK_CHOICES}
+                            onChoose={setBackSeconds}
+                            hotkey="j"
                             size={iconSize}
-                            onClick={() => {
+                            coarse={coarse}
+                            onSkip={() => {
+                                const by = backSeconds * 1000;
+
                                 // A reel seeks in reel time, so going back can cross into the
                                 // previous span rather than stopping at this one's start.
                                 if (timeline) {
-                                    timeline.onSeek(Math.max(0, reelPositionMs - 10_000));
+                                    timeline.onSeek(Math.max(0, reelPositionMs - by));
 
                                     return;
                                 }
 
                                 if (remote) {
-                                    remote.seekTo(Math.max(0, remote.positionMs - 10_000));
+                                    remote.seekTo(Math.max(0, remote.positionMs - by));
 
                                     return;
                                 }
 
                                 const video = videoRef.current;
-                                if (video) seekTo(Math.max(0, video.currentTime * 1000 - 10_000));
+                                if (video) seekTo(Math.max(0, video.currentTime * 1000 - by));
                             }}
-                            aria-label="Back 10 seconds (j)"
-                        >
-                            <BackTenGlyph />
-                        </ActionIcon>
+                        />
 
                         {/* Play between the two jumps, so the button that leaves the item is
                             never the one beside it. */}
@@ -2167,15 +2140,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             )}
                         </ActionIcon>
 
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
+                        <SkipButton
+                            direction="forward"
+                            seconds={forwardSeconds}
+                            choices={SKIP_FORWARD_CHOICES}
+                            onChoose={setForwardSeconds}
+                            hotkey="l"
                             size={iconSize}
-                            onClick={() => {
+                            coarse={coarse}
+                            onSkip={() => {
+                                const by = forwardSeconds * 1000;
+
                                 // In reel time too, so it can cross into the next span.
                                 if (timeline) {
                                     timeline.onSeek(
-                                        Math.min(timeline.totalMs, reelPositionMs + 10_000)
+                                        Math.min(timeline.totalMs, reelPositionMs + by)
                                     );
 
                                     return;
@@ -2183,7 +2162,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
                                 if (remote) {
                                     remote.seekTo(
-                                        Math.min(remote.durationMs, remote.positionMs + 10_000)
+                                        Math.min(remote.durationMs, remote.positionMs + by)
                                     );
 
                                     return;
@@ -2194,15 +2173,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                     seekTo(
                                         Math.min(
                                             (video.duration || 0) * 1000,
-                                            video.currentTime * 1000 + 10_000
+                                            video.currentTime * 1000 + by
                                         )
                                     );
                                 }
                             }}
-                            aria-label="Forward 10 seconds (l)"
-                        >
-                            <ForwardTenGlyph />
-                        </ActionIcon>
+                        />
 
                         {steps && (
                             <ActionIcon

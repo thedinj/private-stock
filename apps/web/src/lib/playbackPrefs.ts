@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+    DEFAULT_SKIP_BACK,
+    DEFAULT_SKIP_FORWARD,
+    snapSkipBack,
+    snapSkipForward,
+    type SkipBackSeconds,
+    type SkipForwardSeconds,
+} from "./skipLengths";
 import { DEFAULT_DWELL, snapDwellSeconds, type DwellSeconds } from "./stageDwell";
 import {
     DEFAULT_CLIP_SECONDS,
@@ -182,3 +190,15 @@ export const useTastingClipSeconds = (): [TastingSeconds, (value: TastingSeconds
 
 export const useTastingPhotoSeconds = (): [TastingSeconds, (value: TastingSeconds) => void] =>
     useChoicePref("ps:tastingPhotoSeconds", DEFAULT_PHOTO_SECONDS, snapPhoto);
+
+/**
+ * How far the player's back and forward buttons jump (§14b). On the device like the rest: a
+ * thumb on the sofa and a mouse at the desk can want different steps.
+ */
+export const useSkipBackSeconds = (): [SkipBackSeconds, (value: SkipBackSeconds) => void] =>
+    useChoicePref("ps:skipBackSeconds", DEFAULT_SKIP_BACK, snapSkipBack);
+
+export const useSkipForwardSeconds = (): [
+    SkipForwardSeconds,
+    (value: SkipForwardSeconds) => void,
+] => useChoicePref("ps:skipForwardSeconds", DEFAULT_SKIP_FORWARD, snapSkipForward);

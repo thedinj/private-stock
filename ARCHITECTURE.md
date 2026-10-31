@@ -8227,10 +8227,11 @@ parser checks `?sort=` against it rather than keeping its own, because a copy th
 behind and read `?sort=bitrate` back as the default, so the menu choice was silently ignored.
 
 **Hotkeys**: `space` play/pause · `←`/`→` ±5 s, shift ±30 s · `,` `.` frame step · `0`–`9`
-jump to 0–90% · `[` `]` clip in/out · `j` `k` `l` shuttle · `-` `+` speed (0.25×–4×) · `f`
-fullscreen · `m` mute · `1`–`5` rating in grid · numpad `1`–`5` rating in the viewer (the same
-number again clears it) · `h` favourite in the viewer · `Delete` (or `Backspace`) trash in the
-viewer, `Enter` to confirm · `/` search · `g g` top · `?` help.
+jump to 0–90% · `[` `]` clip in/out · `j` `k` `l` shuttle (`j`/`l` by the bar's chosen jump
+lengths, §14b) · `-` `+` speed (0.25×–4×) · `f` fullscreen · `m` mute · `1`–`5` rating in
+grid · numpad `1`–`5` rating in the viewer (the same number again clears it) · `h` favourite in
+the viewer · `Delete` (or `Backspace`) trash in the viewer, `Enter` to confirm · `/` search ·
+`g g` top · `?` help.
 
 **Every rating and favourite answers over the picture**, clicked or pressed. It started with the
 keys: somebody rating from the numpad is looking at the film, often in fullscreen, often with the
@@ -8381,9 +8382,10 @@ Three things that are genuinely different on a phone, not just narrower:
   must therefore cap concurrent previews by device class (desktop ~8, mobile 1–2) and fall
   back to animated-WebP or static covers when the cap is hit. Building this desktop-first and
   discovering it later would mean rewriting gallery mode, which is why it belongs in phase 1.
-- **Hotkeys need touch equivalents.** Double-tap sides to seek ±10 s, vertical drag for
-  volume, long-press for speed, swipe down to dismiss the player, and a tap-to-reveal control
-  bar. The keymap (§14) stays the desktop path; neither is a translation of the other.
+- **Hotkeys need touch equivalents.** Double-tap sides to seek by the bar's jump lengths
+  (§14b), vertical drag for volume, long-press for speed, swipe down to dismiss the player,
+  and a tap-to-reveal control bar. The keymap (§14) stays the desktop path; neither is a
+  translation of the other.
 - **Bandwidth and data.** The `remote-720p` profile (§18.8) is the default on a cellular
   connection, and hover previews are off by default on metered connections.
 
@@ -8951,6 +8953,20 @@ contributors share that line and truncate, and the save spinner is inside the bo
 **A note left mid-sentence is saved anyway.** It saves on blur, and the page moves on by itself
 — autoplay goes to the next item, which unmounts the box without blurring it. It also saves on
 unmount now.
+
+**Each jump button chooses its own length, by holding it.** Back and forward were a fixed ten
+seconds; the asks were "back up a tad" and, the other way, getting past a scene, which no one
+length serves. A press jumps; holding the button half a second, or right-clicking it, raises a
+strip of lengths from the button itself — back 1, 2, 3, 5, 10, 15, 30 s, forward 5, 10, 15, 30,
+60, 90 s — and the glyph's number is whatever was picked. Both start at ten, so nothing moved
+until somebody chose. `j`/`l`, the phone's double-tap and the bar while casting all follow the
+same two lengths; `←`/`→` stay 5 s and 30 s, the fine control. Stored on the device
+(`ps:skipBackSeconds`, `ps:skipForwardSeconds`), like the rest of the playback preferences.
+Chosen over a speed-style menu word (the bar is full on a phone, and one length would be switched
+back and forth), and over presses that grow on repetition (a press should always do the same
+thing). The cost is discoverability, which the button's title carries; and holding a jump button
+can no longer become hold-to-rewind — that, if it comes, belongs on a held key. The options:
+<https://claude.ai/artifact/2RDBH3CHtprC8o8YfwQXNW>.
 
 **The playback preferences are a menu, not a row.** Play on open, Autoplay next and Hold each
 picture sat between the title and the item's content, with the same weight as the frames and

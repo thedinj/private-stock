@@ -1,0 +1,8 @@
+// Holding the button is how its length is chosen, so the press must not also select the glyph's
+// number or raise the phone's own callout for it.
+.skip {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    font-variant-numeric: tabular-nums;
+}
