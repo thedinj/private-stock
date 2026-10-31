@@ -40,6 +40,8 @@ export const SETTING_KEYS = {
     faceAutoTag: "faces.autoTag",
     /** The library's "Won't play in a browser" filter, shown only while this is on (§8). */
     playbackCheck: "playback.check",
+    /** Identical copies cleared every night (§10e "Every night"). Saved from Review › Duplicates. */
+    identicalNightly: "dupes.identicalNightly",
 } as const;
 
 /**
@@ -52,6 +54,28 @@ export const faceAutoTagSettingSchema = z.object({
     since: z.string().nullable().default(null),
 });
 export type FaceAutoTagSetting = z.infer<typeof faceAutoTagSettingSchema>;
+
+/**
+ * Identical copies cleared by themselves, every night (§10e "Every night"): off until an
+ * administrator turns it on. Who turned it on is kept, because a deletion needs a person to be
+ * recorded against and this one is theirs. The last run is kept so the tab can say what it did.
+ */
+export const identicalNightlyRunSchema = z.object({
+    at: z.string(),
+    deleted: z.number(),
+    failed: z.number(),
+    /** Why the run did not happen at all, when it did not: the switch-holder lost a scope. */
+    error: z.string().nullable(),
+});
+export type IdenticalNightlyRun = z.infer<typeof identicalNightlyRunSchema>;
+
+export const identicalNightlySettingSchema = z.object({
+    enabled: z.boolean().default(false),
+    byUserId: z.string().nullable().default(null),
+    since: z.string().nullable().default(null),
+    lastRun: identicalNightlyRunSchema.nullable().default(null),
+});
+export type IdenticalNightlySetting = z.infer<typeof identicalNightlySettingSchema>;
 
 /**
  * What an admin has decided about each stage, where they have decided anything (§7b).

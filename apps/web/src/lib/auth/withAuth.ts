@@ -89,8 +89,12 @@ export const requireAuth = async (
  * signed media token names a user and nothing else, so scopes and root access are read here
  * exactly as they are for a Bearer token — which is what makes withdrawing a library take
  * effect when it is withdrawn rather than at the token's expiry.
+ *
+ * Exported for the one thing that acts for a person with no request in hand: the nightly clear
+ * of identical copies (§10e "Every night"), which acts as the administrator who turned it on, and
+ * so stops when their account or their scopes do.
  */
-const contextFor = (userId: string, requireEpoch?: number): AuthContext => {
+export const contextFor = (userId: string, requireEpoch?: number): AuthContext => {
     const context = authContext(userId, () => buildContext(userId));
 
     /**

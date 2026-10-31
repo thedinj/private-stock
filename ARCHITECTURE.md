@@ -5799,6 +5799,36 @@ committed in between. The trash entry and its move job are also written in one t
 the lock is still busy, the step is tried again after an `await`ed backoff, which leaves the rest
 of the web process running. Every step it retries is safe to repeat.
 
+### Every night
+
+The button became a switch (2026-10-31). Detection had earned trust, and the keeper rule above
+was being accepted unchanged run after run, so a person pressing the button added nothing. "Clear
+every night" on the Identical tab is off by default and an administrator's to turn on. While it is
+on, the run above happens by itself: `trashIdentical`, batch by batch, until the cursor comes back
+null. It takes the same routine groups, applies the same keeper rule and runs the same checks
+before anything is deleted. Groups under "Needs a look" are still left for a person.
+
+- **The keeper rule is trusted as it stands.** Catalogued first wins. A grace period and a
+  per-library preference were considered and rejected for now. The case they would cover is a copy
+  placed in its tidy folder before the messy original is removed, where the tidy copy is the newer
+  and goes. Running only at night makes that rare, since the original is usually gone by then.
+- **When: the quiet hours' start, on their clock** (§7c), from the `processing.throttle` setting,
+  used even while throttling is off. Those hours are the one place an administrator has said when
+  night is. Within the window, it runs once: a run less than 20 hours after the last one is the
+  same night's. The clock is checked every ten minutes, so a restart inside the window still finds
+  it.
+- **As whom.** `TrashEntry.deletedById` names a person, so the `dupes.identicalNightly` setting
+  keeps who turned it on, and each night acts as them, with their scopes as they are that night
+  (`contextFor`). Turning it on needs `admin` and `delete`, as the button does. When either scope
+  is withdrawn or the account is disabled, the run stops and the tab says why.
+- **In the web process, not the worker.** The worker owns every other schedule, but the trash path
+  (the merge, the entry, the move job, the caches it clears) lives in the web services. A worker
+  copy would be a second deletion path to keep in step. The bytes are still removed by the
+  worker's trash job, the only code that writes inside a media root. The clock starts from
+  `instrumentation.ts`.
+- **What it did** is kept as the setting's `lastRun` and shown under the switch: when it ran, the
+  copies deleted, the ones that failed, and why it stopped if it did.
+
 ### The page, reorganised
 
 The All / Identical / Looks-the-same filter, the page-size picker and the "Show reviewed" switch

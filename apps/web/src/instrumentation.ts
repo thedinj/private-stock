@@ -1,6 +1,6 @@
 /**
- * Next's startup hook. The work is in `lib/requestLog.ts` (§20); this file only decides
- * whether to load it.
+ * Next's startup hook. The work is in `lib/requestLog.ts` (§20) and `lib/identicalNightly.ts`
+ * (§10e); this file only decides whether to load them.
  *
  * **Keep the condition literal and the import inside it.** Next compiles this file for the
  * edge runtime as well, and it inlines `NEXT_RUNTIME` there -- so `=== "nodejs"` becomes a
@@ -13,7 +13,9 @@
 export const register = async (): Promise<void> => {
     if (process.env.NEXT_RUNTIME === "nodejs") {
         const { startRequestLog } = await import("./lib/requestLog");
+        const { startIdenticalNightly } = await import("./lib/identicalNightly");
 
         startRequestLog();
+        startIdenticalNightly();
     }
 };

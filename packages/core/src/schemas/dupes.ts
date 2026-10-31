@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mediaKindCountsSchema, mediaKindSchema } from "../domain.js";
 import { bulkActionFailureSchema } from "./bulkActions.js";
 import { mediaListItemSchema } from "./media.js";
+import { identicalNightlyRunSchema } from "./settings.js";
 
 /**
  * The duplicate review contract (§10).
@@ -378,8 +379,23 @@ export const identicalQuerySchema = z.object({
 });
 export type IdenticalQuery = z.infer<typeof identicalQuerySchema>;
 
+/** The nightly run as the Identical tab shows it (§10e "Every night"). */
+export const identicalNightlySchema = z.object({
+    enabled: z.boolean(),
+    /** The administrator the deletions are recorded against. */
+    byName: z.string().nullable(),
+    /** The hour it runs, on the quiet hours' clock: their start, used even when they are off. */
+    startHour: z.number(),
+    lastRun: identicalNightlyRunSchema.nullable(),
+});
+export type IdenticalNightly = z.infer<typeof identicalNightlySchema>;
+
+export const identicalNightlySwitchSchema = z.object({ enabled: z.boolean() });
+export type IdenticalNightlySwitch = z.infer<typeof identicalNightlySwitchSchema>;
+
 export const identicalListResponseSchema = z.object({
     summary: identicalSummarySchema,
+    nightly: identicalNightlySchema,
     /** Groups in this view, for paging. */
     total: z.number(),
     /**

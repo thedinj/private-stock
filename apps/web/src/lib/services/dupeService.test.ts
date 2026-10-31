@@ -77,7 +77,7 @@ vi.mock("./trashService", () => ({
     },
 }));
 
-const { resolveGroups, trashIdentical } = await import("./dupeService");
+const { resolveGroups, switchIdenticalNightly, trashIdentical } = await import("./dupeService");
 
 const auth = (scopes: AuthContext["scopes"]): AuthContext => ({
     userId: "u1",
@@ -312,5 +312,13 @@ describe("trashing every identical copy (§10e)", () => {
             trashIdentical({ after: null, limit: 100 }, auth(["admin"]))
         ).rejects.toBeInstanceOf(AuthorizationError);
         expect(trashed).toEqual([]);
+    });
+});
+
+describe('switching on the nightly clear (§10e "Every night")', () => {
+    it("needs the delete scope, since the deletions are recorded against whoever switches it", () => {
+        expect(() => switchIdenticalNightly({ enabled: true }, auth(["admin"]))).toThrow(
+            AuthorizationError
+        );
     });
 });

@@ -6,6 +6,7 @@ import {
     NotFoundError,
     ValidationError,
     identicalKeeper,
+    identicalNightlySettingSchema,
     planIdentical,
     rankCopies,
     suggestSets,
@@ -18,6 +19,10 @@ import {
     type DupeSortResponse,
     type IdenticalCopy,
     type IdenticalListResponse,
+    type IdenticalNightly,
+    type IdenticalNightlyRun,
+    type IdenticalNightlySetting,
+    type IdenticalNightlySwitch,
     type IdenticalPlan,
     type IdenticalQuery,
     type IdenticalSummary,
@@ -37,8 +42,10 @@ import {
     type MediaCopiesResponse,
     type MediaCopy,
     type TrashMediaResponse,
+    SETTING_KEYS,
+    throttleSettingsSchema,
 } from "@private-stock/core";
-import { db, dupeRepo, mediaRepo } from "@private-stock/db";
+import { db, dupeRepo, mediaRepo, settingRepo, userRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
 import { coverUrl } from "./artService";
@@ -428,7 +435,74 @@ export const listIdentical = (query: IdenticalQuery, auth: AuthContext): Identic
         })
         .filter((group): group is DupeGroup => group !== null);
 
-    return { summary: summarize(plans), total: ids.length, groups };
+    return { summary: summarize(plans), nightly: nightlyState(), total: ids.length, groups };
+};
+
+export const loadIdenticalNightly = (): IdenticalNightlySetting =>
+    identicalNightlySettingSchema.parse(settingRepo.get(SETTING_KEYS.identicalNightly, {}));
+
+/**
+ * When the nightly clear runs: the start of the quiet hours, on their clock (§10e "Every night").
+ *
+ * Their hours even when throttling is off. They are the one place an administrator has said when
+ * the night is, and a second clock for this alone would be a second answer to that question.
+ */
+export const nightlyWindow = (): {
+    startHour: number;
+    endHour: number;
+    timeZone: string | null;
+} => {
+    const parsed = throttleSettingsSchema.safeParse(settingRepo.get(SETTING_KEYS.throttle, {}));
+    const settings = parsed.success ? parsed.data : throttleSettingsSchema.parse({});
+
+    return {
+        startHour: settings.startHour,
+        endHour: settings.endHour,
+        timeZone: settings.timeZone,
+    };
+};
+
+const nightlyState = (): IdenticalNightly => {
+    const setting = loadIdenticalNightly();
+    const by = setting.byUserId ? userRepo.findById(setting.byUserId) : undefined;
+
+    return {
+        enabled: setting.enabled,
+        byName: by?.displayName ?? null,
+        startHour: nightlyWindow().startHour,
+        lastRun: setting.lastRun,
+    };
+};
+
+/**
+ * Clear identical copies every night, or stop (§10e "Every night").
+ *
+ * **Both scopes, like the button.** The deletions are recorded against whoever turns it on, and
+ * each night runs with their scopes as they are then.
+ */
+export const switchIdenticalNightly = (
+    input: IdenticalNightlySwitch,
+    auth: AuthContext
+): IdenticalNightly => {
+    requireAdmin(auth);
+
+    if (!auth.scopes.includes("delete")) {
+        throw new AuthorizationError("You do not have permission to delete files");
+    }
+
+    settingRepo.set(SETTING_KEYS.identicalNightly, {
+        ...loadIdenticalNightly(),
+        enabled: input.enabled,
+        byUserId: input.enabled ? auth.userId : null,
+        since: input.enabled ? new Date().toISOString() : null,
+    });
+
+    return nightlyState();
+};
+
+/** What a night's run did, kept for the tab. The switch is re-read: it may have moved meanwhile. */
+export const recordNightlyRun = (run: IdenticalNightlyRun): void => {
+    settingRepo.set(SETTING_KEYS.identicalNightly, { ...loadIdenticalNightly(), lastRun: run });
 };
 
 /**

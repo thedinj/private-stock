@@ -14,6 +14,7 @@ import {
     Progress,
     SimpleGrid,
     Stack,
+    Switch,
     Text,
     Title,
 } from "@mantine/core";
@@ -24,6 +25,7 @@ import type {
     DupeGroup,
     DupeReviewInput,
     IdenticalListResponse,
+    IdenticalNightly,
     IdenticalTrashResponse,
     MediaKind,
 } from "@private-stock/core";
@@ -137,6 +139,58 @@ const IdenticalCard: React.FC<{
     );
 };
 
+/**
+ * The rule, run every night by itself (§10e "Every night"). Said once, beside the switch: what it
+ * does, when, and as whom; then what the last run did.
+ */
+const NightlySwitch: React.FC<{ nightly: IdenticalNightly; canDelete: boolean }> = ({
+    nightly,
+    canDelete,
+}) => {
+    const queryClient = useQueryClient();
+
+    const toggle = useMutation({
+        mutationFn: (enabled: boolean) =>
+            api<IdenticalNightly>("/api/dupes/identical/nightly", {
+                method: "POST",
+                body: JSON.stringify({ enabled }),
+            }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.dupes.all() }),
+    });
+
+    const at = `${String(nightly.startHour).padStart(2, "0")}:00`;
+    const last = nightly.lastRun;
+
+    return (
+        <Stack gap={4}>
+            <Switch
+                checked={nightly.enabled}
+                disabled={!canDelete || toggle.isPending}
+                onChange={(event) => toggle.mutate(event.currentTarget.checked)}
+                label="Clear every night"
+                description={
+                    nightly.enabled
+                        ? `At ${at}, every copy the rule decides is deleted, as ${nightly.byName ?? "the administrator who turned this on"}. Groups that need a look are left for you.`
+                        : `At ${at}, delete every copy the rule decides, without pressing the button.`
+                }
+            />
+            {last && (
+                <Text size="xs" c={last.error ? "oxblood" : "dimmed"} pl={54}>
+                    Last run {new Date(last.at).toLocaleString()}:{" "}
+                    {plural(last.deleted, "copy", "copies")} deleted
+                    {last.failed > 0 ? `, ${last.failed.toLocaleString()} could not be` : ""}
+                    {last.error ? ` — stopped: ${last.error}` : ""}
+                </Text>
+            )}
+            {toggle.error && (
+                <Text size="xs" c="oxblood" pl={54}>
+                    {toggle.error.message}
+                </Text>
+            )}
+        </Stack>
+    );
+};
+
 export const IdenticalPanel: React.FC<{
     canDelete: boolean;
     /** The cards' page, one-based, owned by the page so it lives in the address (§14b). */
@@ -238,6 +292,8 @@ export const IdenticalPanel: React.FC<{
 
     return (
         <Stack gap="xl">
+            <NightlySwitch nightly={data.nightly} canDelete={canDelete} />
+
             {/* The whole queue in one line, and the one button that clears it. */}
             {summary.groups > 0 || running ? (
                 <Paper withBorder radius="md" p="lg">
