@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Controls that get out of the way, and come back when you ask (§14).
@@ -53,8 +53,24 @@ export const useIdleControls = (
     active: boolean,
     hold: () => boolean,
     idleMs: number = IDLE_MS
-): boolean => {
+): boolean => useDismissableIdleControls(active, hold, idleMs).idle;
+
+/**
+ * The same, with a way to put the controls away on purpose.
+ *
+ * The full-screen player's touch rule is YouTube's: a tap on the picture shows the controls when
+ * they are hidden and hides them when they are showing, and pausing is the play button's job.
+ * `dismiss` is that second tap. It does not ask `hold` -- a paused video holds the bar against
+ * the timer, not against the viewer asking for the picture back -- and the bar stays down until
+ * the next sign of life.
+ */
+export const useDismissableIdleControls = (
+    active: boolean,
+    hold: () => boolean,
+    idleMs: number = IDLE_MS
+): { idle: boolean; dismiss: () => void } => {
     const [idle, setIdle] = useState(false);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     /**
      * Read at the moment of hiding rather than closed over, so that a caller rebuilding this
@@ -71,14 +87,13 @@ export const useIdleControls = (
             return;
         }
 
-        let timer: ReturnType<typeof setTimeout> | undefined;
         /** The wait for the current stretch of quiet: longer when it began with a touch. */
         let delay = idleMs;
 
         const arm = () => {
-            clearTimeout(timer);
+            clearTimeout(timerRef.current);
 
-            timer = setTimeout(() => {
+            timerRef.current = setTimeout(() => {
                 // Something still wants the bar. Ask again rather than never again: the
                 // pointer will leave, the video will play, the menu will close.
                 if (holdRef.current()) {
@@ -109,10 +124,17 @@ export const useIdleControls = (
         arm();
 
         return () => {
-            clearTimeout(timer);
+            clearTimeout(timerRef.current);
             events.forEach((event) => document.removeEventListener(event, wake));
         };
     }, [active, idleMs]);
 
-    return idle;
+    const dismiss = useCallback(() => {
+        if (!active) return;
+
+        clearTimeout(timerRef.current);
+        setIdle(true);
+    }, [active]);
+
+    return { idle, dismiss };
 };

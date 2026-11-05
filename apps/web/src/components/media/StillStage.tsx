@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Button, Menu, Text, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
-import { useIdleControls } from "@/lib/useIdleControls";
+import { useDismissableIdleControls } from "@/lib/useIdleControls";
 import { usePlayerFullscreen } from "@/lib/usePlayerFullscreen";
 import { useStillDwell } from "@/lib/useStillDwell";
+import { usePictureTap } from "@/lib/useWakingTap";
 import { DWELL_CHOICES, type DwellSeconds } from "@/lib/stageDwell";
 import { isTypingTarget } from "@/lib/typingTarget";
 
@@ -141,10 +142,13 @@ export const StillStage: React.FC<StillStageProps> = ({
         }
     }, [src, failed, begin]);
 
-    const controlsIdle = useIdleControls(
+    const { idle: controlsIdle, dismiss: dismissControls } = useDismissableIdleControls(
         isFullscreen,
         useCallback(() => dwell.paused || pointerOnBar, [dwell.paused, pointerOnBar])
     );
+
+    /** A finger on the picture shows or hides the bar on a full screen, as on the player. */
+    const pictureTap = usePictureTap(controlsIdle, isFullscreen, dismissControls);
 
     /**
      * The keys live with the thing that can act on them (§14).
@@ -208,11 +212,15 @@ export const StillStage: React.FC<StillStageProps> = ({
                  * portrait photograph answers too, and so that a still with no picture to show
                  * can still be held.
                  *
+                 * A finger, on a full screen, shows or hides the bar instead and never holds --
+                 * the player's rule (`usePictureTap`); the hold button is in the bar it brings.
+                 *
                  * Nothing to toggle when no show is running, and then no pointer either: a
                  * cursor promising an action that does not exist is worse than a plain one.
                  */
                 data-toggles={dwellMs !== null || undefined}
-                onClick={dwellMs !== null ? dwell.toggle : undefined}
+                onPointerDown={dwellMs !== null ? pictureTap.onPointerDown : undefined}
+                onClick={dwellMs !== null ? () => pictureTap.tap(dwell.toggle) : undefined}
             >
                 <StillSlots
                     mediaId={mediaId}

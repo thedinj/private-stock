@@ -10369,6 +10369,13 @@ decide and reach. Considered and rejected: a first tap that picks a tile and a s
 it. It gives a phone a preview on demand, but the tasting has nothing to pick, and the two modes
 must answer a tap the same way. A mouse is never swallowed.
 
+Where the picture is also a pause button — the full-screen player, the tasting, a running show of
+stills — a finger goes one step further, as on YouTube: a tap shows the controls when hidden and
+hides them when showing, and never pauses; the play button in the bar does that. A mouse click on
+the picture still pauses. Where the controls never hide (the player in the page) a tap acts as a
+click. One hook, `usePictureTap`, so the three cannot drift apart. The wall keeps the plain rule:
+there a tap with the controls up opens a tile, as a feed of videos does.
+
 **Coming back.** Opening a tile records the page and the fraction of it the viewport was at,
 in `sessionStorage`, keyed by the filter; returning from the player puts the wall back there.
 
@@ -10526,8 +10533,9 @@ few seconds of the middle of something is not watching it (§14d).
 **Controls.** Space holds and resumes, → or `n` next, ← or `p` previous, `m` mute, `f` full
 screen, `o` opens the item in the viewer, Escape closes (after the browser has had it to leave
 full screen). Clicking the picture holds; a horizontal swipe steps; stepping lets go of a hold.
-On a touch screen a tap while the controls are hidden only brings them back, as on the showcase
-(§14f); a mouse click always holds, since the pointer moving to make it has already brought them.
+On a touch screen a tap on the picture shows or hides the controls and never holds (§14f,
+`usePictureTap`); a mouse click always holds, since the pointer moving to make it has already
+brought them.
 The controls fade after a moment of stillness and stay while held; the progress line along the
 bottom stays, being information rather than a control. A start refused for want of a gesture —
 a reload — shows one large play button rather than a show silently waiting for an out point.

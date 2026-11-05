@@ -21,10 +21,10 @@ import { pickSegment, segmentAt, segmentProgress, type Segment } from "@/lib/tas
 import { seek, type Cursor, type Seek } from "@/lib/tasting/sequence";
 import { stageTargets } from "@/lib/tasting/targets";
 import { isTypingTarget } from "@/lib/typingTarget";
-import { useIdleControls } from "@/lib/useIdleControls";
+import { useDismissableIdleControls } from "@/lib/useIdleControls";
 import { usePlayerFullscreen } from "@/lib/usePlayerFullscreen";
 import { useStillDwell } from "@/lib/useStillDwell";
-import { useWakingTap } from "@/lib/useWakingTap";
+import { usePictureTap } from "@/lib/useWakingTap";
 import { mayWarmNextItem } from "@/lib/videoWarming";
 
 import { TastingControls } from "./TastingControls";
@@ -482,7 +482,7 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
         () => held || lengthsOpen || pointerOnControls || !current,
         [held, lengthsOpen, pointerOnControls, current]
     );
-    const idle = useIdleControls(true, holdControls);
+    const { idle, dismiss: dismissControls } = useDismissableIdleControls(true, holdControls);
 
     const togglePlay = useCallback(() => {
         setRefused(false);
@@ -568,20 +568,20 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
     }, []);
 
     /**
-     * The picture is the pause button, and a swipe steps.
+     * A click on the picture pauses, and a swipe steps.
      *
-     * A tap that only brought the hidden controls back does nothing else (`useWakingTap`, the
-     * showcase's rule too): somebody reaching for the transport should not stop the show on the
-     * way.
+     * A finger on the picture shows the controls or hides them and never pauses -- the player's
+     * rule, YouTube's (`usePictureTap`): somebody reaching for the transport should not stop the
+     * show on the way.
      */
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
     const swiped = useRef(false);
-    const wakingTap = useWakingTap(idle);
+    const pictureTap = usePictureTap(idle, true, dismissControls);
 
     const onPointerDown = (event: React.PointerEvent) => {
         pointerStart.current = { x: event.clientX, y: event.clientY };
         swiped.current = false;
-        wakingTap.onPointerDown(event);
+        pictureTap.onPointerDown(event);
     };
 
     const onPointerUp = (event: React.PointerEvent) => {
@@ -601,12 +601,10 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
     const onClick = () => {
         pointerStart.current = null;
 
-        // Consumed whatever else is true, so it cannot outlive the tap it belongs to.
-        const onlyWoke = wakingTap.consume();
+        // A swipe has already done its work. What the tap recorded is overwritten by the next one.
+        if (swiped.current || !current) return;
 
-        if (swiped.current || onlyWoke || !current) return;
-
-        togglePlay();
+        pictureTap.tap(togglePlay);
     };
 
     // --- What is on screen ---

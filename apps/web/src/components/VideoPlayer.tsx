@@ -20,8 +20,9 @@ import { effectiveRate, spanRunMs } from "@private-stock/core";
 
 import { assignSlots, initialSlots } from "@/lib/videoSlots";
 import { useOutPoint } from "@/lib/useOutPoint";
-import { useIdleControls } from "@/lib/useIdleControls";
+import { useDismissableIdleControls } from "@/lib/useIdleControls";
 import { usePlayerFullscreen } from "@/lib/usePlayerFullscreen";
+import { usePictureTap } from "@/lib/useWakingTap";
 import { mayWarmNextItem } from "@/lib/videoWarming";
 import { openingTarget, rememberPosition, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
@@ -969,18 +970,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      */
     const barHoveredRef = useRef(false);
 
-    const controlsIdle = useIdleControls(isFullscreen && !bare, () => {
-        const bar = barRef.current;
+    const { idle: controlsIdle, dismiss: dismissControls } = useDismissableIdleControls(
+        isFullscreen && !bare,
+        () => {
+            const bar = barRef.current;
 
-        return (
-            !playing ||
-            scrubbingRef.current ||
-            barHoveredRef.current ||
-            (bar !== null &&
-                (bar.querySelector("[data-expanded]") !== null ||
-                    bar.querySelector(":focus-visible") !== null))
-        );
-    });
+            return (
+                !playing ||
+                scrubbingRef.current ||
+                barHoveredRef.current ||
+                (bar !== null &&
+                    (bar.querySelector("[data-expanded]") !== null ||
+                        bar.querySelector(":focus-visible") !== null))
+            );
+        }
+    );
+
+    /**
+     * A tap on the picture, on a touch screen in full screen, is YouTube's: it shows the bar
+     * when the bar is hidden and hides it when it is showing. Pausing is the play button's job.
+     * A finger cannot announce itself before it lands the way a mouse does, so a tap that paused
+     * would stop the film every time somebody reached for the transport (`useWakingTap`).
+     *
+     * A mouse click still pauses: by the time it clicks it has moved, so the bar is already up,
+     * and a click on the picture is the desktop players' pause. Outside full screen the bar
+     * never hides, and a tap pauses as it always has.
+     */
+    const pictureTap = usePictureTap(controlsIdle, isFullscreen && !bare, dismissControls);
+    const settlePictureTap = pictureTap.tap;
 
     /**
      * Track everything the control bar renders.
@@ -1187,6 +1204,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         if (video.paused) void video.play().catch(() => undefined);
         else video.pause();
     }, [atEnd, onReplay]);
+
+    const onPictureClick = useCallback(
+        () => settlePictureTap(togglePlay),
+        [settlePictureTap, togglePlay]
+    );
 
     /**
      * Tell the server about a view that counted: the watched threshold, or the end (§14b).
@@ -2024,7 +2046,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                            for its turn (§14g) -- and "metadata" would leave it holding a frame
                            and nothing after it. */
                         preload={live && !bare ? "metadata" : "auto"}
-                        onClick={live && !bare ? togglePlay : undefined}
+                        onPointerDown={live && !bare ? pictureTap.onPointerDown : undefined}
+                        onClick={live && !bare ? onPictureClick : undefined}
                         onError={live ? reportUnplayable : undefined}
                         /* A refusal that raises no error: a browser that can decode the sound
                            but not the picture -- HEVC without a decoder for it -- plays the
