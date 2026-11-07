@@ -59,6 +59,8 @@ const withSep = (value: string): string => (value.endsWith(path.sep) ? value : v
  */
 export const checkLibraryPath = async (
     candidate: string,
+    /** The room asking (§21). A clash with another room's library does not name it. */
+    domain: string | null,
     excludeId?: string
 ): Promise<{ ok: true; path: string } | { ok: false; reason: string }> => {
     const inspected = await inspectLibraryPath(candidate);
@@ -102,17 +104,25 @@ export const checkLibraryPath = async (
 
         const candidate = comparable(inspected.path);
         const other = comparable(existing.path);
+        // Named only within its own room: from the Parlour, the cellar's libraries do not exist.
+        const name =
+            domain === null || existing.domain === domain
+                ? `"${existing.label}"`
+                : "another room's library";
 
         if (candidate === other) {
-            return { ok: false, reason: `"${existing.label}" already uses that directory` };
+            return {
+                ok: false,
+                reason: `${name[0]?.toUpperCase()}${name.slice(1)} already uses that directory`,
+            };
         }
 
         if (candidate.startsWith(withSep(other))) {
-            return { ok: false, reason: `That directory is already inside "${existing.label}"` };
+            return { ok: false, reason: `That directory is already inside ${name}` };
         }
 
         if (other.startsWith(withSep(candidate))) {
-            return { ok: false, reason: `That directory already contains "${existing.label}"` };
+            return { ok: false, reason: `That directory already contains ${name}` };
         }
     }
 
@@ -126,8 +136,12 @@ export const checkLibraryPath = async (
  * statuses — but the wording is the check's, which is what keeps the dialog's live message
  * and the eventual error identical.
  */
-const validatePath = async (candidate: string, excludeId?: string): Promise<string> => {
-    const checked = await checkLibraryPath(candidate, excludeId);
+const validatePath = async (
+    candidate: string,
+    domain: string | null,
+    excludeId?: string
+): Promise<string> => {
+    const checked = await checkLibraryPath(candidate, domain, excludeId);
 
     if (!checked.ok) {
         throw checked.reason.includes("already")
@@ -172,7 +186,7 @@ export const addLibrary = async (
     label?: string,
     writable = false
 ) => {
-    const resolved = await validatePath(candidate);
+    const resolved = await validatePath(candidate, domain);
 
     if (writable) {
         await assertMountWritable(resolved);
@@ -228,11 +242,13 @@ export const setLibraryWritable = async (id: string, writable: boolean): Promise
  * untouched. The next scan reconciles whatever did change.
  */
 export const repointLibrary = async (id: string, candidate: string) => {
-    if (!mediaRootRepo.findById(id)) {
+    const root = mediaRootRepo.findById(id);
+
+    if (!root) {
         throw new NotFoundError("Library not found");
     }
 
-    const resolved = await validatePath(candidate, id);
+    const resolved = await validatePath(candidate, root.domain, id);
 
     mediaRootRepo.setPath(id, resolved);
 
@@ -393,7 +409,7 @@ export const libraryStats = (domain: DomainKind | null): LibraryStats => {
         .listRoots()
         .filter((root) => domain === null || root.domain === domain);
     const stats: LibraryStats = {
-        scanning: scanRepo.isAnyRunning(),
+        scanning: domain === null ? scanRepo.isAnyRunning() : scanRepo.isRunningInDomain(domain),
         rootsTotal: roots.length,
         rootsEnabled: roots.filter((root) => root.enabled === 1).length,
         everScanned: roots.some((root) => root.lastScanAt !== null),

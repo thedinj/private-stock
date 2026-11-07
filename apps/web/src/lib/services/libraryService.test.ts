@@ -103,11 +103,12 @@ vi.mock("@private-stock/db", () => ({
         },
         listRoots: () => rows,
         findById: (id: string) => rows.find((row) => row.id === id),
-        create: (rootPath: string, label: string) => {
+        create: (rootPath: string, label: string, domain: string) => {
             const row = {
                 id: `r${rows.length + 1}`,
                 path: rootPath,
                 label,
+                domain,
                 enabled: 1,
                 lastScanAt: null,
             };
@@ -387,7 +388,7 @@ describe("checking a path without writing", () => {
     it("gives the same reason the write would", async () => {
         await addLibrary(path.join(base, "videos"), "cellar");
 
-        const checked = await checkLibraryPath(path.join(base, "videos", "season one"));
+        const checked = await checkLibraryPath(path.join(base, "videos", "season one"), "cellar");
 
         expect(checked.ok).toBe(false);
         expect(checked.ok === false && checked.reason).toMatch(/already inside/);
@@ -397,18 +398,38 @@ describe("checking a path without writing", () => {
     });
 
     it("reports a usable path without creating anything", async () => {
-        const checked = await checkLibraryPath(path.join(base, "videos"));
+        const checked = await checkLibraryPath(path.join(base, "videos"), "cellar");
 
         expect(checked.ok).toBe(true);
         expect(rows).toEqual([]);
+    });
+
+    it("does not name another room's library in a refusal (§21)", async () => {
+        await addLibrary(path.join(base, "videos"), "cellar", "Private");
+
+        const fromParlour = await checkLibraryPath(
+            path.join(base, "videos", "season one"),
+            "family"
+        );
+        const fromCellar = await checkLibraryPath(
+            path.join(base, "videos", "season one"),
+            "cellar"
+        );
+
+        expect(fromParlour.ok === false && fromParlour.reason).toBe(
+            "That directory is already inside another room's library"
+        );
+        expect(fromCellar.ok === false && fromCellar.reason).toMatch(/"Private"/);
     });
 
     /** A library being moved must not collide with where it already is. */
     it("lets a library keep its own path when it is excluded", async () => {
         const root = await addLibrary(path.join(base, "videos"), "cellar");
 
-        expect((await checkLibraryPath(path.join(base, "videos"))).ok).toBe(false);
-        expect((await checkLibraryPath(path.join(base, "videos"), root.id)).ok).toBe(true);
+        expect((await checkLibraryPath(path.join(base, "videos"), "cellar")).ok).toBe(false);
+        expect((await checkLibraryPath(path.join(base, "videos"), "cellar", root.id)).ok).toBe(
+            true
+        );
     });
 });
 

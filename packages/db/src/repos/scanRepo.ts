@@ -72,6 +72,15 @@ export const fail = (id: string, error: string): void => {
 export const isAnyRunning = (): boolean =>
     !!db.prepare(`SELECT 1 FROM "Scan" WHERE "state" = 'running' LIMIT 1`).get();
 
+/** Whether a library of one room is being scanned (§21): another room's scan is not news here. */
+export const isRunningInDomain = (domain: string): boolean =>
+    !!db
+        .prepare(
+            `SELECT 1 FROM "Scan" s JOIN "MediaRoot" r ON r."id" = s."rootId"
+              WHERE s."state" = 'running' AND r."domain" = ? LIMIT 1`
+        )
+        .get(domain);
+
 export const listRecent = (limit = 20): ScanRow[] =>
     db.prepare(`SELECT * FROM "Scan" ORDER BY "startedAt" DESC LIMIT ?`).all(limit) as ScanRow[];
 

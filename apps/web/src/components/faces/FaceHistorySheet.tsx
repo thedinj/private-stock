@@ -19,6 +19,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import type { FaceHistoryEntry } from "@private-stock/core";
 
+import { facetLabel } from "@/lib/facetLabels";
 import { useFaceHistory, useUndoFaceDecision } from "@/lib/api/faces";
 import { itemHref } from "@/lib/lookMoment";
 
@@ -49,7 +50,7 @@ const WHERE: Record<string, string> = {
 };
 
 const describe = (entry: FaceHistoryEntry): string => {
-    const who = entry.performer?.name ?? "a performer since deleted";
+    const who = entry.performer?.name ?? `a ${facetLabel("performer").toLowerCase()} since deleted`;
 
     if (entry.verdict === "later") return `Can't tell — ${faces(entry.faceCount)}`;
     if (entry.verdict === "notOnePerson") return `Not one person — ${faces(entry.faceCount)}`;

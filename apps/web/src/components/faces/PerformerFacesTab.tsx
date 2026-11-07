@@ -19,6 +19,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import type { FaceReviewFace, PersonCard } from "@private-stock/core";
 
+import { facetLabel } from "@/lib/facetLabels";
 import { useDecidePerformerPeople, usePerformerPeople, useSetNoSingleFace } from "@/lib/api/faces";
 
 import { FaceViewDrawer } from "./FaceViewDrawer";
@@ -112,11 +113,12 @@ const NoSingleFace: React.FC<{
             <Popover.Dropdown>
                 <Stack gap="xs" maw={320}>
                     <Text size="sm">
-                        For a performer whose face never shows, or a name that is not one person.
-                        Face matching then leaves {name} out: no face is learned for them, their
-                        tags stop counting as evidence about anybody&apos;s face, and nothing is
-                        suggested or tagged for them by a face — by name only. Anything confirmed is
-                        kept, so undoing it puts everything back.
+                        For a {facetLabel("performer").toLowerCase()} whose face never shows, or a
+                        name that is not one person. Face matching then leaves {name} out: no face
+                        is learned for them, their tags stop counting as evidence about
+                        anybody&apos;s face, and nothing is suggested or tagged for them by a face —
+                        by name only. Anything confirmed is kept, so undoing it puts everything
+                        back.
                     </Text>
                     <Group gap="xs">
                         <Button

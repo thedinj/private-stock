@@ -55,7 +55,9 @@ export async function GET(request: Request) {
                     verifying: mediaFileRepo.countUnverifiedByRoot(root.id),
                 })),
             candidates: await listCandidates(),
-            scanning: scanRepo.isAnyRunning(),
+            scanning: auth.domain
+                ? scanRepo.isRunningInDomain(auth.domain)
+                : scanRepo.isAnyRunning(),
         });
     } catch (error) {
         return toErrorResponse(error, request);

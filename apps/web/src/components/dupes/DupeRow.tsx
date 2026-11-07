@@ -207,16 +207,21 @@ export const DupeRow = forwardRef<HTMLDivElement, DupeRowProps>(
                     );
                 });
 
+            // The room's accent (§21), read off the page: a keyframe is resolved when the
+            // animation is built, so the variable is asked for its value rather than named.
+            const accent =
+                getComputedStyle(document.documentElement)
+                    .getPropertyValue("--ps-accent-rgb")
+                    .trim() || "228, 185, 85";
             const glow = animate(
                 frame,
                 [
-                    { boxShadow: "0 0 0 0 rgba(228, 185, 85, 0)" },
+                    { boxShadow: `0 0 0 0 rgba(${accent}, 0)` },
                     {
-                        boxShadow:
-                            "0 0 0 2px rgba(228, 185, 85, 0.95), 0 0 36px 4px rgba(228, 185, 85, 0.35)",
+                        boxShadow: `0 0 0 2px rgba(${accent}, 0.95), 0 0 36px 4px rgba(${accent}, 0.35)`,
                         offset: 0.4,
                     },
-                    { boxShadow: "0 0 0 0 rgba(228, 185, 85, 0)" },
+                    { boxShadow: `0 0 0 0 rgba(${accent}, 0)` },
                 ],
                 { duration: DURATION.arrive, delay: DURATION.move * 0.75 }
             );

@@ -236,6 +236,47 @@ describe("matching strings", () => {
     });
 });
 
+describe("rooms (§21)", () => {
+    beforeEach(() => {
+        db.prepare(
+            `INSERT INTO "Tag" ("id", "domain", "kind", "name", "nameNorm", "createdAt", "updatedAt")
+             VALUES ('jane-family', 'family', 'performer', 'Jane Doe', 'jane doe',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        ).run();
+        mediaTextRepo.replaceMachineFindings("m1", [finding("Jane Doe")]);
+        repo.rematchStrings(["jane doe"]);
+    });
+
+    it("reads one caption against every room's names", () => {
+        expect(
+            pairs()
+                .map((pair) => pair.tagId)
+                .sort()
+        ).toEqual(["jane", "jane-family"]);
+    });
+
+    it("offers a room only its own names for it", () => {
+        expect(repo.candidatesFor(["jane doe"], "cellar").map((pair) => pair.tagId)).toEqual([
+            "jane",
+        ]);
+        expect(repo.candidatesFor(["jane doe"], "family").map((pair) => pair.tagId)).toEqual([
+            "jane-family",
+        ]);
+        expect(repo.candidatesFor(["jane doe"], "games")).toEqual([]);
+    });
+
+    it("lists a rule only in the room of the tag it names", () => {
+        const cellar = repo.candidatesFor(["jane doe"], "cellar")[0]!;
+        repo.decide([cellar.id], "accepted", USER);
+
+        const rules = (domain: string) =>
+            repo.listQueue({ domain, status: "accepted", after: null, limit: 10 }).rows;
+
+        expect(rules("cellar").map((row) => row.textNorm)).toEqual(["jane doe"]);
+        expect(rules("family")).toEqual([]);
+    });
+});
+
 describe("pending counts", () => {
     beforeEach(() => {
         for (const mediaId of MEDIA) {

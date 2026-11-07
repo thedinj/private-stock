@@ -12,6 +12,7 @@ import {
     useRejectOcrMatch,
     useSkipOnItem,
 } from "@/lib/api/ocr";
+import { facetLabel } from "@/lib/facetLabels";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { applyQueueDecision, type QueueDecision } from "@/lib/ocrReview";
 import { isTypingTarget } from "@/lib/typingTarget";
@@ -266,8 +267,9 @@ export const OcrQueueSheet: React.FC<{
         <Stack gap="md">
             <Group gap="sm" wrap="nowrap" align="flex-start">
                 <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-                    Items whose text names a performer or source you have not decided about. Tagging
-                    also tags everything else showing the same text, now and as it is read.
+                    Items whose text names a {facetLabel("performer").toLowerCase()} or{" "}
+                    {facetLabel("source").toLowerCase()} you have not decided about. Tagging also
+                    tags everything else showing the same text, now and as it is read.
                 </Text>
                 <Popover position="bottom-end" withArrow>
                     <Popover.Target>

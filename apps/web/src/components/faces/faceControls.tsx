@@ -6,6 +6,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 
 import { normalizeName } from "@private-stock/core";
 
+import { facetLabel } from "@/lib/facetLabels";
 import { TagNameInput } from "@/components/tags/TagNameInput";
 import { useTagSearch } from "@/lib/api/tags";
 
@@ -76,7 +77,7 @@ export const NameBox: React.FC<{
                     onSearchChange={setTyped}
                     maxTags={1}
                     placeholder="Who is this?"
-                    aria-label="Performer name"
+                    aria-label={`${facetLabel("performer")} name`}
                     autoFocus={autoFocus}
                     comboboxProps={SUGGESTIONS}
                     style={{ flex: "1 1 220px", minWidth: 0 }}
@@ -88,7 +89,11 @@ export const NameBox: React.FC<{
                     loading={busy}
                     onClick={() => onName(name)}
                 >
-                    {name ? (coining ? `New performer: ${action(name)}` : action(name)) : "Tag"}
+                    {name
+                        ? coining
+                            ? `New ${facetLabel("performer").toLowerCase()}: ${action(name)}`
+                            : action(name)
+                        : "Tag"}
                 </Button>
             </Group>
             {coining && offered.length > 0 && (

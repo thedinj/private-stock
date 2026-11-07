@@ -38,7 +38,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: false, reason: null });
         }
 
-        const checked = await checkLibraryPath(body.path, body.excludeId);
+        const checked = await checkLibraryPath(body.path, auth.domain, body.excludeId);
 
         if (!checked.ok) {
             return NextResponse.json({ ok: false, reason: checked.reason });

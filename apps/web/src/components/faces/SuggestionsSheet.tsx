@@ -18,6 +18,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import type { FaceReviewFace, ReviewMedia, Suggestion } from "@private-stock/core";
 
+import { facetLabel } from "@/lib/facetLabels";
 import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { useDecideSuggestions, useSuggestionPeople, useSuggestions } from "@/lib/api/faces";
 
@@ -345,8 +346,8 @@ export const SuggestionsSheet: React.FC<{
         ) : (
             <>
                 <Text size="sm" c="dimmed">
-                    People in items who look clearly like a performer, one card for each person in
-                    each item. Only clear matches are asked about.
+                    People in items who look clearly like a {facetLabel("performer").toLowerCase()},
+                    one card for each person in each item. Only clear matches are asked about.
                 </Text>
                 <SuggestionPeople media={media} onPerformer={(tagId) => onPerformer(tagId)} />
             </>
