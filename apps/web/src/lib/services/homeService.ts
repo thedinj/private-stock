@@ -19,6 +19,7 @@ import {
 
 import type { AuthContext } from "../auth/withAuth";
 import { createTtlCache } from "../ttlCache";
+import { inRequestDomain, requestDomain } from "./requestDomain";
 import { listMedia, toListPage } from "./mediaService";
 import { queryCacheKey } from "./queryCacheKey";
 import { findSavedQuery } from "./savedFilterService";
@@ -249,7 +250,11 @@ const resolveShelf = (
          * here the two are the same fact and distinguishing them would say more about the
          * owner's choices than this viewer is entitled to know.
          */
-        if (!row || (row.ownerId !== auth.userId && row.visibility !== "shared")) {
+        if (
+            !row ||
+            !inRequestDomain(row.domain, auth) ||
+            (row.ownerId !== auth.userId && row.visibility !== "shared")
+        ) {
             return unavailable(
                 key,
                 shelf.title ?? "Playlist",
@@ -310,7 +315,7 @@ const safeJson = (raw: string): unknown => {
  * every account on whatever it happened to be that day.
  */
 const layoutFor = (auth: AuthContext): { layout: HomeLayout; isDefault: boolean } => {
-    const own = homeLayoutRepo.find(auth.userId);
+    const own = homeLayoutRepo.find(auth.userId, requestDomain(auth));
 
     if (own) {
         const parsed = homeLayoutSchema.safeParse(safeJson(own));
@@ -364,7 +369,7 @@ const pinnedFilterShelves = (layout: HomeLayout, auth: AuthContext): Shelf[] => 
     );
 
     return savedFilterRepo
-        .listVisibleTo(auth.userId)
+        .listVisibleTo(auth.userId, requestDomain(auth))
         .filter(
             (row) => row.pinned === 1 && row.userId === auth.userId && !alreadyPlaced.has(row.id)
         )
@@ -398,10 +403,10 @@ export const getHome = (auth: AuthContext, seed?: number): HomeResponse =>
         .deferred();
 
 export const saveHomeLayout = (layout: HomeLayout, auth: AuthContext): void => {
-    homeLayoutRepo.save(auth.userId, JSON.stringify(layout));
+    homeLayoutRepo.save(auth.userId, requestDomain(auth), JSON.stringify(layout));
 };
 
 /** Going back to the inherited default, which is deleting the row rather than copying it in. */
 export const resetHomeLayout = (auth: AuthContext): void => {
-    homeLayoutRepo.clear(auth.userId);
+    homeLayoutRepo.clear(auth.userId, requestDomain(auth));
 };

@@ -510,15 +510,16 @@ const homeShelves = (viewer: Viewer): Shelf[] => {
             return null;
         }
     };
+    // Measured in the cellar, where the library this tool was written against lives (§21).
     const layout =
-        parse(homeLayoutRepo.find(viewer.userId)) ??
+        parse(homeLayoutRepo.find(viewer.userId, "cellar")) ??
         parse(settingRepo.getRaw(SETTING_KEYS.homeLayout)) ??
         DEFAULT_HOME_LAYOUT;
     const placed = new Set(
         layout.filter((shelf) => shelf.source === "filter").map((shelf) => shelf.filterId)
     );
     const pinned = savedFilterRepo
-        .listVisibleTo(viewer.userId)
+        .listVisibleTo(viewer.userId, "cellar")
         .filter((row) => row.pinned === 1 && row.userId === viewer.userId && !placed.has(row.id))
         .sort((left, right) => left.position - right.position)
         .map((row): Shelf => ({ source: "filter", filterId: row.id, limit: 12 }));

@@ -15,6 +15,7 @@ import { collectionPinRepo, db, mediaRepo, playlistRepo } from "@private-stock/d
 
 import type { AuthContext } from "../auth/withAuth";
 import { PAGE_SIZE } from "../libraryQuery";
+import { inRequestDomain, requestDomain } from "./requestDomain";
 import { STRIP_COUNT, coverCandidates, coverMosaics } from "./coverMosaic";
 import { assertMayShare } from "./collectionAccess";
 import { toListPage } from "./mediaService";
@@ -112,7 +113,11 @@ const toPlaylist = (
 const readable = (playlistId: string, auth: AuthContext): playlistRepo.PlaylistSummaryRow => {
     const row = playlistRepo.findSummary(playlistId);
 
-    if (!row || (row.ownerId !== auth.userId && row.visibility !== "shared")) {
+    if (
+        !row ||
+        !inRequestDomain(row.domain, auth) ||
+        (row.ownerId !== auth.userId && row.visibility !== "shared")
+    ) {
         throw new NotFoundError("Playlist not found");
     }
 
@@ -130,7 +135,7 @@ const writable = (playlistId: string, auth: AuthContext): playlistRepo.PlaylistS
 };
 
 export const listPlaylists = (auth: AuthContext): Playlist[] => {
-    const rows = playlistRepo.listVisibleTo(auth.userId);
+    const rows = playlistRepo.listVisibleTo(auth.userId, requestDomain(auth));
     const covers = coversFor(rows, auth);
     const pins = collectionPinRepo.pinsFor(auth.userId, "playlist");
 
@@ -180,6 +185,7 @@ export const createPlaylist = (input: CreatePlaylistInput, auth: AuthContext): P
     const id = db.transaction((): string => {
         const created = playlistRepo.create({
             ownerId: auth.userId,
+            domain: requestDomain(auth),
             name: input.name,
             description: input.description ?? null,
             visibility: input.visibility,

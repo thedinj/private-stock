@@ -60,6 +60,7 @@ let sequence = 0;
 
 const newReel = (ownerId = USER, visibility: "private" | "shared" = "private"): string =>
     reelRepo.create({
+        domain: "cellar",
         ownerId,
         name: `Reel ${(sequence += 1)}`,
         description: null,
@@ -341,8 +342,8 @@ describe("the index", () => {
             page: 0,
         };
 
-        expect(reelRepo.listVisibleTo(query, USER, "desc")).toHaveLength(2);
-        expect(reelRepo.countVisibleTo(query, USER)).toBe(2);
+        expect(reelRepo.listVisibleTo(query, USER, "cellar", "desc")).toHaveLength(2);
+        expect(reelRepo.countVisibleTo(query, USER, "cellar")).toBe(2);
     });
 
     it("narrows to mine, and to what the house offered", () => {
@@ -351,22 +352,24 @@ describe("the index", () => {
 
         const base = { sort: "updated" as const, limit: 50, page: 0 };
 
-        expect(reelRepo.listVisibleTo({ ...base, ownership: "mine" }, USER, "desc")).toHaveLength(
-            1
-        );
-        expect(reelRepo.listVisibleTo({ ...base, ownership: "shared" }, USER, "desc")).toHaveLength(
-            1
-        );
+        expect(
+            reelRepo.listVisibleTo({ ...base, ownership: "mine" }, USER, "cellar", "desc")
+        ).toHaveLength(1);
+        expect(
+            reelRepo.listVisibleTo({ ...base, ownership: "shared" }, USER, "cellar", "desc")
+        ).toHaveLength(1);
     });
 
     it("searches name and description with LIKE, and escapes the wildcards", () => {
         reelRepo.create({
+            domain: "cellar",
             ownerId: USER,
             name: "Florida 2026",
             description: "family cut",
             visibility: "private",
         });
         reelRepo.create({
+            domain: "cellar",
             ownerId: USER,
             name: "100% keepers",
             description: null,
@@ -375,10 +378,16 @@ describe("the index", () => {
 
         const base = { ownership: "all" as const, sort: "name" as const, limit: 50, page: 0 };
 
-        expect(reelRepo.listVisibleTo({ ...base, search: "flor" }, USER, "asc")).toHaveLength(1);
-        expect(reelRepo.listVisibleTo({ ...base, search: "family" }, USER, "asc")).toHaveLength(1);
+        expect(
+            reelRepo.listVisibleTo({ ...base, search: "flor" }, USER, "cellar", "asc")
+        ).toHaveLength(1);
+        expect(
+            reelRepo.listVisibleTo({ ...base, search: "family" }, USER, "cellar", "asc")
+        ).toHaveLength(1);
         // A bare "%" would otherwise match everything.
-        expect(reelRepo.listVisibleTo({ ...base, search: "100%" }, USER, "asc")).toHaveLength(1);
+        expect(
+            reelRepo.listVisibleTo({ ...base, search: "100%" }, USER, "cellar", "asc")
+        ).toHaveLength(1);
     });
 
     it("sorts by running time, which speed changes", () => {
@@ -391,6 +400,7 @@ describe("the index", () => {
         const ordered = reelRepo.listVisibleTo(
             { ownership: "all", sort: "duration", limit: 50, page: 0 },
             USER,
+            "cellar",
             "desc"
         );
 

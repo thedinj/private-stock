@@ -24,6 +24,8 @@ import { db } from "../db.js";
 export interface PlaylistRow {
     id: string;
     ownerId: string;
+    /** The room it belongs to (§21). */
+    domain: string;
     name: string;
     description: string | null;
     visibility: "private" | "shared";
@@ -42,6 +44,7 @@ export interface PlaylistSummaryRow extends PlaylistRow {
 
 export interface NewPlaylistInput {
     ownerId: string;
+    domain: string;
     name: string;
     description: string | null;
     visibility: "private" | "shared";
@@ -66,12 +69,13 @@ export const create = (input: NewPlaylistInput): string => {
 
     db.prepare(
         `INSERT INTO "Playlist"
-             ("id", "ownerId", "name", "description", "visibility", "pinned", "position",
-              "updatedAt")
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+             ("id", "ownerId", "domain", "name", "description", "visibility", "pinned",
+              "position", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(
         id,
         input.ownerId,
+        input.domain,
         input.name,
         input.description,
         input.visibility,
@@ -100,17 +104,18 @@ export const findSummary = (id: string): PlaylistSummaryRow | undefined =>
  * Someone else's pin and position describe their sidebar, not this one, so a shared playlist
  * from another account falls to the end and sorts by name.
  */
-export const listVisibleTo = (userId: string): PlaylistSummaryRow[] =>
+export const listVisibleTo = (userId: string, domain: string): PlaylistSummaryRow[] =>
     db
         .prepare(
             `${SUMMARY_SELECTION}
-              WHERE p."ownerId" = :userId OR p."visibility" = 'shared'
+              WHERE (p."ownerId" = :userId OR p."visibility" = 'shared')
+                AND p."domain" = :domain
               ORDER BY (p."ownerId" = :userId) DESC,
                        (p."ownerId" = :userId AND p."pinned" IS NOT NULL) DESC,
                        CASE WHEN p."ownerId" = :userId THEN p."position" ELSE 0 END ASC,
                        p."name" COLLATE NOCASE ASC`
         )
-        .all({ userId }) as PlaylistSummaryRow[];
+        .all({ userId, domain }) as PlaylistSummaryRow[];
 
 export const update = (id: string, input: UpdatePlaylistInput): void => {
     const sets: string[] = [];

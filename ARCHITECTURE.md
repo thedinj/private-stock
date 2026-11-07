@@ -11879,12 +11879,26 @@ the box says (`domainProfiles[d].facets`): People in the Parlour; Players in the
 `source` is the Game. The kinds stay as they are, so no row moves and there is no second code
 path.
 
+### Playlists, reels, saved views and the home page belong to a room
+
+Their contents were already narrowed — every item is read through the request's roots — but
+their names were not, and the Parlour's sidebar must not list a playlist named for something in
+the Cellar. `Playlist`, `Reel` and `SavedFilter` carry `domain`, set from the request that makes
+them; lists are filtered by it, and one opened from another room reads as not found, the house
+convention for something you may not see. `HomeLayout` is keyed `(userId, domain)` — a shelf names
+a playlist or a view, so one arrangement for every room would fill the Parlour with shelves it
+cannot open, each still carrying its Cellar title.
+
+**Names stay unique per owner across rooms** for playlists and reels, because that is a table
+constraint and rebuilding two tables to relax it bought nothing for one person: a second
+"Christmas" in another room is refused, and the refusal tells its owner only what they already
+know. Saved views had no constraint, so their names are per room.
+
 ### Still to build
 
 - **Tag vocabulary per domain** (`Tag.domain`). Tags hang off no root, so the narrowed context
   does not reach them: until this lands the filter panel, the tag pages and face suggestions
   draw on every room's names. It is why this is not usable yet.
-- **Playlists, reels, saved views and home layout per domain.**
 - **Stage policy per domain** — faces off in the Game Room; the faces auto-tag stays on in the
   Parlour as in the Cellar.
 - **A look per room**, chosen in rounds of mockups, and the facet labels read from the profile.

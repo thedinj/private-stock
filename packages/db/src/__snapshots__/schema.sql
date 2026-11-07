@@ -254,9 +254,11 @@ CREATE TABLE "FaceStale" (
         ) WITHOUT ROWID;
 
 CREATE TABLE "HomeLayout" (
-            "userId" TEXT NOT NULL PRIMARY KEY,
+            "userId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL CHECK(length("domain") BETWEEN 1 AND 32),
             "rowsJson" TEXT NOT NULL CHECK(length("rowsJson") <= 20000),
             "updatedAt" DATETIME NOT NULL,
+            PRIMARY KEY ("userId", "domain"),
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE
         );
 
@@ -817,6 +819,7 @@ CREATE TABLE "PhashVideo" (
 CREATE TABLE "Playlist" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "visibility" TEXT NOT NULL DEFAULT 'private'
@@ -853,6 +856,7 @@ CREATE TABLE "PlaylistItem" (
 CREATE TABLE "Reel" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "visibility" TEXT NOT NULL DEFAULT 'private'
@@ -902,6 +906,7 @@ CREATE TABLE "RefreshToken" (
 CREATE TABLE "SavedFilter" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "userId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "queryJson" TEXT NOT NULL CHECK(length("queryJson") <= 8000),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),

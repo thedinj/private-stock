@@ -26,6 +26,8 @@ import { db } from "../db.js";
 export interface ReelRow {
     id: string;
     ownerId: string;
+    /** The room it belongs to (§21). Names stay unique per owner across rooms. */
+    domain: string;
     name: string;
     description: string | null;
     visibility: "private" | "shared";
@@ -51,6 +53,7 @@ export interface ReelEntryRow {
 
 export interface NewReelInput {
     ownerId: string;
+    domain: string;
     name: string;
     description: string | null;
     visibility: "private" | "shared";
@@ -77,9 +80,9 @@ export const create = (input: NewReelInput): string => {
 
     db.prepare(
         `INSERT INTO "Reel"
-             ("id", "ownerId", "name", "description", "visibility", "updatedAt")
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
-    ).run(id, input.ownerId, input.name, input.description, input.visibility);
+             ("id", "ownerId", "domain", "name", "description", "visibility", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+    ).run(id, input.ownerId, input.domain, input.name, input.description, input.visibility);
 
     return id;
 };
@@ -111,10 +114,11 @@ const SORT_COLUMNS: Record<ReelQuery["sort"], string> = {
  */
 const buildVisible = (
     query: ReelQuery,
-    userId: string
+    userId: string,
+    domain: string
 ): { where: string; params: Record<string, unknown> } => {
-    const params: Record<string, unknown> = { userId };
-    const clauses: string[] = [];
+    const params: Record<string, unknown> = { userId, domain };
+    const clauses: string[] = [`r."domain" = :domain`];
 
     if (query.ownership === "mine") {
         clauses.push(`r."ownerId" = :userId`);
@@ -137,9 +141,10 @@ const buildVisible = (
 export const listVisibleTo = (
     query: ReelQuery,
     userId: string,
+    domain: string,
     direction: "asc" | "desc"
 ): ReelSummaryRow[] => {
-    const { where, params } = buildVisible(query, userId);
+    const { where, params } = buildVisible(query, userId, domain);
     const order = direction === "asc" ? "ASC" : "DESC";
 
     return db
@@ -155,8 +160,8 @@ export const listVisibleTo = (
         }) as ReelSummaryRow[];
 };
 
-export const countVisibleTo = (query: ReelQuery, userId: string): number => {
-    const { where, params } = buildVisible(query, userId);
+export const countVisibleTo = (query: ReelQuery, userId: string, domain: string): number => {
+    const { where, params } = buildVisible(query, userId, domain);
 
     return (db.prepare(`SELECT COUNT(*) AS n FROM "Reel" r ${where}`).get(params) as { n: number })
         .n;

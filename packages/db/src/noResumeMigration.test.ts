@@ -41,8 +41,8 @@ beforeEach(() => {
          VALUES ('u1', 'u1@example.test', 'U1', 'x', CURRENT_TIMESTAMP)`
     ).run();
     db.prepare(
-        `INSERT INTO "HomeLayout" ("userId", "rowsJson", "updatedAt")
-         VALUES ('u1', ?, CURRENT_TIMESTAMP)`
+        `INSERT INTO "HomeLayout" ("userId", "domain", "rowsJson", "updatedAt")
+         VALUES ('u1', 'cellar', ?, CURRENT_TIMESTAMP)`
     ).run(OLD_LAYOUT);
     db.prepare(
         `INSERT INTO "Setting" ("key", "value", "updatedAt")

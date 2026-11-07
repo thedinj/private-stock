@@ -19,6 +19,8 @@ import { db } from "../db.js";
 export interface SavedFilterRow {
     id: string;
     userId: string;
+    /** The room it belongs to (§21). */
+    domain: string;
     name: string;
     queryJson: string;
     description: string | null;
@@ -42,6 +44,7 @@ const SUMMARY_SELECTION = `
 
 export interface NewSavedFilterInput {
     userId: string;
+    domain: string;
     name: string;
     queryJson: string;
     description: string | null;
@@ -61,12 +64,13 @@ export const create = (input: NewSavedFilterInput): string => {
 
     db.prepare(
         `INSERT INTO "SavedFilter"
-             ("id", "userId", "name", "queryJson", "description", "visibility", "resolveAs",
-              "pinned", "position", "updatedAt")
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+             ("id", "userId", "domain", "name", "queryJson", "description", "visibility",
+              "resolveAs", "pinned", "position", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(
         id,
         input.userId,
+        input.domain,
         input.name,
         input.queryJson,
         input.description,
@@ -100,10 +104,15 @@ export const findVisibleTo = (id: string, userId: string): SavedFilterSummaryRow
         )
         .get({ id, userId }) as SavedFilterSummaryRow | undefined;
 
-export const findByName = (userId: string, name: string): SavedFilterRow | undefined =>
+/** A name is the owner's within one room (§21): the same name may mean a view in each. */
+export const findByName = (
+    userId: string,
+    domain: string,
+    name: string
+): SavedFilterRow | undefined =>
     db
-        .prepare(`SELECT * FROM "SavedFilter" WHERE "userId" = ? AND "name" = ?`)
-        .get(userId, name) as SavedFilterRow | undefined;
+        .prepare(`SELECT * FROM "SavedFilter" WHERE "userId" = ? AND "domain" = ? AND "name" = ?`)
+        .get(userId, domain, name) as SavedFilterRow | undefined;
 
 /**
  * What this user can open: their own, plus everything anyone has shared.
@@ -112,17 +121,18 @@ export const findByName = (userId: string, name: string): SavedFilterRow | undef
  * their arrangement of their own sidebar and mean nothing here, so shared filters from other
  * accounts fall to the end and sort by name.
  */
-export const listVisibleTo = (userId: string): SavedFilterSummaryRow[] =>
+export const listVisibleTo = (userId: string, domain: string): SavedFilterSummaryRow[] =>
     db
         .prepare(
             `${SUMMARY_SELECTION}
-              WHERE f."userId" = :userId OR f."visibility" = 'shared'
+              WHERE (f."userId" = :userId OR f."visibility" = 'shared')
+                AND f."domain" = :domain
               ORDER BY (f."userId" = :userId) DESC,
                        (f."userId" = :userId AND f."pinned" IS NOT NULL) DESC,
                        CASE WHEN f."userId" = :userId THEN f."position" ELSE 0 END ASC,
                        f."name" COLLATE NOCASE ASC`
         )
-        .all({ userId }) as SavedFilterSummaryRow[];
+        .all({ userId, domain }) as SavedFilterSummaryRow[];
 
 export interface UpdateSavedFilterFields {
     name?: string;

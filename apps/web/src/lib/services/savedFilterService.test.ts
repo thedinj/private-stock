@@ -23,6 +23,7 @@ import type { AuthContext } from "../auth/withAuth";
 interface FilterFixture {
     id: string;
     userId: string;
+    domain: string;
     name: string;
     queryJson: string;
     description: string | null;
@@ -78,6 +79,7 @@ vi.mock("@private-stock/db", () => ({
     savedFilterRepo: {
         create: (input: {
             userId: string;
+            domain: string;
             name: string;
             queryJson: string;
             description: string | null;
@@ -88,6 +90,7 @@ vi.mock("@private-stock/db", () => ({
             const row: FilterFixture = {
                 id: `f${filters.length + 1}`,
                 userId: input.userId,
+                domain: input.domain,
                 name: input.name,
                 queryJson: input.queryJson,
                 description: input.description,
@@ -112,10 +115,13 @@ vi.mock("@private-stock/db", () => ({
 
             return row ? withOwner(row) : undefined;
         },
-        findByName: (userId: string, name: string) =>
-            filters.find((row) => row.userId === userId && row.name === name),
-        listVisibleTo: (userId: string) =>
+        findByName: (userId: string, domain: string, name: string) =>
+            filters.find(
+                (row) => row.userId === userId && row.domain === domain && row.name === name
+            ),
+        listVisibleTo: (userId: string, domain: string) =>
             filters
+                .filter((row) => row.domain === domain)
                 .filter((row) => row.userId === userId || row.visibility === "shared")
                 .map(withOwner),
         update: (
@@ -183,7 +189,7 @@ const asUser = (userId: string, scopes: string[] = []): AuthContext =>
         displayName: userId,
         scopes,
         accessibleRootIds: ["root"],
-        domain: null,
+        domain: "cellar",
     }) as AuthContext;
 
 /**
@@ -232,6 +238,18 @@ beforeEach(() => {
 });
 
 describe("ownership", () => {
+    it("does not find a view from another room, even its owner's own (§21)", () => {
+        const made = newFilter();
+        const id = made.id;
+        const elsewhere = { ...ME, domain: "family" } as AuthContext;
+
+        expect(listSavedFilters(elsewhere)).toEqual([]);
+        expect(() => updateSavedFilter(id, { name: "Moved" }, elsewhere)).toThrow(NotFoundError);
+        expect(() => resolveSavedQuery(id, 0, elsewhere)).toThrow(NotFoundError);
+        // The same name is free in another room.
+        expect(() => newFilter({ name: made.name }, elsewhere)).not.toThrow();
+    });
+
     it("does not find another account's private filter, whatever is done to it", () => {
         const id = newFilter().id;
 

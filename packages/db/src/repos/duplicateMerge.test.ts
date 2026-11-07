@@ -302,6 +302,7 @@ describe("taking the departing copy's place in a playlist", () => {
 
     const givenPlaylist = (mediaIds: string[]): string => {
         const id = playlistRepo.create({
+            domain: "cellar",
             ownerId: "u1",
             name: `Evening ${(nextName += 1)}`,
             description: null,

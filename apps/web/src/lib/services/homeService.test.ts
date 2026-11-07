@@ -42,7 +42,7 @@ vi.mock("@private-stock/db", () => ({
     },
     homeLayoutRepo: {
         find: () => storedLayout,
-        save: (_userId: string, rowsJson: string) => {
+        save: (_userId: string, _domain: string, rowsJson: string) => {
             storedLayout = rowsJson;
         },
         clear: () => {
@@ -54,6 +54,7 @@ vi.mock("@private-stock/db", () => ({
             filters
                 .filter((entry) => entry.userId === userId || entry.visibility === "shared")
                 .map((entry) => ({
+                    domain: "cellar",
                     ...entry,
                     pinned: entry.pinned ?? null,
                     position: entry.position ?? 0,
@@ -65,11 +66,15 @@ vi.mock("@private-stock/db", () => ({
                     entry.id === id && (entry.userId === userId || entry.visibility === "shared")
             );
 
-            return row ? { ...row, ownerName: "Someone" } : undefined;
+            return row ? { domain: "cellar", ...row, ownerName: "Someone" } : undefined;
         },
     },
     playlistRepo: {
-        findSummary: (id: string) => playlists.find((row) => row.id === id),
+        findSummary: (id: string) => {
+            const row = playlists.find((entry) => entry.id === id);
+
+            return row ? { domain: "cellar", ...row } : undefined;
+        },
         listItemIds: () => ["m1"],
     },
     tagRepo: {
@@ -123,7 +128,7 @@ const AUTH = {
     displayName: "Me",
     scopes: [],
     accessibleRootIds: ["root"],
-    domain: null,
+    domain: "cellar",
 } as unknown as AuthContext;
 
 beforeEach(() => {

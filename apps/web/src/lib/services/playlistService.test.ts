@@ -16,6 +16,8 @@ import type { AuthContext } from "../auth/withAuth";
 interface PlaylistFixture {
     id: string;
     ownerId: string;
+    /** The room (§21); a fixture written without one is the cellar's. */
+    domain?: string;
     visibility: "private" | "shared";
     /** The owner's pin — their own sidebar when private, the household default when shared. */
     pinned: 1 | null;
@@ -39,6 +41,7 @@ let reads: string[] = [];
 
 const summary = (row: PlaylistFixture) => ({
     ...row,
+    domain: row.domain ?? "cellar",
     // From the row, not hardcoded: both decide where a collection lands for a viewer, and a
     // summary that flattened them would make the per-viewer pin tests meaningless.
     name: row.name ?? "A list",
@@ -115,8 +118,9 @@ vi.mock("@private-stock/db", () => ({
 
             return row ? summary(row) : undefined;
         },
-        listVisibleTo: (userId: string) =>
+        listVisibleTo: (userId: string, domain: string) =>
             playlists
+                .filter((row) => (row.domain ?? "cellar") === domain)
                 .filter((row) => row.ownerId === userId || row.visibility === "shared")
                 .map(summary),
         update: (id: string, patch: { visibility?: "private" | "shared"; pinned?: boolean }) => {
@@ -206,7 +210,7 @@ const asUser = (userId: string, scopes: string[] = []): AuthContext =>
         displayName: userId,
         scopes,
         accessibleRootIds: ["root"],
-        domain: null,
+        domain: "cellar",
     }) as AuthContext;
 
 /**

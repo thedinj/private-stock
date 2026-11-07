@@ -15,6 +15,7 @@ import {
 import { collectionPinRepo, savedFilterRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
+import { inRequestDomain, requestDomain } from "./requestDomain";
 import { assertMayShare } from "./collectionAccess";
 
 /**
@@ -93,7 +94,7 @@ export const findSavedQuery = (
 } | null => {
     const row = savedFilterRepo.findVisibleTo(id, auth.userId);
 
-    if (!row) {
+    if (!row || !inRequestDomain(row.domain, auth)) {
         return null;
     }
 
@@ -132,7 +133,7 @@ export const overlayForRequest = (
     const row = savedFilterRepo.findVisibleTo(filterId, auth.userId);
     const saved = row ? parseQuery(row.queryJson) : null;
 
-    if (!row || !saved) {
+    if (!row || !saved || !inRequestDomain(row.domain, auth)) {
         return undefined;
     }
 
@@ -208,7 +209,7 @@ export const listSavedFilters = (auth: AuthContext): SavedFilter[] => {
 
     return (
         savedFilterRepo
-            .listVisibleTo(auth.userId)
+            .listVisibleTo(auth.userId, requestDomain(auth))
             .map((row) => toSavedFilter(row, auth, toViewerPin(pins.get(row.id))))
             // Re-sorted here, because the repo orders by the owner's pin and this viewer's pin can
             // disagree with it — a curated collection they took out, or a shared one they pinned
@@ -230,7 +231,7 @@ export const listSavedFilters = (auth: AuthContext): SavedFilter[] => {
 const readable = (id: string, auth: AuthContext): savedFilterRepo.SavedFilterSummaryRow => {
     const row = savedFilterRepo.findVisibleTo(id, auth.userId);
 
-    if (!row) {
+    if (!row || !inRequestDomain(row.domain, auth)) {
         throw new NotFoundError("Saved filter not found");
     }
 
@@ -261,7 +262,7 @@ const requireOwn = (id: string, auth: AuthContext): savedFilterRepo.SavedFilterS
  * leave two identically named entries in the sidebar with no way to tell them apart.
  */
 const assertNameFree = (name: string, auth: AuthContext, exceptId?: string): void => {
-    const clash = savedFilterRepo.findByName(auth.userId, name);
+    const clash = savedFilterRepo.findByName(auth.userId, requestDomain(auth), name);
 
     if (clash && clash.id !== exceptId) {
         throw new ConflictError(`A saved filter named "${name}" already exists`);
@@ -277,6 +278,7 @@ export const createSavedFilter = (
 
     const id = savedFilterRepo.create({
         userId: auth.userId,
+        domain: requestDomain(auth),
         name: input.name,
         queryJson: serializeQuery(input.query),
         description: input.description ?? null,

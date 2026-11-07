@@ -59,6 +59,7 @@ const newPlaylist = (
     options: { name?: string; pinned?: boolean } = {}
 ) =>
     playlistRepo.create({
+        domain: "cellar",
         ownerId,
         name: options.name ?? `List ${(sequence += 1)}`,
         description: null,
@@ -247,10 +248,26 @@ describe("visibility", () => {
         newPlaylist(FRIEND, "shared");
         const hidden = newPlaylist(FRIEND, "private");
 
-        const visible = playlistRepo.listVisibleTo(USER);
+        const visible = playlistRepo.listVisibleTo(USER, "cellar");
 
         expect(visible.map((row) => row.ownerId)).toEqual([USER, FRIEND]);
         expect(visible.map((row) => row.id)).not.toContain(hidden);
+    });
+
+    it("lists only the room it was made in, shared or not (§21)", () => {
+        const cellar = newPlaylist(FRIEND, "shared");
+        const parlour = playlistRepo.create({
+            domain: "family",
+            ownerId: FRIEND,
+            name: "Christmas",
+            description: null,
+            visibility: "shared",
+            pinned: false,
+        });
+
+        expect(playlistRepo.listVisibleTo(USER, "cellar").map((row) => row.id)).toEqual([cellar]);
+        expect(playlistRepo.listVisibleTo(USER, "family").map((row) => row.id)).toEqual([parlour]);
+        expect(playlistRepo.listVisibleTo(USER, "games")).toEqual([]);
     });
 
     it("carries the owner's name, so a shared playlist can say whose it is", () => {
@@ -265,7 +282,10 @@ describe("the owner's arrangement", () => {
         const first = newPlaylist(USER, "private", { name: "Zebra" });
         const pinned = newPlaylist(USER, "private", { name: "Aardvark", pinned: true });
 
-        expect(playlistRepo.listVisibleTo(USER).map((row) => row.id)).toEqual([pinned, first]);
+        expect(playlistRepo.listVisibleTo(USER, "cellar").map((row) => row.id)).toEqual([
+            pinned,
+            first,
+        ]);
     });
 
     /**
@@ -280,7 +300,7 @@ describe("the owner's arrangement", () => {
         const alsoTheirs = newPlaylist(FRIEND, "shared", { name: "Aardvark" });
         const mine = newPlaylist(USER, "private", { name: "Mine" });
 
-        expect(playlistRepo.listVisibleTo(USER).map((row) => row.id)).toEqual([
+        expect(playlistRepo.listVisibleTo(USER, "cellar").map((row) => row.id)).toEqual([
             mine,
             alsoTheirs,
             theirs,

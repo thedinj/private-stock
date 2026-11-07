@@ -1813,6 +1813,7 @@ export function initializeDatabase(db: Database): void {
         CREATE TABLE IF NOT EXISTS "Playlist" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "visibility" TEXT NOT NULL DEFAULT 'private'
@@ -1852,6 +1853,7 @@ export function initializeDatabase(db: Database): void {
         CREATE TABLE IF NOT EXISTS "SavedFilter" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "userId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "queryJson" TEXT NOT NULL CHECK(length("queryJson") <= 8000),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
@@ -1923,11 +1925,14 @@ export function initializeDatabase(db: Database): void {
         CREATE INDEX IF NOT EXISTS "idx_CollectionPin_lookup"
             ON "CollectionPin" ("kind", "collectionId");
 
-        -- rowsJson is an ordered list of shelf descriptors (§6).
+        -- rowsJson is an ordered list of shelf descriptors (§6). One per person per room
+        -- (§21): a shelf names a playlist or a view, and those belong to a room.
         CREATE TABLE IF NOT EXISTS "HomeLayout" (
-            "userId" TEXT NOT NULL PRIMARY KEY,
+            "userId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL CHECK(length("domain") BETWEEN 1 AND 32),
             "rowsJson" TEXT NOT NULL CHECK(length("rowsJson") <= 20000),
             "updatedAt" DATETIME NOT NULL,
+            PRIMARY KEY ("userId", "domain"),
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE
         );
 
@@ -2032,6 +2037,7 @@ export function initializeDatabase(db: Database): void {
         CREATE TABLE IF NOT EXISTS "Reel" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "name" TEXT NOT NULL CHECK(length("name") BETWEEN 1 AND 200),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "visibility" TEXT NOT NULL DEFAULT 'private'
