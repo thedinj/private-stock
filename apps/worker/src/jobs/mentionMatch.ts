@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 
 import {
     buildTagMatcher,
+    domainKinds,
     mentionsIn,
+    parseDomain,
+    type DomainKind,
     type TagMatcher,
     type TagNameEntry,
 } from "@private-stock/core";
@@ -13,7 +16,7 @@ import { breathe } from "../eventLoop.js";
 /**
  * Which tags each item's own text names (§5b "One rule for names").
  *
- * Two writers of `MediaMention`, one matcher:
+ * Two writers of `MediaMention`, one matcher per room:
  *
  * - **The index stage**, for one item, whenever it rebuilds that item's search document — its
  *   name, title or on-screen text may have changed (`mentionsForItem`).
@@ -21,6 +24,10 @@ import { breathe } from "../eventLoop.js";
  *   rename or merge can make every item name a tag it did not. The web enqueues it, held back a
  *   few seconds so a burst of names is one run, and it does nothing when the vocabulary is the one
  *   it last matched against. It also runs once after startup.
+ *
+ * **Each item is matched against its own room's names only** (§21): a Parlour filename that
+ * happens to spell a Cellar performer names nobody. An item no library claims is in no room and
+ * names nothing.
  *
  * Nothing holds the write lock while it reads: documents are read and matched outside any
  * transaction, and only items whose mentions changed are written (`mentionRepo.writeChanged`).
@@ -38,20 +45,45 @@ const CHUNK = 500;
  */
 const MATCHER_TTL_MS = 60_000;
 
-const fingerprintOf = (vocabulary: TagNameEntry[]): string =>
+const fingerprintOf = (vocabularies: Map<DomainKind, TagNameEntry[]>): string =>
     createHash("sha256")
-        .update(vocabulary.map((entry) => `${entry.tagId}\t${entry.name}`).join("\n"))
+        .update(
+            [...vocabularies]
+                .map(
+                    ([domain, vocabulary]) =>
+                        `${domain}\n${vocabulary.map((entry) => `${entry.tagId}\t${entry.name}`).join("\n")}`
+                )
+                .join("\n\n")
+        )
         .digest("hex");
 
-let cached: { loadedAt: number; matcher: TagMatcher } | null = null;
+const readVocabularies = (): Map<DomainKind, TagNameEntry[]> =>
+    new Map(domainKinds.map((domain) => [domain, mentionRepo.vocabulary(domain)]));
 
-/** The tags an item's text names, by field, with a matcher at most a minute old. */
-export const mentionsForItem = (texts: Parameters<typeof mentionsIn>[0]) => {
-    if (!cached || Date.now() - cached.loadedAt > MATCHER_TTL_MS) {
-        cached = { loadedAt: Date.now(), matcher: buildTagMatcher(mentionRepo.vocabulary()) };
+const cached = new Map<DomainKind, { loadedAt: number; matcher: TagMatcher }>();
+
+/**
+ * The tags an item's text names, by field, with its room's matcher at most a minute old. An item
+ * in no room names nothing.
+ */
+export const mentionsForItem = (
+    texts: Parameters<typeof mentionsIn>[0],
+    domain: string | null
+): ReturnType<typeof mentionsIn> => {
+    const room = parseDomain(domain);
+
+    if (!room) {
+        return [];
     }
 
-    return mentionsIn(texts, cached.matcher);
+    let entry = cached.get(room);
+
+    if (!entry || Date.now() - entry.loadedAt > MATCHER_TTL_MS) {
+        entry = { loadedAt: Date.now(), matcher: buildTagMatcher(mentionRepo.vocabulary(room)) };
+        cached.set(room, entry);
+    }
+
+    return mentionsIn(texts, entry.matcher);
 };
 
 /** The vocabulary this process last matched the whole library against. */
@@ -63,14 +95,16 @@ export const runMentionMatch = async (): Promise<void> => {
     // Until the vocabulary holds still: a name coined while a run is under way finds this job
     // claimed, so the web queues nothing, and the run itself is what has to notice.
     for (;;) {
-        const vocabulary = mentionRepo.vocabulary();
-        const fingerprint = fingerprintOf(vocabulary);
+        const vocabularies = readVocabularies();
+        const fingerprint = fingerprintOf(vocabularies);
 
         if (fingerprint === lastFingerprint) {
             return;
         }
 
-        const matcher = buildTagMatcher(vocabulary);
+        const matchers = new Map(
+            [...vocabularies].map(([domain, vocabulary]) => [domain, buildTagMatcher(vocabulary)])
+        );
         let cursor = 0;
         let read = 0;
         let written = 0;
@@ -83,10 +117,15 @@ export const runMentionMatch = async (): Promise<void> => {
             }
 
             written += mentionRepo.writeChanged(
-                documents.map((document) => ({
-                    mediaId: document.mediaId,
-                    mentions: mentionsIn(document.texts, matcher),
-                }))
+                documents.map((document) => {
+                    const room = parseDomain(document.domain);
+                    const matcher = room ? matchers.get(room) : undefined;
+
+                    return {
+                        mediaId: document.mediaId,
+                        mentions: matcher ? mentionsIn(document.texts, matcher) : [],
+                    };
+                })
             );
             read += documents.length;
             cursor = documents[documents.length - 1].cursor;
@@ -94,11 +133,16 @@ export const runMentionMatch = async (): Promise<void> => {
         }
 
         lastFingerprint = fingerprint;
-        // The index stage's matcher follows the same vocabulary from now on.
-        cached = { loadedAt: Date.now(), matcher };
+
+        // The index stage's matchers follow the same vocabulary from now on.
+        for (const [domain, matcher] of matchers) {
+            cached.set(domain, { loadedAt: Date.now(), matcher });
+        }
+
+        const names = [...vocabularies.values()].reduce((sum, list) => sum + list.length, 0);
 
         console.log(
-            `Matched ${read} item(s) against ${vocabulary.length} tag name(s); ` +
+            `Matched ${read} item(s) against ${names} tag name(s); ` +
                 `${written} item(s) name different tags than before`
         );
     }

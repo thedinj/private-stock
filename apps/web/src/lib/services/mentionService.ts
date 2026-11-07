@@ -3,6 +3,7 @@ import { faceDecisionRepo, jobRepo, mentionRepo, tagRepo } from "@private-stock/
 
 import type { AuthContext } from "../auth/withAuth";
 import { lookupMedia } from "./mediaService";
+import { inRoom } from "./room";
 
 /**
  * "Not them", said from "Find untagged" (§5d): items whose own text names a tag, but somebody
@@ -18,7 +19,7 @@ export const refuseMentions = (
 ): { refused: number } => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId)) {
+    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId) || !inRoom(tag, auth)) {
         throw new NotFoundError("Tag not found");
     }
 
@@ -55,7 +56,7 @@ export const refuseMentions = (
 export const mentionsMatching = (tagId: string, auth: AuthContext): { matching: boolean } => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId)) {
+    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId) || !inRoom(tag, auth)) {
         throw new NotFoundError("Tag not found");
     }
 

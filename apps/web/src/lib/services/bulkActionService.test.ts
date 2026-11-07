@@ -47,7 +47,7 @@ vi.mock("@private-stock/db", () => ({
         listByIds: (ids: string[]) => rows.filter((row) => ids.includes(row.id)),
     },
     tagRepo: {
-        ensureTag: (kind: string, name: string, ownerId: string | null = null) => {
+        ensureTag: (_domain: string, kind: string, name: string, ownerId: string | null = null) => {
             coined.push(name);
 
             return `${kind}:${name}:${ownerId ?? "library"}`;
@@ -63,7 +63,13 @@ vi.mock("@private-stock/db", () => ({
 
             if (!kind || !name || !owner || !known.has(tagId)) return undefined;
 
-            return { id: tagId, kind, name, ownerId: owner === "library" ? null : owner };
+            return {
+                id: tagId,
+                kind,
+                name,
+                ownerId: owner === "library" ? null : owner,
+                domain: "cellar",
+            };
         },
         resolveForUser: () => undefined,
         assign: (input: { mediaId: string; tagId: string; userId?: string | null }) => {
@@ -124,14 +130,14 @@ const { applyBulkAction } = await import("./bulkActionService");
 const ADMIN = {
     userId: "admin",
     accessibleRootIds: ["root"],
-    domain: null,
+    domain: "cellar",
     scopes: ["admin", "delete"],
 } as unknown as AuthContext;
 
 const ANNA = {
     userId: "anna",
     accessibleRootIds: ["root"],
-    domain: null,
+    domain: "cellar",
     scopes: ["delete"],
 } as unknown as AuthContext;
 

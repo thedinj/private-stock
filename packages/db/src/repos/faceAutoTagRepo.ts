@@ -45,6 +45,10 @@ export const candidates = (line: number, margin: number): AutoTagCandidate[] =>
                    JOIN "FaceAnchor" an ON an."tagId" = a."matchTagId"
                    JOIN "Media" m ON m."id" = a."mediaId" AND m."listable" = 1
                   WHERE a."legible" = 1 AND a."score" >= :line AND a."score" - a."second" >= :margin
+                    -- Only a performer of the item's own room (§21). The references are scored
+                    -- room by room already; this is the floor under an appearance written before.
+                    AND EXISTS (SELECT 1 FROM "Tag" g JOIN "MediaRoot" r ON r."domain" = g."domain"
+                                 WHERE g."id" = a."matchTagId" AND r."id" = m."listRootId")
                     AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                      WHERE mt."mediaId" = a."mediaId" AND mt."tagId" = a."matchTagId")
                     AND NOT EXISTS (SELECT 1 FROM "ItemRefusal" ir

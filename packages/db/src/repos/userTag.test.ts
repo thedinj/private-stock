@@ -51,7 +51,7 @@ beforeEach(() => {
 
 /** A tag carried by the one item, so browsing can see it. */
 const tagged = (kind: string, name: string, owner: string | null): string => {
-    const tagId = tagRepo.ensureTag(kind, name, owner);
+    const tagId = tagRepo.ensureTag("cellar", kind, name, owner);
 
     tagRepo.assign({ mediaId: MEDIA, tagId, userId: owner, createdById: owner ?? ADA });
 
@@ -60,7 +60,7 @@ const tagged = (kind: string, name: string, owner: string | null): string => {
 
 const browse = (viewerId: string, favorite?: boolean) =>
     tagRepo
-        .browseTags(null, {
+        .browseTags("cellar", null, {
             kind: "performer",
             sort: "name",
             viewerId,
@@ -110,7 +110,7 @@ describe("browsing", () => {
         expect(browse(ADA, true)).toEqual([["Dad", 1]]);
         expect(browse(BEN, true)).toEqual([["Mum", 1]]);
         expect(
-            tagRepo.browseTags(null, {
+            tagRepo.browseTags("cellar", null, {
                 kind: "performer",
                 sort: "name",
                 viewerId: ADA,

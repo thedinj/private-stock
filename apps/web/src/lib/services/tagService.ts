@@ -61,6 +61,7 @@ import { createTtlCache } from "../ttlCache";
 import { listMedia, toListPage } from "./mediaService";
 import { notThem } from "./notThem";
 import { tagsChangedOn, vocabularyChanged } from "./ocrMatchHooks";
+import { inRoom, roomOf } from "./room";
 import { picturesFor, withPictures } from "./tagPictureService";
 
 /**
@@ -103,9 +104,13 @@ const requireAdmin = (auth: AuthContext, action: string): void => {
  *
  * Reported as not-found rather than forbidden, like everything else that turns on access.
  * Forbidden would confirm the tag exists, which is half of what was being kept private.
+ *
+ * **And in the request's room** (§21). A tag of another room is not-found for the same reason:
+ * from the Parlour the Cellar's vocabulary does not exist, and a tag page, a rename or a merge
+ * reached by id must not say otherwise.
  */
-const visibleTo = (tag: { ownerId: string | null }, auth: AuthContext): boolean =>
-    tag.ownerId === null || tag.ownerId === auth.userId;
+const visibleTo = (tag: { ownerId: string | null; domain: string }, auth: AuthContext): boolean =>
+    (tag.ownerId === null || tag.ownerId === auth.userId) && inRoom(tag, auth);
 
 /**
  * The owner column for the system a write names: null for public, the viewer for private.
@@ -168,6 +173,7 @@ const toTag = (row: tagRepo.TagWithCountRow | tagRepo.TagRow): Tag => ({
  * response without them would read as the save having dropped them.
  */
 const readTag = (tagId: string): Tag => {
+    // Only ever called with a tag the caller has just checked, or just made, in its room.
     const row = tagRepo.findById(tagId);
 
     if (!row) {
@@ -216,7 +222,7 @@ export const toMediaTags = (rows: tagRepo.MediaTagRow[], auth: AuthContext): Med
  * coins a private tag of the same name.
  */
 export const listTags = (kind: string, scope: TagScope, auth: AuthContext, limit?: number): Tag[] =>
-    tagRepo.listByKind(kind, writesTo(scope, auth), limit).map(toTag);
+    tagRepo.listByKind(roomOf(auth), kind, writesTo(scope, auth), limit).map(toTag);
 
 /**
  * How many names the server considers before ordering them. The match set for anything typed
@@ -237,6 +243,7 @@ export const searchTags = (
     limit: number
 ): TagSearchResponse => {
     const { rows, near } = tagRepo.searchByKind(
+        roomOf(auth),
         kind,
         writesTo(scope, auth),
         typed,
@@ -274,7 +281,7 @@ export const searchTags = (
  * unstyled, not unsupported.
  */
 export const listFacetKinds = (auth: AuthContext): string[] => {
-    const present = new Set(tagRepo.listKinds(auth.userId).map((row) => row.kind));
+    const present = new Set(tagRepo.listKinds(roomOf(auth), auth.userId).map((row) => row.kind));
 
     const known = tagKinds.filter((kind) => present.has(kind));
     const unknown = [...present].filter((kind) => !isKnownFacet(kind)).sort();
@@ -355,12 +362,12 @@ export const applyTags = (
         // source for OCR text to name (§5d).
         const coins =
             input.mode !== "remove" &&
-            input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
+            input.names.some((name) => !tagRepo.resolveName(roomOf(auth), input.kind, name, scope));
         const tagIds =
             input.mode === "remove"
                 ? []
                 : input.names.map((name) =>
-                      tagRepo.ensureTag(input.kind, name, scope, auth.userId)
+                      tagRepo.ensureTag(roomOf(auth), input.kind, name, scope, auth.userId)
                   );
 
         /**
@@ -387,7 +394,7 @@ export const applyTags = (
              * alone, used to put a removed suggestion straight back on the chip.
              */
             for (const name of input.names) {
-                const resolved = tagRepo.resolveName(input.kind, name, scope);
+                const resolved = tagRepo.resolveName(roomOf(auth), input.kind, name, scope);
 
                 if (
                     resolved &&
@@ -458,7 +465,7 @@ export const applyTags = (
  */
 export const createTag = (input: CreateTagInput, auth: AuthContext): Tag => {
     const owner = writesTo(input.scope, auth);
-    const existing = tagRepo.resolveName(input.kind, input.name, owner);
+    const existing = tagRepo.resolveName(roomOf(auth), input.kind, input.name, owner);
 
     if (existing) {
         // A 409 rather than silently returning the existing tag: the caller asked to create
@@ -473,6 +480,7 @@ export const createTag = (input: CreateTagInput, auth: AuthContext): Tag => {
     }
 
     const id = tagRepo.ensureTag(
+        roomOf(auth),
         input.kind,
         input.name,
         owner,
@@ -533,7 +541,7 @@ export const updateTag = (tagId: string, input: UpdateTagInput, auth: AuthContex
      */
     if (input.name || moved) {
         const name = input.name ?? existing.name;
-        const clash = tagRepo.resolveName(kind, name, existing.ownerId);
+        const clash = tagRepo.resolveName(existing.domain, kind, name, existing.ownerId);
 
         if (clash && clash.tag.id !== tagId) {
             throw new ConflictError(
@@ -687,7 +695,7 @@ export const mergeTags = (
 const ownedTag = (tagId: string, auth: AuthContext) => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || tag.ownerId !== auth.userId) {
+    if (!tag || tag.ownerId !== auth.userId || !inRoom(tag, auth)) {
         throw new NotFoundError("Tag not found");
     }
 
@@ -718,7 +726,7 @@ export const publishTag = (tagId: string, auth: AuthContext): TagChangeResult =>
      * By name *or alias* (§5b "Aliases"). A private "Jane Smith" published into a library that
      * files that name as an alias of Jane Doe means Jane Doe, exactly as typing it there would.
      */
-    const existing = tagRepo.resolveName(tag.kind, tag.name, null)?.tag;
+    const existing = tagRepo.resolveName(tag.domain, tag.kind, tag.name, null)?.tag;
 
     /**
      * Aliases travel with the tag, less any the library already gives to another one. The
@@ -772,7 +780,7 @@ export const unpublishTag = (tagId: string, auth: AuthContext): TagChangeResult 
      * administrator had set up and not yet applied — into their own private vocabulary, and
      * it would vanish from everybody else's. A tag whose coiner is unknown stays public.
      */
-    if (!tag || tag.ownerId !== null || tag.createdById !== auth.userId) {
+    if (!tag || tag.ownerId !== null || tag.createdById !== auth.userId || !inRoom(tag, auth)) {
         throw new NotFoundError("Tag not found");
     }
 
@@ -793,7 +801,7 @@ export const unpublishTag = (tagId: string, auth: AuthContext): TagChangeResult 
         );
     }
 
-    const clash = tagRepo.resolveName(tag.kind, tag.name, auth.userId);
+    const clash = tagRepo.resolveName(tag.domain, tag.kind, tag.name, auth.userId);
 
     if (clash) {
         throw new ConflictError(
@@ -822,7 +830,7 @@ export const unpublishTag = (tagId: string, auth: AuthContext): TagChangeResult 
  * and the private one resolves through `writesTo`, so it can only ever be the caller's own.
  */
 export const listVocabulary = (query: VocabularyQuery, auth: AuthContext): VocabularyResponse => {
-    const { rows, total } = tagRepo.listVocabulary(writesTo(query.scope, auth), {
+    const { rows, total } = tagRepo.listVocabulary(roomOf(auth), writesTo(query.scope, auth), {
         kind: query.kind,
         search: query.search,
         unusedOnly: query.unusedOnly,
@@ -942,7 +950,7 @@ const companionsFor = (tagId: string, seed: number, auth: AuthContext): TagCompa
  */
 export const browseTags = (query: TagBrowseQuery, auth: AuthContext): TagBrowseResponse => {
     const owner = writesTo(query.scope, auth);
-    const { rows, total } = tagRepo.browseTags(owner, {
+    const { rows, total } = tagRepo.browseTags(roomOf(auth), owner, {
         kind: query.kind,
         search: query.search,
         sort: query.sort,
@@ -1176,6 +1184,8 @@ function* facetsReads(
     function* facetsFor(scope: FacetScope): ReadPlan<Facet[]> {
         const owner = writesTo(scope, auth);
         const options = {
+            // In the cache key too: one room's values are never served to another (§21).
+            domain: roomOf(auth),
             owner,
             search,
             limit: expanded.length > 0 ? FACET_EXPANDED_LIMIT : perFacetLimit,
@@ -1238,7 +1248,7 @@ function* facetsReads(
         if (placed.has(facet.kind)) continue;
 
         placed.add(facet.kind);
-        facet.favorites = yield* read("favoriteTagCount", auth.userId, facet.kind);
+        facet.favorites = yield* read("favoriteTagCount", roomOf(auth), auth.userId, facet.kind);
     }
 
     return { facets };

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { isClipTagKind } from "@private-stock/core";
+import { isClipTagKind, ValidationError } from "@private-stock/core";
 
 import { db } from "../db.js";
 import { pruneUnused } from "./tagRepo.js";
@@ -42,15 +42,29 @@ export interface ClipTagFacetRow {
 export const assertFits = (clipId: string, tagId: string): void => {
     const row = db
         .prepare(
-            `SELECT t."kind", t."ownerId", c."userId"
+            `SELECT t."kind", t."ownerId", c."userId", t."domain",
+                    (SELECT r."domain" FROM "Media" m JOIN "MediaRoot" r ON r."id" = m."listRootId"
+                      WHERE m."id" = c."mediaId") AS "itemDomain"
                FROM "Tag" t, "Clip" c
               WHERE t."id" = ? AND c."id" = ?`
         )
         .get(tagId, clipId) as
-        { kind: string; ownerId: string | null; userId: string | null } | undefined;
+        | {
+              kind: string;
+              ownerId: string | null;
+              userId: string | null;
+              domain: string;
+              itemDomain: string | null;
+          }
+        | undefined;
 
     if (!row) {
         throw new Error(`No such tag or clip: ${tagId}, ${clipId}`);
+    }
+
+    // A clip is in its video's room (§21), and takes only that room's names.
+    if (row.itemDomain !== null && row.itemDomain !== row.domain) {
+        throw new ValidationError("That tag belongs to another room's vocabulary");
     }
 
     if (!isClipTagKind(row.kind)) {

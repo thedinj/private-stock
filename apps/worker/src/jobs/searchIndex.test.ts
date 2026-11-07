@@ -9,7 +9,12 @@ const mentionWrites: { mediaId: string; mentions: { tagId: string; field: string
 vi.mock("@private-stock/db", () => ({
     db: {
         prepare: () => ({
-            get: () => ({ id: "m1", title: "Untitled", relPath: "Family/AuntMargaret.beach.mp4" }),
+            get: () => ({
+                id: "m1",
+                title: "Untitled",
+                relPath: "Family/AuntMargaret.beach.mp4",
+                domain: "family",
+            }),
             all: () => [],
         }),
         transaction: (fn: () => void) => fn,

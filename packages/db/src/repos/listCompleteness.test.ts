@@ -192,10 +192,10 @@ beforeAll(() => {
         ).run(userId, email);
     }
 
-    tags.drama = tagRepo.ensureTag("genre", "Drama", null, USER);
-    tags.noir = tagRepo.ensureTag("genre", "Noir", null, USER);
-    tags.mine = tagRepo.ensureTag("tag", "Mine", USER, USER);
-    tags.theirs = tagRepo.ensureTag("tag", "Theirs", OWNER, OWNER);
+    tags.drama = tagRepo.ensureTag("cellar", "genre", "Drama", null, USER);
+    tags.noir = tagRepo.ensureTag("cellar", "genre", "Noir", null, USER);
+    tags.mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER, USER);
+    tags.theirs = tagRepo.ensureTag("cellar", "tag", "Theirs", OWNER, OWNER);
 
     for (const [key, kind] of [
         ["drama", "genre"],

@@ -199,7 +199,7 @@ vi.mock("@private-stock/db", () => ({
             ids.filter((id) => clips.find((clip) => clip.id === id)?.userId === userId),
     },
     tagRepo: {
-        ensureTag: (_kind: string, name: string) => name,
+        ensureTag: (_domain: string, _kind: string, name: string) => name,
         resolveName: () => undefined,
     },
     tagBatchRepo: {
@@ -231,7 +231,13 @@ const {
 } = await import("./clipService");
 
 const auth = (userId: string, scopes: string[] = []): AuthContext =>
-    ({ userId, scopes, accessibleRootIds: ["root"], tokenEpoch: 0 }) as unknown as AuthContext;
+    ({
+        userId,
+        scopes,
+        accessibleRootIds: ["root"],
+        domain: "cellar",
+        tokenEpoch: 0,
+    }) as unknown as AuthContext;
 
 beforeEach(() => {
     reels = [];

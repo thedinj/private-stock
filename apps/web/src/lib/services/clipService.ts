@@ -32,6 +32,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { toTagBatch } from "./bulkTagService";
 import { mayAlterOwnWork } from "./collectionAccess";
 import { vocabularyChanged } from "./ocrMatchHooks";
+import { roomOf } from "./room";
 import { spriteThumbFor } from "./spriteThumb";
 import { writesTo } from "./tagService";
 
@@ -192,7 +193,7 @@ export const createClip = (mediaId: string, input: CreateClipInput, auth: AuthCo
     }
 
     const coined = (input.tags ?? []).filter(
-        (tag) => !tagRepo.resolveName(tag.kind, tag.name, writesTo(tag.scope, auth))
+        (tag) => !tagRepo.resolveName(roomOf(auth), tag.kind, tag.name, writesTo(tag.scope, auth))
     );
 
     // One transaction, so a name the tag rules refuse does not leave an untagged clip behind.
@@ -210,6 +211,7 @@ export const createClip = (mediaId: string, input: CreateClipInput, auth: AuthCo
             clipTagRepo.assign({
                 clipId,
                 tagId: tagRepo.ensureTag(
+                    roomOf(auth),
                     tag.kind,
                     tag.name,
                     writesTo(tag.scope, auth),
@@ -265,12 +267,12 @@ export const editClipTags = (
     const scope = writesTo(input.scope, auth);
     const coins =
         input.mode !== "remove" &&
-        input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
+        input.names.some((name) => !tagRepo.resolveName(roomOf(auth), input.kind, name, scope));
 
     db.transaction((): void => {
         if (input.mode === "remove") {
             for (const name of input.names) {
-                const resolved = tagRepo.resolveName(input.kind, name, scope);
+                const resolved = tagRepo.resolveName(roomOf(auth), input.kind, name, scope);
 
                 if (resolved) {
                     clipTagRepo.unassign(clipId, resolved.tag.id);
@@ -285,7 +287,7 @@ export const editClipTags = (
         input.names.forEach((name, index) => {
             clipTagRepo.assign({
                 clipId,
-                tagId: tagRepo.ensureTag(input.kind, name, scope, auth.userId),
+                tagId: tagRepo.ensureTag(roomOf(auth), input.kind, name, scope, auth.userId),
                 position: first + index,
             });
         });
@@ -312,7 +314,9 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
     }
 
     const scope = writesTo(input.scope, auth);
-    const coins = input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
+    const coins = input.names.some(
+        (name) => !tagRepo.resolveName(roomOf(auth), input.kind, name, scope)
+    );
     const count = clipIds.length;
     const summary =
         `Tagged ${count} clip${count === 1 ? "" : "s"} ${input.kind}: ` + input.names.join(", ");
@@ -323,7 +327,7 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
             summary,
             clipIds,
             tagIds: input.names.map((name) =>
-                tagRepo.ensureTag(input.kind, name, scope, auth.userId)
+                tagRepo.ensureTag(roomOf(auth), input.kind, name, scope, auth.userId)
             ),
         })
     )();

@@ -22,6 +22,8 @@ export interface AppearanceSourceFace {
     scattered: 0 | 1;
     /** Confirmed as somebody, or set aside as "later": not a new person to ask about. */
     decided: 0 | 1;
+    /** The item's room (§21), whose performers alone it is scored against; null for none. */
+    domain: string | null;
 }
 
 /**
@@ -34,8 +36,10 @@ export const sourceFaces = (mediaIds: readonly string[] | null): AppearanceSourc
         .prepare(
             `SELECT f."id", f."mediaId", f."vectorIndex", f."eyes", f."score", m."kind",
                     f."scatteredAt" IS NOT NULL AS "scattered",
-                    (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL) AS "decided"
+                    (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL) AS "decided",
+                    r."domain"
                FROM "Face" f JOIN "Media" m ON m."id" = f."mediaId"
+               LEFT JOIN "MediaRoot" r ON r."id" = m."listRootId"
               ${mediaIds === null ? "" : `WHERE f."mediaId" IN (SELECT value FROM json_each(?))`}
               ORDER BY f."mediaId", f."vectorIndex"`
         )

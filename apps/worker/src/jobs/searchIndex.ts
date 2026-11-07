@@ -35,6 +35,8 @@ interface DocumentSourceRow {
     id: string;
     title: string | null;
     relPath: string | null;
+    /** The room of the original's library (§21), whose names it is matched against. */
+    domain: string | null;
 }
 
 /**
@@ -108,7 +110,8 @@ const tagText = (mediaId: string): { performers: string[]; tags: string[] } => {
 };
 
 /**
- * The library's tag names, squashed, for `searchVariants` to find inside glued words.
+ * One room's library tag names, squashed, for `searchVariants` to find inside glued words (§21:
+ * a Cellar name does not split a Parlour filename). An item in no room is split by no names.
  *
  * Cached, because the index stage runs once per item and a bulk reindex runs it two hundred
  * thousand times; reading the vocabulary for each would be most of the stage's work. A minute is
@@ -118,11 +121,18 @@ const tagText = (mediaId: string): { performers: string[]; tags: string[] } => {
  * next reindex.
  */
 const VOCABULARY_TTL_MS = 60_000;
-let vocabulary: { loadedAt: number; names: Map<string, string> } | null = null;
+const vocabularies = new Map<string, { loadedAt: number; names: Map<string, string> }>();
 
-const nameVocabulary = (): Map<string, string> => {
+const nameVocabulary = (domain: string | null): Map<string, string> => {
+    if (domain === null) {
+        return new Map();
+    }
+
+    let vocabulary = vocabularies.get(domain);
+
     if (!vocabulary || Date.now() - vocabulary.loadedAt > VOCABULARY_TTL_MS) {
-        vocabulary = { loadedAt: Date.now(), names: tagRepo.publicNameVocabulary() };
+        vocabulary = { loadedAt: Date.now(), names: tagRepo.publicNameVocabulary(domain) };
+        vocabularies.set(domain, vocabulary);
     }
 
     return vocabulary.names;
@@ -160,11 +170,12 @@ const ocrText = (mediaId: string): string =>
 export const indexMedia = (mediaId: string): void => {
     const row = db
         .prepare(
-            `SELECT m."id", m."title", f."relPath"
+            `SELECT m."id", m."title", f."relPath", r."domain"
                FROM "Media" m
                LEFT JOIN "MediaFileLink" fl
                       ON fl."mediaId" = m."id" AND fl."role" = 'original'
                LEFT JOIN "MediaFile" f ON f."id" = fl."fileId"
+               LEFT JOIN "MediaRoot" r ON r."id" = f."rootId"
               WHERE m."id" = ?`
         )
         .get(mediaId) as DocumentSourceRow | undefined;
@@ -186,7 +197,7 @@ export const indexMedia = (mediaId: string): void => {
             // names arrive glued.
             messy: [...segments, title],
         },
-        nameVocabulary()
+        nameVocabulary(row.domain)
     );
 
     /**
@@ -228,7 +239,10 @@ export const indexMedia = (mediaId: string): void => {
     mentionRepo.writeChanged([
         {
             mediaId,
-            mentions: mentionsForItem({ filename, title: expandedTitle, screen: ocr, metadata }),
+            mentions: mentionsForItem(
+                { filename, title: expandedTitle, screen: ocr, metadata },
+                row.domain
+            ),
         },
     ]);
 };

@@ -80,7 +80,7 @@ beforeEach(() => {
 describe("applying a batch", () => {
     it("tags every item and reports how many rows it wrote", () => {
         const ids = ["a", "b", "c"].map(addMedia);
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         const result = tagBatchRepo.apply({
             userId: USER,
@@ -96,7 +96,7 @@ describe("applying a batch", () => {
     it("writes one row per item per tag", () => {
         const ids = ["a", "b"].map(addMedia);
         const tagIds = ["Jane Doe", "John Roe"].map((name) =>
-            tagRepo.ensureTag("performer", name, null, USER)
+            tagRepo.ensureTag("cellar", "performer", name, null, USER)
         );
 
         expect(
@@ -120,7 +120,7 @@ describe("undo", () => {
      */
     it("leaves a hand-applied tag alone when the same tag was later applied in bulk", () => {
         addMedia("a");
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         tagRepo.assign({ mediaId: "a", tagId, source: "user" });
 
@@ -141,8 +141,8 @@ describe("undo", () => {
 
     it("removes exactly the rows the batch wrote, and nothing from another batch", () => {
         ["a", "b"].forEach(addMedia);
-        const first = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
-        const second = tagRepo.ensureTag("studio", "Acme", null, USER);
+        const first = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
+        const second = tagRepo.ensureTag("cellar", "studio", "Acme", null, USER);
 
         const one = tagBatchRepo.apply({
             userId: USER,
@@ -163,8 +163,8 @@ describe("undo", () => {
 
     it("takes back a tag it was the only use of, and keeps one still used elsewhere", () => {
         ["a", "b"].forEach(addMedia);
-        const typo = tagRepo.ensureTag("performer", "Jnae Doe", null, USER);
-        const used = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const typo = tagRepo.ensureTag("cellar", "performer", "Jnae Doe", null, USER);
+        const used = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         tagRepo.assign({ mediaId: "b", tagId: used, source: "user" });
 
@@ -190,7 +190,7 @@ describe("undo", () => {
      */
     it("keeps the batch record and marks when it was withdrawn", () => {
         addMedia("a");
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         const { batchId } = tagBatchRepo.apply({
             userId: USER,
@@ -210,7 +210,7 @@ describe("undo", () => {
 
     it("collects the affected items before they are deleted", () => {
         ["a", "b"].forEach(addMedia);
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         const { batchId } = tagBatchRepo.apply({
             userId: USER,
@@ -235,7 +235,7 @@ describe("undo", () => {
      */
     it("survives the tag itself being deleted", () => {
         addMedia("a");
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         const { batchId } = tagBatchRepo.apply({
             userId: USER,
@@ -254,7 +254,7 @@ describe("undo", () => {
 describe("ownership", () => {
     it("does not return another account's batch", () => {
         addMedia("a");
-        const tagId = tagRepo.ensureTag("performer", "Jane Doe", null, USER);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, USER);
 
         const { batchId } = tagBatchRepo.apply({
             userId: USER,

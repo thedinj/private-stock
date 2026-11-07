@@ -966,6 +966,7 @@ CREATE TABLE "Tag" (
             "colorKey" TEXT CHECK("colorKey" IS NULL OR length("colorKey") <= 40),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "ownerId" TEXT,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             /*
              * Who coined this name (§6).
              *
@@ -1445,10 +1446,10 @@ CREATE INDEX "idx_Tag_owner"
             ON "Tag" ("ownerId") WHERE "ownerId" IS NOT NULL;
 
 CREATE UNIQUE INDEX "idx_Tag_unique_library"
-            ON "Tag" ("kind", "nameNorm") WHERE "ownerId" IS NULL;
+            ON "Tag" ("domain", "kind", "nameNorm") WHERE "ownerId" IS NULL;
 
 CREATE UNIQUE INDEX "idx_Tag_unique_owner"
-            ON "Tag" ("kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL;
+            ON "Tag" ("domain", "kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL;
 
 CREATE INDEX "idx_TrashEntry_deletedById" ON "TrashEntry" ("deletedById");
 

@@ -57,7 +57,7 @@ beforeEach(() => {
 
 /** Applies a tag in one of the two systems, as one person. */
 const tagIt = (name: string, owner: string | null, by: string): string => {
-    const tagId = tagRepo.ensureTag("tag", name, owner);
+    const tagId = tagRepo.ensureTag("cellar", "tag", name, owner);
 
     tagRepo.assign({ mediaId: MEDIA, tagId, userId: owner, createdById: by });
 
@@ -108,8 +108,8 @@ describe("what each person can see", () => {
         const tagId = tagIt("therapy", ADA, ADA);
 
         expect(tagRepo.listForMedia(MEDIA, BEN)).toEqual([]);
-        expect(tagRepo.listByKind("tag", BEN)).toEqual([]);
-        expect(tagRepo.listByKind("tag", null)).toEqual([]);
+        expect(tagRepo.listByKind("cellar", "tag", BEN)).toEqual([]);
+        expect(tagRepo.listByKind("cellar", "tag", null)).toEqual([]);
         // The row exists; no viewer-scoped read reaches it.
         expect(tagRepo.findById(tagId)?.ownerId).toBe(ADA);
     });
@@ -131,7 +131,7 @@ describe("the tags on a page of tiles", () => {
         tagIt("therapy", BEN, BEN);
         tagRepo.assign({
             mediaId: "m2",
-            tagId: tagRepo.ensureTag("genre", "drama", null),
+            tagId: tagRepo.ensureTag("cellar", "genre", "drama", null),
             userId: null,
             createdById: ADA,
         });
@@ -173,8 +173,8 @@ describe("the two systems do not blend", () => {
      * a shared chip a second, invisible meaning.
      */
     it("refuses an assignment that would cross the two", () => {
-        const mine = tagRepo.ensureTag("tag", "therapy", ADA);
-        const shared = tagRepo.ensureTag("tag", "beach", null);
+        const mine = tagRepo.ensureTag("cellar", "tag", "therapy", ADA);
+        const shared = tagRepo.ensureTag("cellar", "tag", "beach", null);
 
         expect(() =>
             tagRepo.assign({ mediaId: MEDIA, tagId: mine, userId: null, createdById: ADA })
@@ -229,7 +229,9 @@ describe("removing a public tag", () => {
     it("lets somebody else remove what you added", () => {
         tagIt("beach", null, ADA);
 
-        expect(tagRepo.unassign(MEDIA, tagRepo.ensureTag("tag", "beach", null), null)).toBe(1);
+        expect(
+            tagRepo.unassign(MEDIA, tagRepo.ensureTag("cellar", "tag", "beach", null), null)
+        ).toBe(1);
         expect(namesFor(BEN)).toEqual([]);
     });
 
@@ -237,7 +239,7 @@ describe("removing a public tag", () => {
         tagIt("beach", null, ADA);
         tagIt("beach", BEN, BEN);
 
-        tagRepo.unassign(MEDIA, tagRepo.ensureTag("tag", "beach", null), null);
+        tagRepo.unassign(MEDIA, tagRepo.ensureTag("cellar", "tag", "beach", null), null);
 
         expect(namesFor(ADA)).toEqual([]);
         expect(namesFor(BEN)).toEqual(["beach"]);
@@ -255,17 +257,19 @@ describe("only tags can be private", () => {
      * `kind` of their own choosing.
      */
     it.each(["performer", "source"])("refuses to coin a private %s", (kind) => {
-        expect(() => tagRepo.ensureTag(kind, "Jane Doe", ADA, ADA)).toThrow(/cannot be private/);
+        expect(() => tagRepo.ensureTag("cellar", kind, "Jane Doe", ADA, ADA)).toThrow(
+            /cannot be private/
+        );
     });
 
     it("still allows a public one of every facet", () => {
         for (const kind of ["tag", "performer", "source"]) {
-            expect(() => tagRepo.ensureTag(kind, "Jane Doe", null, ADA)).not.toThrow();
+            expect(() => tagRepo.ensureTag("cellar", kind, "Jane Doe", null, ADA)).not.toThrow();
         }
     });
 
     it("allows a private tag, which is the whole of the private system", () => {
-        expect(() => tagRepo.ensureTag("tag", "to cut", ADA, ADA)).not.toThrow();
+        expect(() => tagRepo.ensureTag("cellar", "tag", "to cut", ADA, ADA)).not.toThrow();
     });
 
     /**
@@ -273,13 +277,13 @@ describe("only tags can be private", () => {
      * public performer would make one out of a row that already exists.
      */
     it("refuses to unpublish a performer into a private one", () => {
-        const performer = tagRepo.ensureTag("performer", "Jane Doe", null, ADA);
+        const performer = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null, ADA);
 
         expect(() => tagRepo.setScope(performer, ADA)).toThrow(/cannot be private/);
     });
 
     it("still lets a public tag be taken private", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", null, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         expect(() => tagRepo.setScope(tag, ADA)).not.toThrow();
     });

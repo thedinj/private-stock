@@ -235,19 +235,26 @@ export const copyFromTwin = (fromMediaId: string, toMediaId: string): number => 
             const copy = copies.get(face.vectorIndex)!;
 
             if (face.tagId !== null) {
+                // Not across rooms (§21): a twin in another room keeps its faces unnamed, since
+                // the name is the other room's.
                 db.prepare(
                     `UPDATE "Face"
-                        SET "tagId" = ?, "decidedByUserId" = ?, "decidedAt" = ?, "decidedHow" = ?,
-                            "decisionId" = ?
-                      WHERE "id" = ? AND "tagId" IS NULL`
-                ).run(
-                    face.tagId,
-                    face.decidedByUserId,
-                    face.decidedAt,
-                    face.decidedHow,
-                    face.decisionId,
-                    copy
-                );
+                        SET "tagId" = :tagId, "decidedByUserId" = :by, "decidedAt" = :at,
+                            "decidedHow" = :how, "decisionId" = :decision
+                      WHERE "id" = :copy AND "tagId" IS NULL
+                        AND NOT EXISTS (
+                            SELECT 1 FROM "Media" m
+                              JOIN "MediaRoot" r ON r."id" = m."listRootId"
+                              JOIN "Tag" t ON t."id" = :tagId
+                             WHERE m."id" = "Face"."mediaId" AND r."domain" <> t."domain")`
+                ).run({
+                    tagId: face.tagId,
+                    by: face.decidedByUserId,
+                    at: face.decidedAt,
+                    how: face.decidedHow,
+                    decision: face.decisionId,
+                    copy,
+                });
             }
 
             if (face.skippedAt !== null) {
@@ -438,10 +445,12 @@ export const confirmedFaceRefs = (
     tagId: string;
     mediaId: string;
     vectorIndex: number;
+    /** The performer's room (§21): only its items' people are scored against them. */
+    domain: string;
 }[] =>
     db
         .prepare(
-            `SELECT f."tagId", f."mediaId", f."vectorIndex"
+            `SELECT f."tagId", f."mediaId", f."vectorIndex", t."domain"
                FROM "Face" f JOIN "Tag" t ON t."id" = f."tagId"
               WHERE t."kind" = 'performer' AND t."ownerId" IS NULL ${onlyTags(`f."tagId"`, tagIds)}
                 AND NOT EXISTS (SELECT 1 FROM "PerformerNoFace" nf WHERE nf."tagId" = t."id")
@@ -451,6 +460,7 @@ export const confirmedFaceRefs = (
         tagId: string;
         mediaId: string;
         vectorIndex: number;
+        domain: string;
     }[];
 
 /**
@@ -463,12 +473,12 @@ export const confirmedFaceRefs = (
 export const taggedFaceRefs = (
     perTag: number,
     tagIds: readonly string[] | null
-): { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[] =>
+): { tagId: string; faceId: string; mediaId: string; vectorIndex: number; domain: string }[] =>
     db
         .prepare(
-            `SELECT x."tagId", f."id" AS "faceId", f."mediaId", f."vectorIndex"
+            `SELECT x."tagId", f."id" AS "faceId", f."mediaId", f."vectorIndex", x."domain"
                FROM (
-                 SELECT mt."tagId", mt."mediaId",
+                 SELECT mt."tagId", mt."mediaId", t."domain",
                         row_number() OVER (PARTITION BY mt."tagId" ORDER BY mt."createdAt" DESC) AS "n"
                    FROM "MediaTag" mt
                    JOIN "Tag" t ON t."id" = mt."tagId" AND t."kind" = 'performer' AND t."ownerId" IS NULL
@@ -488,6 +498,7 @@ export const taggedFaceRefs = (
         faceId: string;
         mediaId: string;
         vectorIndex: number;
+        domain: string;
     }[];
 
 /** The library performers on these items: whose shared face may move when the items' faces do. */

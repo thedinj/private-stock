@@ -11879,6 +11879,44 @@ the box says (`domainProfiles[d].facets`): People in the Parlour; Players in the
 `source` is the Game. The kinds stay as they are, so no row moves and there is no second code
 path.
 
+### One vocabulary per room
+
+Tags hang off no root, so the narrowed context did not reach them. **`Tag.domain`** says which
+room's vocabulary a tag is in, set when it is coined and never changed; every tag that existed
+became the cellar's, the only room that had libraries. It leads both partial uniques, so "Jane"
+in the Parlour and "Jane" in the Cellar are two people with two pages, two pictures and two
+faces references. No `Tag_stale_*` trigger watches it, since nothing updates it.
+
+- **Every vocabulary read and write names its room**, the way it names its owner: `ensureTag`,
+  `resolveName`, `listByKind`, `searchByKind`, `listFacetValues`, `listVocabulary`,
+  `browseTags`, `listKinds`, `favoriteTagCount`, `publicNameVocabulary`, the matcher's
+  `mentionRepo.vocabulary`. Services pass `auth.domain` (`roomOf`), and a context with no room
+  is refused (a 400) rather than defaulted, for the reason a request without one is.
+- **Another room's tag is not found**, as somebody else's private tag is: a tag page, rename,
+  delete, merge, favourite, alias edit, picture or face decision reached by id answers 404
+  (`inRoom`). The picture's bytes route is in no room and stays authorised by the picture's item.
+- **Operations on one tag stay in its room.** Alias clashes, rename clashes and publishing are
+  checked in the tag's own room; `mergeTags` and `moveAssignments` refuse two rooms outright.
+- **A tag goes only on its own room's items.** `assign` (and so `replaceFacet`), clip tagging and
+  a face copied from a twin compare the tag's room with the item's library's — one indexed read on
+  a path that already reads the tag. A bulk apply skips a stray pair rather than failing ten
+  thousand good rows. An item with no library to say passes, as before rooms existed.
+- **The worker partitions by room.** An item's room is its original's library
+  (`Media.listRootId`). Its text is matched only against its room's names (`mentionMatch`, the
+  index stage), and only its room's names split its glued words. Faces: a person is scored
+  only against references of their item's room, and strangers are gathered into new people room
+  by room, so nobody in a Parlour video is offered as a Cellar performer; the faces auto-tag's
+  candidates carry the same check underneath. Face search reads every reference from one file
+  and offers only the room's.
+- **OCR strings are matched against every room's names**, since one caption can be read in two
+  rooms; what a pair counts, offers and tags is narrowed to items of its tag's room, and the
+  Rules list shows the room's pairs only.
+- **Duplicates:** a trashed copy's tags are copied only onto a survivor in the same room (§10c).
+
+Left unscoped on purpose: an item's own tags (`listForMedia`, `listForMediaIds`,
+`listForSelection`), which are read through an item the room already let through, and counts by
+tag id, which are counted over the room's roots.
+
 ### Playlists, reels, saved views and the home page belong to a room
 
 Their contents were already narrowed — every item is read through the request's roots — but
@@ -11912,7 +11950,4 @@ The faces auto-tag stays one switch for the whole library: on in the Parlour as 
 
 ### Still to build
 
-- **Tag vocabulary per domain** (`Tag.domain`). Tags hang off no root, so the narrowed context
-  does not reach them: until this lands the filter panel, the tag pages and face suggestions
-  draw on every room's names. It is why this is not usable yet.
-- **A look per room**, chosen in rounds of mockups, and the facet labels read from the profile.
+- **A look per room**, chosen in rounds of mockups. The facet labels already follow the room.

@@ -461,8 +461,8 @@ describe("tag filtering", () => {
         const both = addItem(1, { title: "Both", durationMs: 1, size: 1 });
         addItem(2, { title: "One", durationMs: 1, size: 1 });
 
-        const drama = tagRepo.ensureTag("genre", "Drama", null);
-        const noir = tagRepo.ensureTag("genre", "Noir", null);
+        const drama = tagRepo.ensureTag("cellar", "genre", "Drama", null);
+        const noir = tagRepo.ensureTag("cellar", "genre", "Noir", null);
 
         tagRepo.assign({ mediaId: both, tagId: drama, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: both, tagId: noir, userId: null, createdById: USER });
@@ -494,7 +494,7 @@ describe("tag filtering", () => {
             });
         }
 
-        const drama = tagRepo.ensureTag("genre", "Drama", null);
+        const drama = tagRepo.ensureTag("cellar", "genre", "Drama", null);
         tagRepo.assign({ mediaId: match, tagId: drama, userId: null, createdById: USER });
 
         const result = mediaRepo.listMedia(
@@ -774,11 +774,11 @@ describe("facet values", () => {
         }
 
         const lonely = addItem(99, { title: "The tagged one", durationMs: 1, size: 1 });
-        const keyword = tagRepo.ensureTag("tag", "Interesting", USER);
+        const keyword = tagRepo.ensureTag("cellar", "tag", "Interesting", USER);
 
         tagRepo.assign({ mediaId: lonely, tagId: keyword, userId: USER, createdById: USER });
 
-        expect(tagRepo.listFacetValues({ owner: USER, limit: 20 })).toEqual([
+        expect(tagRepo.listFacetValues({ domain: "cellar", owner: USER, limit: 20 })).toEqual([
             expect.objectContaining({ name: "Interesting", uses: 1 }),
         ]);
     });
@@ -787,25 +787,26 @@ describe("facet values", () => {
         // A tag on no items is not a filter, it is a row for the vocabulary screen to tidy
         // up. Offering it guarantees an empty grid and explains nothing.
         addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        tagRepo.ensureTag("genre", "Unused", null);
+        tagRepo.ensureTag("cellar", "genre", "Unused", null);
 
-        expect(tagRepo.listFacetValues({ owner: null, limit: 20 })).toEqual([]);
+        expect(tagRepo.listFacetValues({ domain: "cellar", owner: null, limit: 20 })).toEqual([]);
     });
 
     it("orders by how much the library uses each value", () => {
         const one = addItem(1, { title: "One", durationMs: 1, size: 1 });
         const two = addItem(2, { title: "Two", durationMs: 1, size: 1 });
-        const common = tagRepo.ensureTag("genre", "Common", null);
-        const rare = tagRepo.ensureTag("genre", "Rare", null);
+        const common = tagRepo.ensureTag("cellar", "genre", "Common", null);
+        const rare = tagRepo.ensureTag("cellar", "genre", "Rare", null);
 
         tagRepo.assign({ mediaId: one, tagId: common, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: two, tagId: common, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: one, tagId: rare, userId: null, createdById: USER });
 
-        expect(tagRepo.listFacetValues({ owner: null, limit: 20 }).map((row) => row.name)).toEqual([
-            "Common",
-            "Rare",
-        ]);
+        expect(
+            tagRepo
+                .listFacetValues({ domain: "cellar", owner: null, limit: 20 })
+                .map((row) => row.name)
+        ).toEqual(["Common", "Rare"]);
     });
 
     it("narrows by name, so a value past the cap is still reachable", () => {
@@ -817,7 +818,7 @@ describe("facet values", () => {
         for (const name of ["Aurora", "Beacon", "Cinder"]) {
             tagRepo.assign({
                 mediaId: video,
-                tagId: tagRepo.ensureTag("studio", name, null, USER),
+                tagId: tagRepo.ensureTag("cellar", "studio", name, null, USER),
                 userId: null,
                 createdById: USER,
             });
@@ -825,36 +826,40 @@ describe("facet values", () => {
 
         expect(
             tagRepo
-                .listFacetValues({ owner: null, limit: 20, search: "bea" })
+                .listFacetValues({ domain: "cellar", owner: null, limit: 20, search: "bea" })
                 .map((row) => row.name)
         ).toEqual(["Beacon"]);
     });
 
     it("lists only the library vocabulary for the public group", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
 
         tagRepo.assign({ mediaId: video, tagId: shared, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: video, tagId: mine, userId: USER, createdById: USER });
 
-        expect(tagRepo.listFacetValues({ owner: null, limit: 20 }).map((row) => row.name)).toEqual([
-            "Drama",
-        ]);
+        expect(
+            tagRepo
+                .listFacetValues({ domain: "cellar", owner: null, limit: 20 })
+                .map((row) => row.name)
+        ).toEqual(["Drama"]);
     });
 
     it("lists the viewer own tags for the private group, and nobody else", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
-        const theirs = tagRepo.ensureTag("tag", "Theirs", OWNER);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
+        const theirs = tagRepo.ensureTag("cellar", "tag", "Theirs", OWNER);
 
         tagRepo.assign({ mediaId: video, tagId: mine, userId: USER, createdById: USER });
         tagRepo.assign({ mediaId: video, tagId: theirs, userId: OWNER, createdById: OWNER });
 
         // Seeing it would disclose both that the tag exists and what carries it (§6).
-        expect(tagRepo.listFacetValues({ owner: USER, limit: 20 }).map((row) => row.name)).toEqual([
-            "Mine",
-        ]);
+        expect(
+            tagRepo
+                .listFacetValues({ domain: "cellar", owner: USER, limit: 20 })
+                .map((row) => row.name)
+        ).toEqual(["Mine"]);
     });
 
     it("reports a total per facet beyond what it returns", () => {
@@ -863,14 +868,14 @@ describe("facet values", () => {
         for (const name of ["Drama", "Noir", "Comedy"]) {
             tagRepo.assign({
                 mediaId: video,
-                tagId: tagRepo.ensureTag("genre", name, null, USER),
+                tagId: tagRepo.ensureTag("cellar", "genre", name, null, USER),
                 userId: null,
                 createdById: USER,
             });
         }
 
         // Capped at one, it still knows there are three: the total is counted before the cap.
-        expect(tagRepo.listFacetValues({ owner: null, limit: 1 })).toEqual([
+        expect(tagRepo.listFacetValues({ domain: "cellar", owner: null, limit: 1 })).toEqual([
             expect.objectContaining({ kind: "genre", total: 3 }),
         ]);
     });
@@ -882,15 +887,18 @@ describe("facet values", () => {
         for (const name of ["A", "B", "C"]) {
             tagRepo.assign({
                 mediaId: video,
-                tagId: tagRepo.ensureTag("genre", name, null, USER),
+                tagId: tagRepo.ensureTag("cellar", "genre", name, null, USER),
                 userId: null,
                 createdById: USER,
             });
         }
 
-        tagRepo.assign({ mediaId: video, tagId: tagRepo.ensureTag("studio", "Aurora", null) });
+        tagRepo.assign({
+            mediaId: video,
+            tagId: tagRepo.ensureTag("cellar", "studio", "Aurora", null),
+        });
 
-        const values = tagRepo.listFacetValues({ owner: null, limit: 2 });
+        const values = tagRepo.listFacetValues({ domain: "cellar", owner: null, limit: 2 });
 
         expect(values.filter((row) => row.kind === "genre")).toHaveLength(2);
         expect(values.filter((row) => row.kind === "studio")).toHaveLength(1);
@@ -906,7 +914,7 @@ describe("facetCountsForTags", () => {
 
         db.prepare(`UPDATE "Media" SET "kind" = 'image' WHERE "id" = ?`).run(image);
 
-        const drama = tagRepo.ensureTag("genre", "Drama", null);
+        const drama = tagRepo.ensureTag("cellar", "genre", "Drama", null);
         tagRepo.assign({ mediaId: video, tagId: drama, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: image, tagId: drama, userId: null, createdById: USER });
 
@@ -937,7 +945,7 @@ describe("facetCountsForTags", () => {
 
         db.prepare(`UPDATE "Media" SET "kind" = 'image' WHERE "id" = ?`).run(image);
 
-        const drama = tagRepo.ensureTag("genre", "Drama", null);
+        const drama = tagRepo.ensureTag("cellar", "genre", "Drama", null);
         tagRepo.assign({ mediaId: image, tagId: drama, userId: null, createdById: USER });
 
         expect(
@@ -953,7 +961,7 @@ describe("facetCountsForTags", () => {
 
     it("gives two viewers the same public count for the same tag", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         tagRepo.assign({ mediaId: video, tagId: shared, userId: null, createdById: USER });
 
@@ -964,7 +972,7 @@ describe("facetCountsForTags", () => {
 
     it("counts the viewer own assignments in the private pass", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
 
         tagRepo.assign({ mediaId: video, tagId: mine, userId: USER, createdById: USER });
 
@@ -985,7 +993,7 @@ describe("facetCountsForTags", () => {
      */
     it("keeps a selected private tag out of the public pass", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
 
         tagRepo.assign({ mediaId: video, tagId: mine, userId: USER, createdById: USER });
 
@@ -999,7 +1007,7 @@ describe("facetCountsForTags", () => {
 
     it("keeps a selected public tag out of the private pass", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const shared = tagRepo.ensureTag("tag", "Drama", null);
+        const shared = tagRepo.ensureTag("cellar", "tag", "Drama", null);
 
         tagRepo.assign({ mediaId: video, tagId: shared, userId: null, createdById: USER });
 
@@ -1011,7 +1019,7 @@ describe("facetCountsForTags", () => {
     /** And never another person tag, selected or not. */
     it("keeps a selected tag belonging to somebody else out of both", () => {
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const theirs = tagRepo.ensureTag("tag", "Theirs", OWNER);
+        const theirs = tagRepo.ensureTag("cellar", "tag", "Theirs", OWNER);
 
         tagRepo.assign({ mediaId: video, tagId: theirs, userId: OWNER, createdById: OWNER });
 
@@ -1036,7 +1044,7 @@ describe("access control", () => {
         // Facets are a second path to the library, and a count is enough to reveal that
         // something exists in a root the viewer cannot see.
         const video = addItem(1, { title: "A Video", durationMs: 1, size: 1 });
-        const drama = tagRepo.ensureTag("genre", "Drama", null);
+        const drama = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         tagRepo.assign({ mediaId: video, tagId: drama });
 
@@ -1536,7 +1544,7 @@ describe("resolving text matches", () => {
 
     /** What the worker's `mentionMatch` pass writes: every document matched by the one rule. */
     const matchMentions = (): void => {
-        const matcher = buildTagMatcher(mentionRepo.vocabulary());
+        const matcher = buildTagMatcher(mentionRepo.vocabulary("cellar"));
 
         mentionRepo.writeChanged(
             mentionRepo.documentsAfter(0, 100_000).map((document) => ({
@@ -1600,8 +1608,8 @@ describe("resolving text matches", () => {
      */
     const givenLibrary = (): Fixture => {
         const tags = {
-            margaret: tagRepo.ensureTag("performer", "Aunt Margaret", null),
-            rain: tagRepo.ensureTag("tag", "rain", null),
+            margaret: tagRepo.ensureTag("cellar", "performer", "Aunt Margaret", null),
+            rain: tagRepo.ensureTag("cellar", "tag", "rain", null),
         };
         const items: Fixture["items"] = [];
 

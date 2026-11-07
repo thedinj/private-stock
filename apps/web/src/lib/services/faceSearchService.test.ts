@@ -84,7 +84,9 @@ vi.mock("@private-stock/db", () => ({
                 ? { via: "name" }
                 : undefined,
         findById: (id: string) =>
-            NAMES[id] ? { id, kind: "performer", name: NAMES[id], ownerId: null } : undefined,
+            NAMES[id]
+                ? { id, kind: "performer", name: NAMES[id], ownerId: null, domain: "cellar" }
+                : undefined,
         listForMediaIds: () => [],
     },
 }));
@@ -112,7 +114,7 @@ const admin: AuthContext = {
     displayName: "U",
     scopes: ["admin"],
     accessibleRootIds: ["r1"],
-    domain: null,
+    domain: "cellar",
     tokenEpoch: 0,
 };
 

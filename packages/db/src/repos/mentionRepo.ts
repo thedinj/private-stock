@@ -12,21 +12,28 @@ import { activeDecision } from "./faceDecisionRepo.js";
  * is the query's rule (`mediaRepo`: the library's tags and the viewer's own), not this table's.
  */
 
-/** Every tag's name and aliases, each pointing at its tag: what the matcher is built from. */
-export const vocabulary = (): TagNameEntry[] =>
+/**
+ * One room's tag names and aliases, each pointing at its tag: what that room's matcher is built
+ * from. An item is matched only against its own room's names (§21), so a Parlour filename never
+ * names a Cellar performer.
+ */
+export const vocabulary = (domain: string): TagNameEntry[] =>
     db
         .prepare(
-            `SELECT "id" AS "tagId", "name" FROM "Tag"
+            `SELECT "id" AS "tagId", "name" FROM "Tag" WHERE "domain" = :domain
              UNION ALL
-             SELECT "tagId", "name" FROM "TagAlias"
+             SELECT a."tagId", a."name" FROM "TagAlias" a JOIN "Tag" t ON t."id" = a."tagId"
+              WHERE t."domain" = :domain
               ORDER BY "tagId", "name"`
         )
-        .all() as TagNameEntry[];
+        .all({ domain }) as TagNameEntry[];
 
 /** One item's text as its search document holds it, by mention field. */
 export interface DocumentTexts {
     cursor: number;
     mediaId: string;
+    /** The item's room (§21), by its library; null when no original says. */
+    domain: string | null;
     texts: Record<MentionField, string>;
 }
 
@@ -46,16 +53,21 @@ export const documentsAfter = (cursor: number, limit: number): DocumentTexts[] =
     (
         db
             .prepare(
-                `SELECT d."rowid" AS "cursor", d."mediaId", d."filename", d."title", d."ocr",
+                `SELECT d."rowid" AS "cursor", d."mediaId", r."domain", d."filename", d."title",
+                        d."ocr",
                         COALESCE((SELECT group_concat("value", ' ') FROM (
                             SELECT a."value" FROM "MediaAttribute" a
                              WHERE a."mediaId" = d."mediaId" ORDER BY a."key"
                         )), '') AS "metadata"
-                   FROM "MediaSearchDoc" d WHERE d."rowid" > ? ORDER BY d."rowid" LIMIT ?`
+                   FROM "MediaSearchDoc" d
+                   LEFT JOIN "Media" m ON m."id" = d."mediaId"
+                   LEFT JOIN "MediaRoot" r ON r."id" = m."listRootId"
+                  WHERE d."rowid" > ? ORDER BY d."rowid" LIMIT ?`
             )
             .all(cursor, limit) as {
             cursor: number;
             mediaId: string;
+            domain: string | null;
             filename: string;
             title: string;
             ocr: string;
@@ -64,6 +76,7 @@ export const documentsAfter = (cursor: number, limit: number): DocumentTexts[] =
     ).map((row) => ({
         cursor: row.cursor,
         mediaId: row.mediaId,
+        domain: row.domain,
         texts: {
             filename: row.filename,
             title: row.title,

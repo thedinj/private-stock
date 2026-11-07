@@ -25,6 +25,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
+import { inRoom } from "./room";
 import { picturesFor } from "./tagPictureService";
 
 /**
@@ -47,10 +48,10 @@ const requireAdmin = (auth: AuthContext): void => {
     }
 };
 
-const libraryPerformer = (tagId: string) => {
+const libraryPerformer = (tagId: string, auth: AuthContext) => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+    if (!tag || tag.kind !== "performer" || tag.ownerId !== null || !inRoom(tag, auth)) {
         throw new NotFoundError("Performer not found");
     }
 
@@ -105,7 +106,7 @@ const parseCursor = (raw: string | undefined): { score: number; id: string } | n
 export const suggestions = (query: SuggestionsQuery, auth: AuthContext): SuggestionsPage => {
     requireAdmin(auth);
 
-    const tag = libraryPerformer(query.tagId);
+    const tag = libraryPerformer(query.tagId, auth);
     const rows = appearanceRepo.suggestions({
         tagId: tag.id,
         rootIds: auth.accessibleRootIds,
@@ -169,7 +170,7 @@ export const decideSuggestions = (
 ): { tagged: number; refused: number } => {
     requireAdmin(auth);
 
-    const tag = libraryPerformer(decision.tagId);
+    const tag = libraryPerformer(decision.tagId, auth);
     const visible = new Set(
         lookupMedia(
             decision.people.map((person) => person.mediaId),

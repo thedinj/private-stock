@@ -9,6 +9,7 @@ import {
     squashName,
     tagNamePatterns,
     ValidationError,
+    type DomainKind,
 } from "@private-stock/core";
 
 import { db } from "../db.js";
@@ -34,6 +35,11 @@ export interface TagRow {
     ownerId: string | null;
     /** Who coined the name, or null once that account is gone (§6). */
     createdById: string | null;
+    /**
+     * The room whose vocabulary it is in (§21). Written only by `ensureTag`, from a
+     * `DomainKind`, and never changed.
+     */
+    domain: DomainKind;
 }
 
 export interface TagWithCountRow extends TagRow {
@@ -92,7 +98,7 @@ const NAME_OR_ALIAS_MATCH = `(${tagNameMatchSql("t", "search", "searchSquashed")
  */
 const tagSearchCondition = (
     search: string,
-    scope: { owner: TagOwner; kind?: string }
+    scope: { domain: DomainKind; owner: TagOwner; kind?: string }
 ): { sql: string; params: Record<string, unknown> } | null => {
     const patterns = tagNamePatterns(search);
 
@@ -100,8 +106,8 @@ const tagSearchCondition = (
         return null;
     }
 
-    const scopeSql = `t."ownerId" IS :owner${scope.kind ? ` AND t."kind" = :kind` : ""}`;
-    const scopeParams: Record<string, unknown> = { owner: scope.owner };
+    const scopeSql = `t."domain" = :domain AND t."ownerId" IS :owner${scope.kind ? ` AND t."kind" = :kind` : ""}`;
+    const scopeParams: Record<string, unknown> = { domain: scope.domain, owner: scope.owner };
 
     if (scope.kind) {
         scopeParams.kind = scope.kind;
@@ -150,7 +156,7 @@ export interface MediaTagRow {
     private: 1 | null;
 }
 
-const SELECT_COLUMNS = `"id", "kind", "name", "nameNorm", "colorKey", "description", "ownerId", "createdById"`;
+const SELECT_COLUMNS = `"id", "kind", "name", "nameNorm", "colorKey", "description", "ownerId", "createdById", "domain"`;
 
 /**
  * The vocabulary this viewer can see: the library's, plus their own.
@@ -180,13 +186,15 @@ export interface ResolvedName {
  *
  * `ownerId` names *which* vocabulary to look in, and null means the library's. It is not a
  * filter that widens: asking for the library's "beach" must not answer with somebody's private
- * one, or creating a library tag would silently adopt a private row.
+ * one, or creating a library tag would silently adopt a private row. `domain` narrows it the
+ * same way (§21): the Parlour's "Jane" is not the Cellar's.
  *
  * Unambiguous by construction: within a vocabulary a normalised name belongs to at most one tag,
  * as its name or as an alias (`setAliases` and the services enforce it), so there is never a
  * choice between a name and an alias to make here.
  */
 export const resolveName = (
+    domain: DomainKind,
     kind: string,
     name: string,
     ownerId: string | null
@@ -200,9 +208,9 @@ export const resolveName = (
     const named = db
         .prepare(
             `SELECT ${SELECT_COLUMNS} FROM "Tag"
-              WHERE "kind" = ? AND "nameNorm" = ? AND "ownerId" IS ?`
+              WHERE "domain" = ? AND "kind" = ? AND "nameNorm" = ? AND "ownerId" IS ?`
         )
-        .get(kind, nameNorm, ownerId) as TagRow | undefined;
+        .get(domain, kind, nameNorm, ownerId) as TagRow | undefined;
 
     if (named) {
         return { tag: named, via: "name" };
@@ -211,13 +219,13 @@ export const resolveName = (
     const aliased = db
         .prepare(
             `SELECT t."id", t."kind", t."name", t."nameNorm", t."colorKey", t."description",
-                    t."ownerId", t."createdById"
+                    t."ownerId", t."createdById", t."domain"
                FROM "TagAlias" a
                JOIN "Tag" t ON t."id" = a."tagId"
-              WHERE a."nameNorm" = ? AND t."kind" = ? AND t."ownerId" IS ?
+              WHERE a."nameNorm" = ? AND t."domain" = ? AND t."kind" = ? AND t."ownerId" IS ?
               LIMIT 1`
         )
-        .get(nameNorm, kind, ownerId) as TagRow | undefined;
+        .get(nameNorm, domain, kind, ownerId) as TagRow | undefined;
 
     return aliased ? { tag: aliased, via: "alias" } : undefined;
 };
@@ -269,12 +277,44 @@ const assertPrivatable = (kind: string, ownerId: TagOwner): void => {
     }
 };
 
-const assertScopeMatches = (tagId: string, userId: TagOwner): void => {
-    const tag = db.prepare(`SELECT "ownerId" FROM "Tag" WHERE "id" = ?`).get(tagId) as
-        { ownerId: string | null } | undefined;
+/**
+ * The room an item is in: its library's (§21), by the original file `listRootId` follows. Null
+ * for an item with no original left to say.
+ */
+const mediaDomain = (mediaId: string): string | null =>
+    (
+        db
+            .prepare(
+                `SELECT r."domain" FROM "Media" m JOIN "MediaRoot" r ON r."id" = m."listRootId"
+                  WHERE m."id" = ?`
+            )
+            .get(mediaId) as { domain: string } | undefined
+    )?.domain ?? null;
+
+/**
+ * Refuses an assignment across rooms (§21): a Cellar name on a Parlour item would put it in the
+ * Parlour's filter panel and on its people pages. One indexed read beside the tag's, on a write
+ * path that already reads the tag. An item whose original is gone has no room to compare and is
+ * let through, as it was before rooms existed.
+ */
+const assertSameDomain = (tagDomain: string, mediaId: string): void => {
+    const itemDomain = mediaDomain(mediaId);
+
+    if (itemDomain !== null && itemDomain !== tagDomain) {
+        throw new ValidationError("That tag belongs to another room's vocabulary");
+    }
+};
+
+const assertScopeMatches = (tagId: string, userId: TagOwner, mediaId?: string): void => {
+    const tag = db.prepare(`SELECT "ownerId", "domain" FROM "Tag" WHERE "id" = ?`).get(tagId) as
+        { ownerId: string | null; domain: string } | undefined;
 
     if (!tag) {
         throw new Error(`No such tag: ${tagId}`);
+    }
+
+    if (mediaId !== undefined) {
+        assertSameDomain(tag.domain, mediaId);
     }
 
     if ((tag.ownerId ?? null) !== (userId ?? null)) {
@@ -304,6 +344,8 @@ const assertScopeMatches = (tagId: string, userId: TagOwner): void => {
  * a compile error rather than a decision nobody made.
  */
 export const ensureTag = (
+    /** The room whose vocabulary it is coined in (§21). */
+    domain: DomainKind,
     kind: string,
     name: string,
     ownerId: TagOwner,
@@ -338,10 +380,10 @@ export const ensureTag = (
         .prepare(
             `SELECT a."tagId" FROM "TagAlias" a
                JOIN "Tag" t ON t."id" = a."tagId"
-              WHERE a."nameNorm" = ? AND t."kind" = ? AND t."ownerId" IS ?
+              WHERE a."nameNorm" = ? AND t."domain" = ? AND t."kind" = ? AND t."ownerId" IS ?
               LIMIT 1`
         )
-        .get(nameNorm, kind, ownerId) as { tagId: string } | undefined;
+        .get(nameNorm, domain, kind, ownerId) as { tagId: string } | undefined;
 
     if (aliased) {
         return aliased.tagId;
@@ -356,22 +398,29 @@ export const ensureTag = (
      */
     const conflict =
         ownerId === null
-            ? `ON CONFLICT("kind", "nameNorm") WHERE "ownerId" IS NULL`
-            : `ON CONFLICT("kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL`;
+            ? `ON CONFLICT("domain", "kind", "nameNorm") WHERE "ownerId" IS NULL`
+            : `ON CONFLICT("domain", "kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL`;
 
     const row = db
         .prepare(
             `INSERT INTO "Tag"
-                ("id", "kind", "name", "nameNorm", "colorKey", "ownerId", "createdById",
-                 "updatedAt")
-             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ("id", "domain", "kind", "name", "nameNorm", "colorKey", "ownerId",
+                 "createdById", "updatedAt")
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
              ${conflict}
              DO UPDATE SET "updatedAt" = "Tag"."updatedAt"
              RETURNING "id"`
         )
-        .get(randomUUID(), kind, trimmed, nameNorm, colorKey ?? null, ownerId, createdById) as {
-        id: string;
-    };
+        .get(
+            randomUUID(),
+            domain,
+            kind,
+            trimmed,
+            nameNorm,
+            colorKey ?? null,
+            ownerId,
+            createdById
+        ) as { id: string };
 
     return row.id;
 };
@@ -449,17 +498,18 @@ export const updateTag = (
  *
  * **Public tags only.** What this finds is written into the shared search document, and a
  * private tag's name there would let everybody find items by somebody else's private vocabulary.
+ * **One room's** (§21): a Cellar name must not split a Parlour filename into words.
  */
-export const publicNameVocabulary = (): Map<string, string> => {
+export const publicNameVocabulary = (domain: string): Map<string, string> => {
     const rows = db
         .prepare(
-            `SELECT "nameNorm" FROM "Tag" WHERE "ownerId" IS NULL
+            `SELECT "nameNorm" FROM "Tag" WHERE "ownerId" IS NULL AND "domain" = :domain
              UNION
              SELECT a."nameNorm" FROM "TagAlias" a JOIN "Tag" t ON t."id" = a."tagId"
-              WHERE t."ownerId" IS NULL`
+              WHERE t."ownerId" IS NULL AND t."domain" = :domain`
         )
         .pluck()
-        .all() as string[];
+        .all({ domain }) as string[];
 
     return new Map(rows.map((nameNorm) => [squashName(nameNorm), nameNorm]));
 };
@@ -531,7 +581,7 @@ export const setAliases = (tagId: string, names: string[], createdById: string |
                 continue;
             }
 
-            const clash = resolveName(tag.kind, trimmed, tag.ownerId);
+            const clash = resolveName(tag.domain, tag.kind, trimmed, tag.ownerId);
 
             if (clash && clash.tag.id !== tagId) {
                 throw new ConflictError(nameTakenMessage(clash, trimmed));
@@ -594,14 +644,14 @@ export const dropClashingAliases = (
               WHERE "tagId" = :tagId
                 AND EXISTS (
                     SELECT 1 FROM "Tag" t
-                     WHERE t."kind" = :kind AND t."ownerId" IS :owner
+                     WHERE t."domain" = :domain AND t."kind" = :kind AND t."ownerId" IS :owner
                        AND t."id" <> :tagId AND t."id" IS NOT :into
                        AND (t."nameNorm" = "TagAlias"."nameNorm"
                             OR EXISTS (SELECT 1 FROM "TagAlias" other
                                         WHERE other."tagId" = t."id"
                                           AND other."nameNorm" = "TagAlias"."nameNorm")))`
         )
-        .run({ tagId, kind: tag.kind, owner, into: intoTagId }).changes;
+        .run({ tagId, domain: tag.domain, kind: tag.kind, owner, into: intoTagId }).changes;
 };
 
 export const removeTag = (tagId: string): void => {
@@ -686,6 +736,21 @@ const carryFaceDecisions = (sourceTagId: string, targetTagId: string): void => {
     );
 };
 
+/**
+ * Refuses folding a tag into one from another room (§21). The Parlour's "Jane" and the Cellar's
+ * are two people, and a merge would put one room's items under the other's name.
+ */
+const assertOneRoom = (fromTagId: string, toTagId: string): void => {
+    const rooms = db
+        .prepare(`SELECT DISTINCT "domain" FROM "Tag" WHERE "id" IN (?, ?)`)
+        .pluck()
+        .all(fromTagId, toTagId);
+
+    if (rooms.length > 1) {
+        throw new ValidationError("Tags in different rooms cannot be merged");
+    }
+};
+
 export const mergeTags = (
     sourceTagId: string,
     targetTagId: string,
@@ -695,6 +760,8 @@ export const mergeTags = (
         if (sourceTagId === targetTagId) {
             return 0;
         }
+
+        assertOneRoom(sourceTagId, targetTagId);
 
         const moved = db
             .prepare(`UPDATE OR IGNORE "MediaTag" SET "tagId" = ? WHERE "tagId" = ?`)
@@ -745,6 +812,8 @@ export const mergeTags = (
  * owner's own use of it.
  */
 export const listByKind = (
+    /** The room whose vocabulary to list (§21). */
+    domain: DomainKind,
     kind: string,
     /**
      * Which vocabulary to list (§6).
@@ -769,12 +838,12 @@ export const listByKind = (
                -- of 380 and the panel looks broken rather than stale.
                LEFT JOIN "Media" m ON m."id" = mt."mediaId" AND m."listable" = 1
                LEFT JOIN "User" u ON u."id" = t."createdById"
-              WHERE t."kind" = ? AND t."ownerId" IS ?
+              WHERE t."domain" = ? AND t."kind" = ? AND t."ownerId" IS ?
               GROUP BY t."id"
               ORDER BY "mediaCount" DESC, t."name" COLLATE NOCASE
               LIMIT ?`
         )
-        .all(kind, owner, limit)
+        .all(domain, kind, owner, limit)
         .map((row) => parseAliases(row as WithAliasesJson<TagWithCountRow>));
 
 /**
@@ -788,12 +857,13 @@ export const listByKind = (
  * count order.
  */
 export const searchByKind = (
+    domain: DomainKind,
     kind: string,
     owner: TagOwner,
     search: string,
     limit: number
 ): { rows: TagWithCountRow[]; near: boolean } => {
-    const condition = tagSearchCondition(search, { owner, kind });
+    const condition = tagSearchCondition(search, { domain, owner, kind });
 
     if (!condition) {
         return { rows: [], near: false };
@@ -808,12 +878,13 @@ export const searchByKind = (
                LEFT JOIN "MediaTag" mt ON mt."tagId" = t."id"
                LEFT JOIN "Media" m ON m."id" = mt."mediaId" AND m."listable" = 1
                LEFT JOIN "User" u ON u."id" = t."createdById"
-              WHERE t."kind" = :kind AND t."ownerId" IS :owner AND ${condition.sql}
+              WHERE t."domain" = :domain AND t."kind" = :kind AND t."ownerId" IS :owner
+                AND ${condition.sql}
               GROUP BY t."id"
               ORDER BY "mediaCount" DESC, t."name" COLLATE NOCASE
               LIMIT :limit`
         )
-        .all({ kind, owner, limit, ...condition.params })
+        .all({ domain, kind, owner, limit, ...condition.params })
         .map((row) => parseAliases(row as WithAliasesJson<TagWithCountRow>));
 
     return { rows, near: "typoIds" in condition.params };
@@ -828,8 +899,8 @@ export const searchByKind = (
 const facetValueFilters = (
     options: Omit<FacetValueOptions, "limit">
 ): { where: string[]; params: Record<string, unknown> } => {
-    const where = [`t."ownerId" IS :owner`];
-    const params: Record<string, unknown> = { owner: options.owner };
+    const where = [`t."domain" = :domain`, `t."ownerId" IS :owner`];
+    const params: Record<string, unknown> = { domain: options.domain, owner: options.owner };
 
     if (options.kind) {
         where.push(`t."kind" = :kind`);
@@ -838,6 +909,7 @@ const facetValueFilters = (
 
     if (options.search) {
         const condition = tagSearchCondition(options.search, {
+            domain: options.domain,
             owner: options.owner,
             kind: options.kind,
         });
@@ -878,6 +950,8 @@ export interface FacetValueRow {
 }
 
 export interface FacetValueOptions {
+    /** The room whose vocabulary to read (§21). */
+    domain: DomainKind;
     /** Which vocabulary to read: `null` the library's, a user id their own (§6). */
     owner: TagOwner;
     /** One facet only, for the expanded view. Every facet when absent. */
@@ -969,11 +1043,13 @@ export interface VocabularyOptions {
  * delivers 380 reads as broken data rather than as two different questions.
  */
 export const listVocabulary = (
+    domain: DomainKind,
     owner: TagOwner,
     options: VocabularyOptions
 ): { rows: TagWithCountRow[]; total: number } => {
-    const where = [`t."ownerId" IS :owner`];
+    const where = [`t."domain" = :domain`, `t."ownerId" IS :owner`];
     const params: Record<string, unknown> = {
+        domain,
         owner,
         limit: options.limit,
         offset: options.offset,
@@ -985,7 +1061,11 @@ export const listVocabulary = (
     }
 
     if (options.search) {
-        const condition = tagSearchCondition(options.search, { owner, kind: options.kind });
+        const condition = tagSearchCondition(options.search, {
+            domain,
+            owner,
+            kind: options.kind,
+        });
 
         if (condition) {
             where.push(condition.sql);
@@ -1145,6 +1225,7 @@ const BROWSE_ORDER: Record<BrowseSort, string> = {
  * are two different things somebody opens this page for.
  */
 export const browseTags = (
+    domain: DomainKind,
     owner: TagOwner,
     options: BrowseOptions
 ): { rows: BrowseTagRow[]; total: number } => {
@@ -1152,8 +1233,9 @@ export const browseTags = (
         return { rows: [], total: 0 };
     }
 
-    const where = [`t."ownerId" IS :owner`, `t."kind" = :kind`];
+    const where = [`t."domain" = :domain`, `t."ownerId" IS :owner`, `t."kind" = :kind`];
     const params: Record<string, unknown> = {
+        domain,
         owner,
         kind: options.kind,
         ...viewerParams({ userId: options.viewerId, rootIds: options.rootIds }),
@@ -1166,7 +1248,11 @@ export const browseTags = (
     }
 
     if (options.search) {
-        const condition = tagSearchCondition(options.search, { owner, kind: options.kind });
+        const condition = tagSearchCondition(options.search, {
+            domain,
+            owner,
+            kind: options.kind,
+        });
 
         if (condition) {
             where.push(condition.sql);
@@ -1183,7 +1269,7 @@ export const browseTags = (
     const rows = db
         .prepare(
             `SELECT t."id", t."kind", t."name", t."nameNorm", t."colorKey", t."description",
-                    t."ownerId", ut."favorite",
+                    t."ownerId", t."domain", ut."favorite",
                     sum(m."kind" = 'video') AS "videoCount",
                     sum(m."kind" = 'image') AS "imageCount",
                     ${ALIASES_COLUMN}
@@ -1328,6 +1414,7 @@ export const companions = (
                                     AND other."tagId" <> mine."tagId"
                                     AND other."userId" IS NULL
                JOIN "Tag" t ON t."id" = other."tagId" AND t."kind" = :kind
+                           AND t."domain" = (SELECT "domain" FROM "Tag" WHERE "id" = :tagId)
               WHERE mine."tagId" = :tagId
               GROUP BY other."tagId"
               ORDER BY "shared" DESC, t."name" COLLATE NOCASE
@@ -1503,6 +1590,7 @@ export const setScope = (tagId: string, owner: TagOwner): string[] =>
  */
 export const moveAssignments = (fromTagId: string, toTagId: string, owner: TagOwner): string[] =>
     db.transaction((): string[] => {
+        assertOneRoom(fromTagId, toTagId);
         assertNoForeignClips(fromTagId, owner);
 
         const affected = mediaIdsWithTag(fromTagId);
@@ -1579,14 +1667,17 @@ export const moveAssignments = (fromTagId: string, toTagId: string, owner: TagOw
         return affected;
     })();
 
-export const listKinds = (userId: string): { kind: string; tagCount: number }[] =>
+export const listKinds = (
+    domain: DomainKind,
+    userId: string
+): { kind: string; tagCount: number }[] =>
     db
         .prepare(
             `SELECT "kind", count(*) AS "tagCount" FROM "Tag"
-              WHERE ${VISIBLE_TO}
+              WHERE "domain" = ? AND ${VISIBLE_TO}
               GROUP BY "kind" ORDER BY "kind"`
         )
-        .all(userId) as { kind: string; tagCount: number }[];
+        .all(domain, userId) as { kind: string; tagCount: number }[];
 
 /**
  * The tags on one item.
@@ -1767,7 +1858,7 @@ export interface AssignInput {
  * re-tagging something that is already tagged is a no-op, not an error the UI should show.
  */
 export const assign = (input: AssignInput): void => {
-    assertScopeMatches(input.tagId, input.userId);
+    assertScopeMatches(input.tagId, input.userId, input.mediaId);
 
     db.prepare(
         `INSERT OR IGNORE INTO "MediaTag"
@@ -1957,6 +2048,10 @@ export const mediaIdsWithTag = (tagId: string): string[] =>
  * `batchId` is carried over deliberately. The survivor is tagged *because* that bulk apply
  * happened, so withdrawing the batch should take this row with it; attributing it to no batch
  * would leave a tag nobody can now undo.
+ *
+ * **Only tags of the survivor's room** (§21). A Parlour copy of a Cellar file keeps its own
+ * room's names; the Cellar's would put another room's vocabulary on it. A survivor whose room
+ * cannot be read takes everything, as before rooms existed.
  */
 export const copyAssignments = (fromMediaId: string, toMediaId: string): number => {
     if (fromMediaId === toMediaId) {
@@ -1966,11 +2061,12 @@ export const copyAssignments = (fromMediaId: string, toMediaId: string): number 
     return db.transaction((): number => {
         const rows = db
             .prepare(
-                `SELECT "tagId", "userId", "createdById", "source", "confidence", "position",
-                        "batchId"
-                   FROM "MediaTag" WHERE "mediaId" = ?`
+                `SELECT mt."tagId", mt."userId", mt."createdById", mt."source", mt."confidence",
+                        mt."position", mt."batchId"
+                   FROM "MediaTag" mt JOIN "Tag" t ON t."id" = mt."tagId"
+                  WHERE mt."mediaId" = :from AND (:room IS NULL OR t."domain" = :room)`
             )
-            .all(fromMediaId) as {
+            .all({ from: fromMediaId, room: mediaDomain(toMediaId) }) as {
             tagId: string;
             userId: string | null;
             createdById: string | null;

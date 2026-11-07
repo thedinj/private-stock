@@ -26,6 +26,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 import { vocabularyChanged } from "./ocrMatchHooks";
+import { inRoom, roomOf } from "./room";
 
 /**
  * Who is this? (§5f "Who is this?"): the faces on the frame somebody had on screen, and for the one
@@ -142,8 +143,10 @@ const likelyPerformers = (
         .flatMap((candidate) => {
             const tag = tagRepo.findById(candidate.tagId);
 
+            // The references are every room's, read from one file: only this room's are offered.
             return tag?.kind === "performer" &&
-                (tag.ownerId === null || tag.ownerId === auth.userId)
+                (tag.ownerId === null || tag.ownerId === auth.userId) &&
+                inRoom(tag, auth)
                 ? [{ ...candidate, name: tag.name }]
                 : [];
         })
@@ -289,7 +292,7 @@ export const nameFromSearch = (
 
     const coins =
         decision.performer.by === "name" &&
-        !tagRepo.resolveName("performer", decision.performer.name, null);
+        !tagRepo.resolveName(roomOf(auth), "performer", decision.performer.name, null);
     const visible = new Set(
         lookupMedia(
             decision.people.map((person) => person.mediaId),
@@ -321,6 +324,7 @@ export const nameFromSearch = (
                     decision.performer.by === "id"
                         ? decision.performer.tagId
                         : tagRepo.ensureTag(
+                              roomOf(auth),
                               "performer",
                               decision.performer.name,
                               null,
@@ -328,7 +332,12 @@ export const nameFromSearch = (
                           );
                 const tag = tagRepo.findById(tagId);
 
-                if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+                if (
+                    !tag ||
+                    tag.kind !== "performer" ||
+                    tag.ownerId !== null ||
+                    !inRoom(tag, auth)
+                ) {
                     throw new NotFoundError("Performer not found");
                 }
 

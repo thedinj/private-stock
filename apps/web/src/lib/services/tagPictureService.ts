@@ -48,11 +48,19 @@ const execFileAsync = promisify(execFile);
 /** The still the crop dialogue shows: wide enough to frame on a large screen, no wider. */
 const STILL_WIDTH = 1280;
 
-/** The tag, if this viewer can see it: the library's, or their own. */
+/**
+ * The tag, if this viewer can see it: the library's, or their own, and in the request's room
+ * (§21). The bytes route is in no room -- an `<img>` cannot say which -- and is authorised by
+ * the picture's own item instead (`resolveTagPicture`), so a context with no room passes here.
+ */
 const visibleTag = (tagId: string, auth: AuthContext): tagRepo.TagRow => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || (tag.ownerId !== null && tag.ownerId !== auth.userId)) {
+    if (
+        !tag ||
+        (tag.ownerId !== null && tag.ownerId !== auth.userId) ||
+        (auth.domain !== null && tag.domain !== auth.domain)
+    ) {
         throw new NotFoundError("Tag not found");
     }
 

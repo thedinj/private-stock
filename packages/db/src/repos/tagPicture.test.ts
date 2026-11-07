@@ -61,7 +61,7 @@ const shown = (tagId: string, rootIds = ["root"]) =>
 
 describe("the picture a viewer is shown", () => {
     it("is the chosen one over the automatic one, and the automatic one once that goes", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
 
         picture(jane, "auto", SHOWN);
         expect(shown(jane)).toBe("auto");
@@ -74,7 +74,7 @@ describe("the picture a viewer is shown", () => {
     });
 
     it("follows the item it was taken from into the trash, and outlives its purge", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
 
         picture(jane, "user", SHOWN);
         db.prepare(`UPDATE "Media" SET "listable" = NULL WHERE "id" = ?`).run(SHOWN);
@@ -86,14 +86,14 @@ describe("the picture a viewer is shown", () => {
     });
 
     it("is not shown from a library the viewer cannot reach", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
 
         picture(jane, "user", SHOWN);
         expect(shown(jane, ["elsewhere"])).toBeNull();
     });
 
     it("moves the time on when it is replaced, so its URL changes", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
         const first = picture(jane, "user", SHOWN).generatedAt;
         const second = picture(jane, "user", OTHER).generatedAt;
 
@@ -103,8 +103,8 @@ describe("the picture a viewer is shown", () => {
 
 describe("a merge", () => {
     it("carries the folded tag's chosen picture to a survivor without one", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
-        const doe = tagRepo.ensureTag("performer", "Jane Doe", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
+        const doe = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
 
         picture(jane, "user", SHOWN);
         picture(jane, "auto", SHOWN);
@@ -116,8 +116,8 @@ describe("a merge", () => {
     });
 
     it("keeps the survivor's own chosen picture", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
-        const doe = tagRepo.ensureTag("performer", "Jane Doe", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
+        const doe = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
 
         picture(jane, "user", SHOWN);
         picture(doe, "user", OTHER);
@@ -129,8 +129,8 @@ describe("a merge", () => {
 
 describe("the automatic pictures each job keeps", () => {
     it("are the performers' for the faces job and everybody else's for the looks job", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
-        const beach = tagRepo.ensureTag("tag", "Beach", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
+        const beach = tagRepo.ensureTag("cellar", "tag", "Beach", null);
 
         picture(jane, "auto", SHOWN);
         picture(beach, "auto", SHOWN);
@@ -141,8 +141,8 @@ describe("the automatic pictures each job keeps", () => {
     });
 
     it("reads a look from listable items of tags that are not performers", () => {
-        const jane = tagRepo.ensureTag("performer", "Jane", null);
-        const beach = tagRepo.ensureTag("tag", "Beach", null);
+        const jane = tagRepo.ensureTag("cellar", "performer", "Jane", null);
+        const beach = tagRepo.ensureTag("cellar", "tag", "Beach", null);
 
         for (const tagId of [jane, beach]) {
             for (const mediaId of [SHOWN, OTHER]) {

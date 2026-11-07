@@ -9,6 +9,7 @@ import {
     searchTerms,
     rowidShuffleParams,
     rulesIn,
+    type DomainKind,
     type FilterGroup,
     type FilterMeasure,
     type FilterRule,
@@ -2154,17 +2155,21 @@ export const facetCountsForTags = (
 /**
  * The filter panel's Favourites chip for one facet: how many favourite tags of it somebody has
  * (§14e "Favourites ♥"). Null when they have none, which is the panel's cue to leave the chip
- * out.
+ * out. One room's favourites (§21).
  */
-export const favoriteTagCount = (userId: string, kind: string): { tags: number } | null => {
+export const favoriteTagCount = (
+    domain: DomainKind,
+    userId: string,
+    kind: string
+): { tags: number } | null => {
     const { tags } = db
         .prepare(
             `SELECT count(*) AS "tags" FROM "UserTag" ut
-               JOIN "Tag" t ON t."id" = ut."tagId" AND t."kind" = ?
+               JOIN "Tag" t ON t."id" = ut."tagId" AND t."kind" = ? AND t."domain" = ?
                     AND (t."ownerId" IS NULL OR t."ownerId" = ?)
               WHERE ut."userId" = ? AND ut."favorite" IS NOT NULL`
         )
-        .get(kind, userId, userId) as { tags: number };
+        .get(kind, domain, userId, userId) as { tags: number };
 
     return tags === 0 ? null : { tags };
 };

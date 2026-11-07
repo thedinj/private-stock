@@ -36,7 +36,7 @@ const { db: sharedDb } = await import("../db.js");
 
 /** What the worker's `mentionMatch` pass writes: every document matched by the one rule. */
 const matchMentions = (): void => {
-    const matcher = buildTagMatcher(mentionRepo.vocabulary());
+    const matcher = buildTagMatcher(mentionRepo.vocabulary("cellar"));
 
     mentionRepo.writeChanged(
         mentionRepo.documentsAfter(0, 100_000).map((document) => ({
@@ -104,7 +104,7 @@ const givenMedia = (id: string, title: string): string => {
 };
 
 const tagIt = (mediaId: string, name: string, owner: string | null, by: string): void => {
-    const tagId = tagRepo.ensureTag("tag", name, owner);
+    const tagId = tagRepo.ensureTag("cellar", "tag", name, owner);
 
     tagRepo.assign({ mediaId, tagId, userId: owner, createdById: by });
 };
@@ -235,7 +235,11 @@ describe("finding a private tag by an alias", () => {
     it("finds the item for the tag's owner, by the alias's prefix", () => {
         givenMedia("m1", "Untitled");
         tagIt("m1", "clown", ADA, ADA);
-        tagRepo.setAliases(tagRepo.resolveName("tag", "clown", ADA)!.tag.id, ["jester"], ADA);
+        tagRepo.setAliases(
+            tagRepo.resolveName("cellar", "tag", "clown", ADA)!.tag.id,
+            ["jester"],
+            ADA
+        );
 
         expect(found("jest", ADA)).toEqual(["m1"]);
     });
@@ -243,7 +247,11 @@ describe("finding a private tag by an alias", () => {
     it("does not find it for anybody else", () => {
         givenMedia("m1", "Untitled");
         tagIt("m1", "clown", ADA, ADA);
-        tagRepo.setAliases(tagRepo.resolveName("tag", "clown", ADA)!.tag.id, ["jester"], ADA);
+        tagRepo.setAliases(
+            tagRepo.resolveName("cellar", "tag", "clown", ADA)!.tag.id,
+            ["jester"],
+            ADA
+        );
 
         expect(found("jester", BEN)).toEqual([]);
     });
@@ -342,7 +350,7 @@ describe("finding what names a tag but does not carry it", () => {
         givenMedia("m3", "Maggie May birthday");
         givenMedia("m4", "Aunt Margaret already filed");
         givenMedia("m5", "Margaret, an aunt of nobody");
-        const tagId = tagRepo.ensureTag("performer", "Aunt Margaret", null);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Aunt Margaret", null);
         tagRepo.setAliases(tagId, ["Maggie May"], ADA);
         tagRepo.assign({ mediaId: "m4", tagId, userId: null, createdById: ADA });
 
@@ -352,7 +360,7 @@ describe("finding what names a tag but does not carry it", () => {
     it("composes with the search box rather than replacing it", () => {
         givenMedia("m1", "Aunt Margaret beach");
         givenMedia("m2", "Aunt Margaret garden");
-        const tagId = tagRepo.ensureTag("performer", "Aunt Margaret", null);
+        const tagId = tagRepo.ensureTag("cellar", "performer", "Aunt Margaret", null);
 
         matchMentions();
         expect(
@@ -369,7 +377,7 @@ describe("finding what names a tag but does not carry it", () => {
     /** An id in a shared address must not search the library for somebody's private name. */
     it("matches nothing for somebody else's private tag", () => {
         givenMedia("m1", "clown party");
-        const tagId = tagRepo.ensureTag("tag", "clown", ADA);
+        const tagId = tagRepo.ensureTag("cellar", "tag", "clown", ADA);
 
         expect(untagged(tagId, ADA)).toEqual(["m1"]);
         expect(untagged(tagId, BEN)).toEqual([]);

@@ -67,9 +67,10 @@ const newClip = (mediaId: string, userId = USER): string =>
         speed: null,
     });
 
-const publicTag = (name: string, kind = "tag"): string => tagRepo.ensureTag(kind, name, null, USER);
+const publicTag = (name: string, kind = "tag"): string =>
+    tagRepo.ensureTag("cellar", kind, name, null, USER);
 const privateTag = (name: string, owner = USER): string =>
-    tagRepo.ensureTag("tag", name, owner, owner);
+    tagRepo.ensureTag("cellar", "tag", name, owner, owner);
 
 const tagMedia = (mediaId: string, tagId: string, owner: string | null = null): void =>
     tagRepo.assign({ mediaId, tagId, userId: owner, createdById: USER });
@@ -282,7 +283,11 @@ describe("the tag lifecycle", () => {
         clipTagRepo.assign({ clipId: newClip("a"), tagId: publicTag("jumping") });
         publicTag("orphan");
 
-        const unused = tagRepo.listVocabulary(null, { unusedOnly: true, limit: 50, offset: 0 });
+        const unused = tagRepo.listVocabulary("cellar", null, {
+            unusedOnly: true,
+            limit: 50,
+            offset: 0,
+        });
 
         expect(unused.rows.map((row) => row.name)).toEqual(["orphan"]);
         expect(unused.total).toBe(1);

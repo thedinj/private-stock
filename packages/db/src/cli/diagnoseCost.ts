@@ -450,7 +450,7 @@ const ENDPOINTS: Endpoint[] = [
     {
         name: "GET /api/tags?kind=performer",
         run: () => {
-            tagRepo.listByKind("performer", null, 500);
+            tagRepo.listByKind("cellar", "performer", null, 500);
         },
     },
     {

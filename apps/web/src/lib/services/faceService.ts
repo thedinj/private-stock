@@ -17,6 +17,7 @@ import {
 
 import type { AuthContext } from "../auth/withAuth";
 import { artifactUrl } from "./artService";
+import { inRoom } from "./room";
 import { spriteThumbFor } from "./spriteThumb";
 
 /**
@@ -36,10 +37,10 @@ const requireAdmin = (auth: AuthContext): void => {
     }
 };
 
-const libraryPerformer = (tagId: string) => {
+const libraryPerformer = (tagId: string, auth: AuthContext) => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+    if (!tag || tag.kind !== "performer" || tag.ownerId !== null || !inRoom(tag, auth)) {
         throw new NotFoundError("Performer not found");
     }
 
@@ -140,7 +141,7 @@ export const setNoSingleFace = (
     auth: AuthContext
 ): { noSingleFace: boolean } => {
     requireAdmin(auth);
-    libraryPerformer(tagId);
+    libraryPerformer(tagId, auth);
 
     faceRepo.setNoSingleFace(tagId, input.noSingleFace, auth.userId);
     jobRepo.enqueueKind("faceAnchors", 200, 0);
@@ -155,7 +156,7 @@ export const confirmedFacesPage = (
     auth: AuthContext
 ): ConfirmedFacesPage => {
     requireAdmin(auth);
-    libraryPerformer(tagId);
+    libraryPerformer(tagId, auth);
 
     const start = query.page * query.limit;
     const { faces, total } = faceRepo.everyConfirmedFace(

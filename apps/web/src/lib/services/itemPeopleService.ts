@@ -24,6 +24,7 @@ import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 import { notThem } from "./notThem";
 import { vocabularyChanged } from "./ocrMatchHooks";
+import { inRoom, roomOf } from "./room";
 import { picturesFor } from "./tagPictureService";
 
 /**
@@ -54,10 +55,10 @@ const visibleItem = (mediaId: string, auth: AuthContext) => {
     return item;
 };
 
-const libraryPerformer = (tagId: string) => {
+const libraryPerformer = (tagId: string, auth: AuthContext) => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+    if (!tag || tag.kind !== "performer" || tag.ownerId !== null || !inRoom(tag, auth)) {
         throw new NotFoundError("Performer not found");
     }
 
@@ -88,7 +89,7 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
     const nameOf = (tagId: string) => {
         const tag = tagRepo.findById(tagId);
 
-        return tag && tag.kind === "performer" && tag.ownerId === null
+        return tag && tag.kind === "performer" && tag.ownerId === null && inRoom(tag, auth)
             ? { id: tag.id, name: tag.name, pictureUrl: pictures.get(tag.id)?.smallUrl ?? null }
             : null;
     };
@@ -191,7 +192,7 @@ export const decideItemPeople = (
     visibleItem(mediaId, auth);
 
     if (decision.action === "refuseNamed") {
-        const tag = libraryPerformer(decision.tagId);
+        const tag = libraryPerformer(decision.tagId, auth);
 
         db.transaction(() => notThem([mediaId], tag.id, auth.userId, "item"))();
 
@@ -215,7 +216,8 @@ export const decideItemPeople = (
     }
 
     const coins =
-        decision.action === "name" && !tagRepo.resolveName("performer", decision.name, null);
+        decision.action === "name" &&
+        !tagRepo.resolveName(roomOf(auth), "performer", decision.name, null);
 
     const press = (tagId: string | null, verdict: "is" | "isNot") => ({
         actor: "user" as const,
@@ -233,7 +235,7 @@ export const decideItemPeople = (
         () =>
             db.transaction((): number => {
                 if (decision.action === "addNamed") {
-                    const tag = libraryPerformer(decision.tagId);
+                    const tag = libraryPerformer(decision.tagId, auth);
 
                     return tagItem(mediaId, tag.id, tag.name, auth.userId);
                 }
@@ -241,9 +243,16 @@ export const decideItemPeople = (
                 const tag =
                     decision.action === "name"
                         ? libraryPerformer(
-                              tagRepo.ensureTag("performer", decision.name, null, auth.userId)
+                              tagRepo.ensureTag(
+                                  roomOf(auth),
+                                  "performer",
+                                  decision.name,
+                                  null,
+                                  auth.userId
+                              ),
+                              auth
                           )
-                        : libraryPerformer(decision.tagId);
+                        : libraryPerformer(decision.tagId, auth);
 
                 faceDecisionRepo.nameActive(tag.id);
 

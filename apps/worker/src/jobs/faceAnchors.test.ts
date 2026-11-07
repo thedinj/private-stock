@@ -47,6 +47,9 @@ const state = vi.hoisted(() => ({
     confirmed: [] as { tagId: string; mediaId: string; vectorIndex: number }[],
     tagged: [] as { tagId: string; faceId: string; mediaId: string; vectorIndex: number }[],
     faces: [] as { id: string; mediaId: string; vectorIndex: number; decided?: 0 | 1 }[],
+    /** Each item's room (§21), and each performer's; the cellar where unsaid. */
+    itemRooms: new Map<string, string>(),
+    tagRooms: new Map<string, string>(),
     stale: { tags: [] as string[], items: [] as string[] },
     /** What each run asked for and wrote, in order. */
     sourced: [] as (string[] | null)[],
@@ -111,6 +114,7 @@ vi.mock("@private-stock/db", () => ({
                     kind: "video",
                     scattered: 0,
                     decided: face.decided ?? 0,
+                    domain: state.itemRooms.get(face.mediaId) ?? "cellar",
                 }));
         },
         writtenAppearances: () => [...state.appearances.values()].map((row) => ({ ...row })),
@@ -136,9 +140,16 @@ vi.mock("@private-stock/db", () => ({
             state.stale = { tags: [], items: [] };
             return stale;
         },
-        confirmedFaceRefs: (tagIds: string[] | null) => only(state.confirmed, "tagId", tagIds),
+        confirmedFaceRefs: (tagIds: string[] | null) =>
+            only(state.confirmed, "tagId", tagIds).map((row) => ({
+                ...row,
+                domain: state.tagRooms.get(row.tagId) ?? "cellar",
+            })),
         taggedFaceRefs: (_perTag: number, tagIds: string[] | null) =>
-            only(state.tagged, "tagId", tagIds),
+            only(state.tagged, "tagId", tagIds).map((row) => ({
+                ...row,
+                domain: state.tagRooms.get(row.tagId) ?? "cellar",
+            })),
         performersOn: (mediaIds: string[]) => [
             ...new Set(only(state.tagged, "mediaId", mediaIds).map((row) => row.tagId)),
         ],
@@ -219,6 +230,8 @@ beforeEach(() => {
     state.confirmed = [];
     state.tagged = [];
     state.faces = [];
+    state.itemRooms = new Map();
+    state.tagRooms = new Map();
     state.anchors = new Map();
     state.appearances = new Map();
     state.stale = { tags: [], items: [] };
@@ -291,6 +304,42 @@ describe("face references", () => {
         expect(people[0].matchTagId).toBe("jane");
         expect(people[0].score).toBeGreaterThan(0.9);
         expect(people[1].score ?? 0).toBeLessThan(0.3);
+    });
+
+    it("scores a person only against the performers of their item's room (§21)", async () => {
+        item("a1", [1, 5]);
+        item("a2", [1, 6]);
+        item("a3", [1, 7]);
+        // The same face in a Cellar video and in a Parlour one.
+        item("cellar", [1, 1]);
+        item("home", [1, 1]);
+        state.itemRooms.set("home", "family");
+        for (const id of ["a1", "a2", "a3"]) tag("jane", id, 2);
+
+        await runFaceAnchors();
+
+        expect(peopleOf("cellar").map((person) => person.matchTagId)).toEqual(["jane"]);
+        expect(peopleOf("home").map((person) => person.matchTagId)).toEqual([null]);
+    });
+
+    it("never gathers strangers of two rooms into one new person (§21)", async () => {
+        for (const id of ["s1", "s2", "s3", "f1", "f2", "f3"]) item(id, [8, 8]);
+        for (const id of ["f1", "f2", "f3"]) state.itemRooms.set(id, "family");
+
+        await runFaceAnchors();
+
+        const of = (prefix: string) =>
+            new Set(
+                [...state.appearances.values()]
+                    .filter((person) => person.mediaId.startsWith(prefix))
+                    .map((person) => person.newPersonId)
+            );
+
+        expect(of("s").size).toBe(1);
+        expect(of("f").size).toBe(1);
+        expect([...of("s")][0]).not.toBeNull();
+        expect([...of("f")][0]).not.toBeNull();
+        expect([...of("s")][0]).not.toBe([...of("f")][0]);
     });
 
     it("gathers people who match nobody, seen on enough items, into a new person", async () => {

@@ -62,13 +62,13 @@ const tagIt = (mediaId: string, tagId: string, owner: string | null, by: string)
 const names = (result: { rows: { name: string }[] }): string[] => result.rows.map((r) => r.name);
 
 const page = (owner: string | null, options = {}) =>
-    tagRepo.listVocabulary(owner, { limit: 50, offset: 0, ...options });
+    tagRepo.listVocabulary("cellar", owner, { limit: 50, offset: 0, ...options });
 
 describe("listing a vocabulary", () => {
     it("returns one system's tags and never the other's", () => {
-        tagRepo.ensureTag("tag", "beach", null, ADA);
-        tagRepo.ensureTag("tag", "therapy", ADA, ADA);
-        tagRepo.ensureTag("tag", "todo", BEN, BEN);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "therapy", ADA, ADA);
+        tagRepo.ensureTag("cellar", "tag", "todo", BEN, BEN);
 
         expect(names(page(null))).toEqual(["beach"]);
         expect(names(page(ADA))).toEqual(["therapy"]);
@@ -81,22 +81,22 @@ describe("listing a vocabulary", () => {
      * and they are exactly what somebody tidying up came for.
      */
     it("orders by facet then name", () => {
-        tagRepo.ensureTag("tag", "zebra", null, ADA);
-        tagRepo.ensureTag("performer", "alice", null, ADA);
-        tagRepo.ensureTag("tag", "apple", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "zebra", null, ADA);
+        tagRepo.ensureTag("cellar", "performer", "alice", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "apple", null, ADA);
 
         expect(names(page(null))).toEqual(["alice", "apple", "zebra"]);
     });
 
     it("keeps a tag nothing carries", () => {
-        tagRepo.ensureTag("tag", "unused", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "unused", null, ADA);
 
         expect(names(page(null))).toEqual(["unused"]);
     });
 
     it("finds by prefix, case and spacing folded", () => {
-        tagRepo.ensureTag("tag", "Jane Doe", null, ADA);
-        tagRepo.ensureTag("tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "Jane Doe", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         expect(names(page(null, { search: "jane" }))).toEqual(["Jane Doe"]);
         expect(names(page(null, { search: "JANE  doe" }))).toEqual(["Jane Doe"]);
@@ -108,8 +108,8 @@ describe("listing a vocabulary", () => {
      * typing has to meet it whichever way it was written.
      */
     it("finds by any word of the name, and by its glued or punctuated spelling", () => {
-        tagRepo.ensureTag("tag", "Aunt Margaret", null, ADA);
-        tagRepo.ensureTag("tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "Aunt Margaret", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         for (const search of [
             "margaret",
@@ -123,8 +123,8 @@ describe("listing a vocabulary", () => {
     });
 
     it("finds a misspelling when nothing is spelled that way", () => {
-        tagRepo.ensureTag("tag", "Aunt Margaret", null, ADA);
-        tagRepo.ensureTag("tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "Aunt Margaret", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         expect(names(page(null, { search: "margret" }))).toEqual(["Aunt Margaret"]);
         expect(names(page(null, { search: "auntmargret" }))).toEqual(["Aunt Margaret"]);
@@ -132,37 +132,37 @@ describe("listing a vocabulary", () => {
 
     /** A close spelling beside an exact one is how fuzzy search buries what was typed. */
     it("does not add near spellings to a search that matched", () => {
-        tagRepo.ensureTag("tag", "beach", null, ADA);
-        tagRepo.ensureTag("tag", "bench", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "bench", null, ADA);
 
         expect(names(page(null, { search: "bench" }))).toEqual(["bench"]);
         expect(names(page(null, { search: "bech" }))).toEqual(["beach", "bench"]);
     });
 
     it("never fuzzes into the other system's vocabulary", () => {
-        tagRepo.ensureTag("tag", "margaret", BEN, BEN);
+        tagRepo.ensureTag("cellar", "tag", "margaret", BEN, BEN);
 
         expect(names(page(null, { search: "margret" }))).toEqual([]);
     });
 
     /** A search for "50%" must not become a search for everything. */
     it("treats a wildcard as a character", () => {
-        tagRepo.ensureTag("tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         expect(names(page(null, { search: "%" }))).toEqual(["beach"]);
     });
 
     it("filters to one facet", () => {
-        tagRepo.ensureTag("tag", "beach", null, ADA);
-        tagRepo.ensureTag("performer", "alice", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "performer", "alice", null, ADA);
 
         expect(names(page(null, { kind: "performer" }))).toEqual(["alice"]);
     });
 
     it("finds the tags nothing carries", () => {
-        const used = tagRepo.ensureTag("tag", "used", null, ADA);
+        const used = tagRepo.ensureTag("cellar", "tag", "used", null, ADA);
 
-        tagRepo.ensureTag("tag", "unused", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "unused", null, ADA);
         tagIt(givenMedia("m1"), used, null, ADA);
 
         expect(names(page(null, { unusedOnly: true }))).toEqual(["unused"]);
@@ -174,7 +174,7 @@ describe("listing a vocabulary", () => {
      * than as two different questions.
      */
     it("counts only items the library would show", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", null, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         tagIt(givenMedia("shown"), tag, null, ADA);
         tagIt(givenMedia("hidden", false), tag, null, ADA);
@@ -184,14 +184,17 @@ describe("listing a vocabulary", () => {
 
     it("pages, and reports the total behind the page", () => {
         for (const name of ["a", "b", "c", "d"]) {
-            tagRepo.ensureTag("tag", name, null, ADA);
+            tagRepo.ensureTag("cellar", "tag", name, null, ADA);
         }
 
-        const first = tagRepo.listVocabulary(null, { limit: 2, offset: 0 });
+        const first = tagRepo.listVocabulary("cellar", null, { limit: 2, offset: 0 });
 
         expect(names(first)).toEqual(["a", "b"]);
         expect(first.total).toBe(4);
-        expect(names(tagRepo.listVocabulary(null, { limit: 2, offset: 2 }))).toEqual(["c", "d"]);
+        expect(names(tagRepo.listVocabulary("cellar", null, { limit: 2, offset: 2 }))).toEqual([
+            "c",
+            "d",
+        ]);
     });
 
     /**
@@ -200,43 +203,43 @@ describe("listing a vocabulary", () => {
      * to the name, so a page boundary never lands somewhere arbitrary.
      */
     it("sorts by count when asked, with the name breaking ties", () => {
-        const busy = tagRepo.ensureTag("tag", "zebra", null, ADA);
-        const some = tagRepo.ensureTag("tag", "yak", null, ADA);
-        tagRepo.ensureTag("tag", "b", null, ADA);
-        tagRepo.ensureTag("tag", "a", null, ADA);
+        const busy = tagRepo.ensureTag("cellar", "tag", "zebra", null, ADA);
+        const some = tagRepo.ensureTag("cellar", "tag", "yak", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "b", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "a", null, ADA);
 
         tagIt(givenMedia("m1"), busy, null, ADA);
         tagIt(givenMedia("m2"), busy, null, ADA);
         tagIt(givenMedia("m3"), some, null, ADA);
 
         expect(names(page(null))).toEqual(["a", "b", "yak", "zebra"]);
-        expect(names(tagRepo.listVocabulary(null, { limit: 1, offset: 0, sort: "count" }))).toEqual(
-            ["zebra"]
-        );
+        expect(
+            names(tagRepo.listVocabulary("cellar", null, { limit: 1, offset: 0, sort: "count" }))
+        ).toEqual(["zebra"]);
         expect(names(page(null, { sort: "count" }))).toEqual(["zebra", "yak", "a", "b"]);
     });
 
     /** The total is counted after the HAVING, or "showing 2 of 40" is a different 40. */
     it("counts the filtered total, not the whole vocabulary", () => {
-        const used = tagRepo.ensureTag("tag", "used", null, ADA);
+        const used = tagRepo.ensureTag("cellar", "tag", "used", null, ADA);
 
-        tagRepo.ensureTag("tag", "unused", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "unused", null, ADA);
         tagIt(givenMedia("m1"), used, null, ADA);
 
-        expect(tagRepo.listVocabulary(null, { limit: 50, offset: 0, unusedOnly: true }).total).toBe(
-            1
-        );
+        expect(
+            tagRepo.listVocabulary("cellar", null, { limit: 50, offset: 0, unusedOnly: true }).total
+        ).toBe(1);
     });
 
     it("names whoever coined it", () => {
-        tagRepo.ensureTag("tag", "beach", null, BEN);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, BEN);
 
         expect(page(null).rows[0].createdBy).toBe("Ben");
     });
 
     /** A public tag belongs to the library, so losing its author must not take the name. */
     it("keeps a public tag when the account that coined it is deleted", () => {
-        tagRepo.ensureTag("tag", "beach", null, BEN);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, BEN);
 
         db.prepare(`DELETE FROM "User" WHERE "id" = ?`).run(BEN);
 
@@ -246,8 +249,8 @@ describe("listing a vocabulary", () => {
 
     /** The second person to type a name did not coin it. */
     it("does not reattribute an existing tag to whoever used it next", () => {
-        tagRepo.ensureTag("tag", "beach", null, ADA);
-        tagRepo.ensureTag("tag", "beach", null, BEN);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
+        tagRepo.ensureTag("cellar", "tag", "beach", null, BEN);
 
         expect(page(null).rows[0].createdBy).toBe("Ada");
     });
@@ -255,7 +258,7 @@ describe("listing a vocabulary", () => {
 
 describe("moving a tag between the two systems", () => {
     it("moves the tag and every assignment together", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", ADA, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", ADA, ADA);
 
         tagIt(givenMedia("m1"), tag, ADA, ADA);
 
@@ -272,7 +275,7 @@ describe("moving a tag between the two systems", () => {
      * would then refuse to write anything more to it.
      */
     it("leaves the scope invariant satisfied afterwards", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", ADA, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", ADA, ADA);
 
         tagIt(givenMedia("m1"), tag, ADA, ADA);
         tagRepo.setScope(tag, null);
@@ -288,8 +291,8 @@ describe("moving a tag between the two systems", () => {
     });
 
     it("carries the assignments into an existing tag when the name is taken", () => {
-        const mine = tagRepo.ensureTag("tag", "beach", ADA, ADA);
-        const shared = tagRepo.ensureTag("tag", "beach", null, BEN);
+        const mine = tagRepo.ensureTag("cellar", "tag", "beach", ADA, ADA);
+        const shared = tagRepo.ensureTag("cellar", "tag", "beach", null, BEN);
 
         tagIt(givenMedia("m1"), mine, ADA, ADA);
 
@@ -299,8 +302,8 @@ describe("moving a tag between the two systems", () => {
     });
 
     it("does not duplicate an assignment the destination already had", () => {
-        const mine = tagRepo.ensureTag("tag", "beach", ADA, ADA);
-        const shared = tagRepo.ensureTag("tag", "beach", null, BEN);
+        const mine = tagRepo.ensureTag("cellar", "tag", "beach", ADA, ADA);
+        const shared = tagRepo.ensureTag("cellar", "tag", "beach", null, BEN);
         const media = givenMedia("m1");
 
         tagIt(media, mine, ADA, ADA);
@@ -315,7 +318,7 @@ describe("moving a tag between the two systems", () => {
 
 describe("whether anybody else has used a tag", () => {
     it("is false while you are the only one", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", null, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         tagIt(givenMedia("m1"), tag, null, ADA);
 
@@ -323,7 +326,7 @@ describe("whether anybody else has used a tag", () => {
     });
 
     it("is true once somebody else has", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", null, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         tagIt(givenMedia("m1"), tag, null, ADA);
         tagIt(givenMedia("m2"), tag, null, BEN);
@@ -337,7 +340,7 @@ describe("whether anybody else has used a tag", () => {
      * that makes unpublishing safe.
      */
     it("treats an unattributed assignment as somebody else's", () => {
-        const tag = tagRepo.ensureTag("tag", "beach", null, ADA);
+        const tag = tagRepo.ensureTag("cellar", "tag", "beach", null, ADA);
 
         tagIt(givenMedia("m1"), tag, null, BEN);
         db.prepare(`DELETE FROM "User" WHERE "id" = ?`).run(BEN);

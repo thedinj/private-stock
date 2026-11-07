@@ -35,6 +35,7 @@ const pair = (id: string, tagId: string, extra: Record<string, unknown> = {}) =>
     state: null,
     batchId: null,
     untagged: 2,
+    tagDomain: "cellar",
     ...extra,
 });
 
@@ -185,7 +186,7 @@ const auth: AuthContext = {
     displayName: "A",
     scopes: ["admin"],
     accessibleRootIds: ["root"],
-    domain: null,
+    domain: "cellar",
     tokenEpoch: 0,
 };
 

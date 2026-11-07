@@ -87,7 +87,7 @@ describe("mentionRepo", () => {
             `INSERT INTO "TagAlias" ("id", "tagId", "name", "nameNorm") VALUES ('a', 'pub', 'Janey', 'janey')`
         ).run();
 
-        expect(mentionRepo.vocabulary()).toEqual([
+        expect(mentionRepo.vocabulary("cellar")).toEqual([
             { tagId: "priv", name: "Aunt Margaret" },
             { tagId: "pub", name: "Jane Doe" },
             { tagId: "pub", name: "Janey" },

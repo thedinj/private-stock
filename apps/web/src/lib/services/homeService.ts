@@ -22,6 +22,7 @@ import { createTtlCache } from "../ttlCache";
 import { inRequestDomain, requestDomain } from "./requestDomain";
 import { listMedia, toListPage } from "./mediaService";
 import { queryCacheKey } from "./queryCacheKey";
+import { inRoom } from "./room";
 import { findSavedQuery } from "./savedFilterService";
 import { loadAdminSettings } from "./settingsService";
 
@@ -282,6 +283,12 @@ const resolveShelf = (
 
     if (!tag) {
         return unavailable(key, shelf.title ?? "Tag", shelf, "This tag was deleted");
+    }
+
+    // Another room's tag is not named here (§21), and would fill nothing: its items are not
+    // among this room's.
+    if (!inRoom(tag, auth)) {
+        return unavailable(key, shelf.title ?? "Tag", shelf, "This tag is not in this room");
     }
 
     return {

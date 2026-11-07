@@ -97,27 +97,36 @@ export const applyAssignments = (input: ApplyAssignmentsInput): ApplyBatchResult
             // `scope` is the assignment's audience: NULL is library-wide, a user id is that
             // person's own (§6). `INSERT OR IGNORE` finds the matching partial unique
             // either way, so a bulk apply cannot duplicate what is already there.
+            //
+            // A pair across rooms (§21) is skipped rather than written: the services pair one
+            // room's names with that room's items, and this is the floor under them -- a skip,
+            // not a refusal, because one stray id must not fail ten thousand good rows.
             `INSERT OR IGNORE INTO
                 "MediaTag" ("id", "mediaId", "tagId", "userId", "createdById", "source",
                             "batchId")
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+             SELECT :id, :mediaId, :tagId, :scope, :userId, :source, :batchId
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM "Media" m
+                    JOIN "MediaRoot" r ON r."id" = m."listRootId"
+                    JOIN "Tag" t ON t."id" = :tagId
+                   WHERE m."id" = :mediaId AND r."domain" <> t."domain")`
         );
 
         let assigned = 0;
 
         for (const { mediaId, tagId } of input.assignments) {
-            assigned += insert.run(
-                randomUUID(),
+            assigned += insert.run({
+                id: randomUUID(),
                 mediaId,
                 tagId,
-                input.scope,
+                scope: input.scope,
                 // Who acted, on every row, whichever system it landed in. A public bulk
                 // apply is the one place ten thousand rows can appear at once, and
                 // reviewing it needs a name attached to them.
-                input.userId,
-                input.source ?? "user",
-                batchId
-            ).changes;
+                userId: input.userId,
+                source: input.source ?? "user",
+                batchId,
+            }).changes;
         }
 
         return { batchId, assigned };

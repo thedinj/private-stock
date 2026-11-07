@@ -50,6 +50,7 @@ import {
     isStringCursor,
     requireAdmin,
 } from "./ocrReviewService";
+import { roomOf } from "./room";
 
 /**
  * Tagging performers and sources from what OCR read (§5d "Tagging performers and sources from
@@ -210,12 +211,16 @@ export const listMatches = (query: OcrMatchQuery, auth: AuthContext): OcrMatchPa
     requireAdmin(auth);
 
     const page = ocrTagMatchRepo.listQueue({
+        domain: roomOf(auth),
         status: query.status,
         search: query.search,
         after: decodeCursor(query.after, isStringCursor),
         limit: query.limit,
     });
-    const candidates = ocrTagMatchRepo.candidatesFor(page.rows.map((row) => row.textNorm));
+    const candidates = ocrTagMatchRepo.candidatesFor(
+        page.rows.map((row) => row.textNorm),
+        roomOf(auth)
+    );
 
     const rows = page.rows.map((row): OcrMatchRow => ({
         textNorm: row.textNorm,
@@ -240,7 +245,7 @@ export const listMatchItems = (query: OcrMatchItemsQuery, auth: AuthContext): Oc
         after: decodeCursor(query.after, isItemCursor),
         limit: query.limit,
     });
-    const pairs = ocrTagMatchRepo.candidatesFor([query.textNorm]);
+    const pairs = ocrTagMatchRepo.candidatesFor([query.textNorm], roomOf(auth));
     const tagged = ocrTagMatchRepo.taggedPairs(
         page.ids,
         pairs.map((pair) => pair.tagId)
@@ -292,10 +297,20 @@ export const listMatchItems = (query: OcrMatchItemsQuery, auth: AuthContext): Oc
 const gone = (): NotFoundError =>
     new NotFoundError("That match is no longer there. Reload the list.");
 
+/**
+ * A pair as it stands, if its tag is in the request's room (§21). A pair of another room's tag
+ * is not there, from here: its string may be read in this room, but its name is not this room's.
+ */
+const pairInRoom = (id: string, auth: AuthContext): ocrTagMatchRepo.CandidateRow | undefined => {
+    const pair = ocrTagMatchRepo.findById(id);
+
+    return pair && pair.tagDomain === roomOf(auth) ? pair : undefined;
+};
+
 /** These pairs as they stand, every one still waiting for a decision, or a 404. */
-const openPairs = (matchIds: string[]): ocrTagMatchRepo.CandidateRow[] =>
+const openPairs = (matchIds: string[], auth: AuthContext): ocrTagMatchRepo.CandidateRow[] =>
     [...new Set(matchIds)].map((id) => {
-        const pair = ocrTagMatchRepo.findById(id);
+        const pair = pairInRoom(id, auth);
 
         if (!pair || pair.state !== null) {
             throw gone();
@@ -446,7 +461,7 @@ const acceptString = (
 export const acceptOnItem = (input: OcrQueueAcceptInput, auth: AuthContext): OcrMatchResult => {
     requireAdmin(auth);
 
-    const pairs = openPairs(input.matchIds);
+    const pairs = openPairs(input.matchIds, auth);
     const shown = pairs.reduce((sum, pair) => sum + pair.untagged, 0);
 
     if (shown !== input.expectedCount) {
@@ -479,7 +494,7 @@ export const acceptOnItem = (input: OcrQueueAcceptInput, auth: AuthContext): Ocr
 export const skipOnItem = (input: OcrQueueSkipInput, auth: AuthContext): OcrMatchResult => {
     requireAdmin(auth);
 
-    const pairs = openPairs(input.matchIds);
+    const pairs = openPairs(input.matchIds, auth);
 
     db.transaction(() => {
         for (const pair of pairs) {
@@ -492,10 +507,11 @@ export const skipOnItem = (input: OcrQueueSkipInput, auth: AuthContext): OcrMatc
     return { tagged: 0, mediaIds: [], textNorm: pairs[0].textNorm };
 };
 
-const textNormOf = (matchIds: string[]): string => {
-    const first = ocrTagMatchRepo.findById(matchIds[0]);
+const textNormOf = (matchIds: string[], auth: AuthContext): string => {
+    const pairs = matchIds.map((id) => pairInRoom(id, auth));
+    const first = pairs[0];
 
-    if (!first) {
+    if (!first || pairs.some((pair) => pair === undefined)) {
         throw gone();
     }
 
@@ -506,7 +522,7 @@ const textNormOf = (matchIds: string[]): string => {
 export const reject = (input: OcrMatchDecideInput, auth: AuthContext): OcrMatchResult => {
     requireAdmin(auth);
 
-    const textNorm = textNormOf(input.matchIds);
+    const textNorm = textNormOf(input.matchIds, auth);
 
     // No count moves: a pair's count is its owed items, whatever was decided about it. The queue
     // leaves it out by its state.
@@ -524,8 +540,8 @@ export const reject = (input: OcrMatchDecideInput, auth: AuthContext): OcrMatchR
 export const undo = (input: OcrMatchDecideInput, auth: AuthContext): OcrMatchResult => {
     requireAdmin(auth);
 
-    const textNorm = textNormOf(input.matchIds);
-    const pairs = input.matchIds.flatMap((id) => ocrTagMatchRepo.findById(id) ?? []);
+    const textNorm = textNormOf(input.matchIds, auth);
+    const pairs = input.matchIds.flatMap((id) => pairInRoom(id, auth) ?? []);
     const accepted = pairs.filter((pair) => pair.state === "accepted");
     const batches = new Set(accepted.flatMap((pair) => (pair.batchId ? [pair.batchId] : [])));
     const mediaIds: string[] = [];
@@ -585,10 +601,10 @@ export const manual = (input: OcrMatchManualInput, auth: AuthContext): OcrMatchR
         throw new NotFoundError("That string is no longer there. Reload the list.");
     }
 
-    const coins = !tagRepo.resolveName(input.kind, input.name, null);
+    const coins = !tagRepo.resolveName(roomOf(auth), input.kind, input.name, null);
 
     const tagId = db.transaction(() => {
-        const ensured = tagRepo.ensureTag(input.kind, input.name, null, auth.userId);
+        const ensured = tagRepo.ensureTag(roomOf(auth), input.kind, input.name, null, auth.userId);
 
         ocrTagMatchRepo.ensureManual(input.textNorm, ensured, text);
 

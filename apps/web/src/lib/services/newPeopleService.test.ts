@@ -60,7 +60,13 @@ vi.mock("@private-stock/db", () => ({
     tagRepo: {
         ensureTag: () => "new",
         resolveName: () => undefined,
-        findById: (id: string) => ({ id, kind: "performer", name: "New One", ownerId: null }),
+        findById: (id: string) => ({
+            id,
+            kind: "performer",
+            name: "New One",
+            ownerId: null,
+            domain: "cellar",
+        }),
     },
 }));
 
@@ -87,7 +93,7 @@ const admin: AuthContext = {
     displayName: "U",
     scopes: ["admin"],
     accessibleRootIds: ["r1"],
-    domain: null,
+    domain: "cellar",
     tokenEpoch: 0,
 };
 

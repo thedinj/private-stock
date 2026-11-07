@@ -20,9 +20,9 @@ vi.mock("@private-stock/db", () => ({
     tagRepo: {
         findById: (id: string) =>
             ({
-                library: { id, ownerId: null },
-                mine: { id, ownerId: "u1" },
-                theirs: { id, ownerId: "u2" },
+                library: { id, ownerId: null, domain: "cellar" },
+                mine: { id, ownerId: "u1", domain: "cellar" },
+                theirs: { id, ownerId: "u2", domain: "cellar" },
             })[id],
     },
     jobRepo: { isLive: (kind: string) => kind === "mentionMatch" && state.live },
@@ -48,7 +48,7 @@ const viewer = (scopes: AuthContext["scopes"]): AuthContext => ({
     displayName: "U",
     scopes,
     accessibleRootIds: ["r1"],
-    domain: null,
+    domain: "cellar",
     tokenEpoch: 0,
 });
 

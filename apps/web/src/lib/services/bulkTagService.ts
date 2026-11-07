@@ -14,6 +14,7 @@ import { mediaRepo, searchRepo, tagBatchRepo, tagRepo } from "@private-stock/db"
 
 import type { AuthContext } from "../auth/withAuth";
 import { batchUndone, tagsChangedOn, vocabularyChanged } from "./ocrMatchHooks";
+import { roomOf } from "./room";
 import { overlayForRequest } from "./savedFilterService";
 import { writesTo } from "./tagService";
 
@@ -135,10 +136,12 @@ export const applyBulkTag = (input: BulkTagApplyInput, auth: AuthContext): BulkT
      * back.
      */
     const scope = writesTo(input.scope, auth);
-    const coins = input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
+    const coins = input.names.some(
+        (name) => !tagRepo.resolveName(roomOf(auth), input.kind, name, scope)
+    );
 
     const tagIds = input.names.map((name) =>
-        tagRepo.ensureTag(input.kind, name, scope, auth.userId)
+        tagRepo.ensureTag(roomOf(auth), input.kind, name, scope, auth.userId)
     );
 
     const { batchId, assigned } = tagBatchRepo.apply({

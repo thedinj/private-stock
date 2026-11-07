@@ -34,6 +34,8 @@ interface TagFixture {
     description: string | null;
     ownerId: string | null;
     createdById: string | null;
+    /** The room whose vocabulary it is in (§21). */
+    domain: string;
 }
 
 interface AssignmentFixture {
@@ -71,8 +73,10 @@ let selectionRows: {
 const norm = (name: string) => name.trim().toLowerCase();
 
 /** The repo's `resolveName`, by name first and then by alias, within one vocabulary. */
-const resolve = (kind: string, name: string, ownerId: string | null) => {
-    const inVocabulary = tags.filter((row) => row.kind === kind && row.ownerId === ownerId);
+const resolve = (domain: string, kind: string, name: string, ownerId: string | null) => {
+    const inVocabulary = tags.filter(
+        (row) => row.domain === domain && row.kind === kind && row.ownerId === ownerId
+    );
     const named = inVocabulary.find((row) => row.nameNorm === norm(name));
 
     if (named) return { tag: named, via: "name" as const };
@@ -119,6 +123,7 @@ vi.mock("@private-stock/db", () => ({
         listForSelection: (mediaIds: string[], _userId: string, limit: number) =>
             mediaIds.length === 0 ? [] : selectionRows.slice(0, limit),
         ensureTag: (
+            domain: string,
             kind: string,
             name: string,
             ownerId: string | null = null,
@@ -126,7 +131,11 @@ vi.mock("@private-stock/db", () => ({
             colorKey: string | null = null
         ) => {
             const existing = tags.find(
-                (row) => row.kind === kind && row.nameNorm === norm(name) && row.ownerId === ownerId
+                (row) =>
+                    row.domain === domain &&
+                    row.kind === kind &&
+                    row.nameNorm === norm(name) &&
+                    row.ownerId === ownerId
             );
 
             if (existing) return existing.id;
@@ -140,6 +149,7 @@ vi.mock("@private-stock/db", () => ({
                 description: null,
                 ownerId,
                 createdById,
+                domain,
             };
             tags.push(row);
 
@@ -197,7 +207,7 @@ vi.mock("@private-stock/db", () => ({
             ];
 
             for (const name of wanted) {
-                const clash = resolve(tag.kind, name, tag.ownerId);
+                const clash = resolve(tag.domain, tag.kind, name, tag.ownerId);
 
                 if (clash && clash.tag.id !== tagId) {
                     throw new ConflictError(takenMessage(clash, name));
@@ -211,14 +221,17 @@ vi.mock("@private-stock/db", () => ({
         },
         dropClashingAliases: () => 0,
         // One vocabulary at a time, matching the repo: the two boxes suggest separately.
-        listByKind: (kind: string, owner: string | null) =>
+        listByKind: (domain: string, kind: string, owner: string | null) =>
             tags
-                .filter((row) => row.kind === kind && row.ownerId === owner)
+                .filter(
+                    (row) => row.domain === domain && row.kind === kind && row.ownerId === owner
+                )
                 .map((row) => ({ ...row, mediaCount: 0 })),
-        listKinds: (userId: string) =>
+        listKinds: (domain: string, userId: string) =>
             [
                 ...new Set(
                     tags
+                        .filter((row) => row.domain === domain)
                         .filter((row) => row.ownerId === null || row.ownerId === userId)
                         .map((row) => row.kind)
                 ),
@@ -308,9 +321,9 @@ vi.mock("@private-stock/db", () => ({
          */
         listFacetValues: () => [],
         /** Every tag of the owner's vocabulary with an assignment, as the browse query would. */
-        browseTags: (owner: string | null) => {
+        browseTags: (domain: string, owner: string | null) => {
             const rows = tags
-                .filter((row) => row.ownerId === owner)
+                .filter((row) => row.domain === domain && row.ownerId === owner)
                 .filter((row) => assignments.some((a) => a.tagId === row.id))
                 .map((row) => ({
                     ...row,
@@ -339,9 +352,13 @@ vi.mock("@private-stock/db", () => ({
         },
         sampleSharedMediaIds: (_tagId: string, companionIds: string[]) =>
             new Map(companionIds.map((id) => [id, sharedSamples.get(id) ?? []])),
-        listVocabulary: (owner: string | null, options: { limit: number; offset: number }) => {
+        listVocabulary: (
+            domain: string,
+            owner: string | null,
+            options: { limit: number; offset: number }
+        ) => {
             const rows = tags
-                .filter((row) => row.ownerId === owner)
+                .filter((row) => row.domain === domain && row.ownerId === owner)
                 .map((row) => ({ ...row, mediaCount: 0, createdBy: null }));
 
             return {
@@ -416,12 +433,24 @@ const {
 const ADMIN = {
     userId: "admin",
     accessibleRootIds: ["root"],
-    domain: null,
+    domain: "cellar",
     scopes: ["admin"],
 } as unknown as AuthContext;
 
-const ANNA = { userId: "anna", accessibleRootIds: ["root"], scopes: [] } as unknown as AuthContext;
-const BEN = { userId: "ben", accessibleRootIds: ["root"], scopes: [] } as unknown as AuthContext;
+const ANNA = {
+    userId: "anna",
+    accessibleRootIds: ["root"],
+    domain: "cellar",
+    scopes: [],
+} as unknown as AuthContext;
+const BEN = {
+    userId: "ben",
+    accessibleRootIds: ["root"],
+    domain: "cellar",
+    scopes: [],
+} as unknown as AuthContext;
+/** Anna again, in the Parlour (§21). */
+const ANNA_HOME = { ...ANNA, domain: "family" } as unknown as AuthContext;
 
 /** What the library sees: assignments with no owner. */
 const libraryTags = (mediaId: string) =>
@@ -1091,5 +1120,79 @@ describe("browsing and a tag's page", () => {
         expect(
             browseTags({ kind: "tag", scope: "private", sort: "count", page: 0, seed: 1 }, BEN).rows
         ).toEqual([]);
+    });
+});
+
+/**
+ * One vocabulary per room (§21 "One vocabulary per room"): the same name in two rooms is two
+ * tags, and from one room the other's tags do not exist.
+ */
+describe("rooms", () => {
+    const ADMIN_HOME = { ...ADMIN, domain: "family" } as unknown as AuthContext;
+
+    it("coins the same name in two rooms as two tags", () => {
+        const cellar = createTag({ kind: "performer", name: "Jane", scope: "public" }, ADMIN);
+        const parlour = createTag({ kind: "performer", name: "Jane", scope: "public" }, ADMIN_HOME);
+
+        expect(parlour.id).not.toBe(cellar.id);
+        expect(tags.map((row) => row.domain).sort()).toEqual(["cellar", "family"]);
+    });
+
+    it("resolves a typed name in the request's room only", () => {
+        applyTags("m1", { kind: "performer", names: ["Jane"], scope: "public", mode: "add" }, ANNA);
+        applyTags(
+            "m2",
+            { kind: "performer", names: ["Jane"], scope: "public", mode: "add" },
+            ANNA_HOME
+        );
+
+        expect(new Set(assignments.map((row) => row.tagId)).size).toBe(2);
+    });
+
+    it("lists each room's names apart", () => {
+        createTag({ kind: "genre", name: "Holidays", scope: "public" }, ADMIN_HOME);
+        createTag({ kind: "genre", name: "Noir", scope: "public" }, ADMIN);
+
+        expect(listTags("genre", "public", ANNA).map((tag) => tag.name)).toEqual(["Noir"]);
+        expect(listTags("genre", "public", ANNA_HOME).map((tag) => tag.name)).toEqual(["Holidays"]);
+        expect(
+            listVocabulary(
+                { scope: "public", sort: "name", limit: 50, offset: 0 },
+                ANNA_HOME
+            ).tags.map((tag) => tag.name)
+        ).toEqual(["Holidays"]);
+    });
+
+    it("does not find another room's tag by id, whatever is asked of it", () => {
+        const id = createTag({ kind: "performer", name: "Jane", scope: "public" }, ADMIN).id;
+
+        expect(() => updateTag(id, { name: "Janet" }, ADMIN_HOME)).toThrow(NotFoundError);
+        expect(() => deleteTag(id, ADMIN_HOME)).toThrow(NotFoundError);
+        expect(() => setTagFavorite(id, true, ANNA_HOME)).toThrow(NotFoundError);
+        expect(() => getTagProfile(id, 1, ANNA_HOME)).toThrow(NotFoundError);
+        expect(tags[0].name).toBe("Jane");
+    });
+
+    it("refuses to merge across rooms, as not found", () => {
+        const cellar = createTag({ kind: "performer", name: "Jane", scope: "public" }, ADMIN).id;
+        const parlour = createTag(
+            { kind: "performer", name: "Jane D", scope: "public" },
+            ADMIN_HOME
+        ).id;
+
+        expect(() => mergeTags(parlour, cellar, ADMIN_HOME)).toThrow(NotFoundError);
+        expect(tags).toHaveLength(2);
+    });
+
+    it("refuses a vocabulary read that does not say which room it is for", () => {
+        const nowhere = { ...ANNA, domain: null } as unknown as AuthContext;
+
+        expect(() => listTags("genre", "public", nowhere)).toThrow(ValidationError);
+        expect(() =>
+            createTag({ kind: "genre", name: "Noir", scope: "public" }, {
+                ...ADMIN,
+                domain: null,
+            } as unknown as AuthContext)
+        ).toThrow(ValidationError);
     });
 });

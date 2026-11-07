@@ -98,25 +98,27 @@ beforeEach(() => {
 
 describe("ensureTag", () => {
     it("returns the same id for names that normalise alike", () => {
-        const first = tagRepo.ensureTag("performer", "Jane Doe", null);
-        const second = tagRepo.ensureTag("performer", "  jane   DOE ", null);
+        const first = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        const second = tagRepo.ensureTag("cellar", "performer", "  jane   DOE ", null);
 
         expect(second).toBe(first);
     });
 
     it("keeps the display name the first writer chose", () => {
         // Otherwise tagging something "JANE DOE" silently rewrites the name everyone sees.
-        tagRepo.ensureTag("performer", "Jane Doe", null);
-        tagRepo.ensureTag("performer", "JANE DOE", null);
+        tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        tagRepo.ensureTag("cellar", "performer", "JANE DOE", null);
 
-        expect(tagRepo.resolveName("performer", "jane doe", null)?.tag.name).toBe("Jane Doe");
+        expect(tagRepo.resolveName("cellar", "performer", "jane doe", null)?.tag.name).toBe(
+            "Jane Doe"
+        );
     });
 
     it("keeps the same name in different facets apart", () => {
         // A studio and a series can legitimately share a name, and collapsing them would
         // make filtering by one silently include the other.
-        const studio = tagRepo.ensureTag("studio", "Aurora", null);
-        const series = tagRepo.ensureTag("series", "Aurora", null);
+        const studio = tagRepo.ensureTag("cellar", "studio", "Aurora", null);
+        const series = tagRepo.ensureTag("cellar", "series", "Aurora", null);
 
         expect(studio).not.toBe(series);
     });
@@ -124,14 +126,14 @@ describe("ensureTag", () => {
     it("refuses a name with nothing to normalise", () => {
         // "???" normalises to empty, which would violate the NOT NULL check with a far less
         // comprehensible error, and would create a tag nobody could ever search for.
-        expect(() => tagRepo.ensureTag("performer", "???", null)).toThrow();
+        expect(() => tagRepo.ensureTag("cellar", "performer", "???", null)).toThrow();
     });
 });
 
 describe("replaceFacet", () => {
     it("replaces only the named facet", () => {
-        const performer = tagRepo.ensureTag("performer", "Jane Doe", null);
-        const genre = tagRepo.ensureTag("genre", "Drama", null);
+        const performer = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        const genre = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         tagRepo.replaceFacet(MEDIA_A, "performer", [performer], {
             userId: null,
@@ -148,8 +150,8 @@ describe("replaceFacet", () => {
     it("replaces only assignments from the same source", () => {
         // This is what makes re-running filename parsing safe. Without it, a re-parse wipes
         // out everything a person typed, and so nobody ever runs it.
-        const typed = tagRepo.ensureTag("performer", "Typed By Hand", null);
-        const parsed = tagRepo.ensureTag("performer", "From Filename", null);
+        const typed = tagRepo.ensureTag("cellar", "performer", "Typed By Hand", null);
+        const parsed = tagRepo.ensureTag("cellar", "performer", "From Filename", null);
 
         tagRepo.assign({
             mediaId: MEDIA_A,
@@ -173,8 +175,8 @@ describe("replaceFacet", () => {
     });
 
     it("records the submitted order as position", () => {
-        const first = tagRepo.ensureTag("performer", "First Billed", null);
-        const second = tagRepo.ensureTag("performer", "Second Billed", null);
+        const first = tagRepo.ensureTag("cellar", "performer", "First Billed", null);
+        const second = tagRepo.ensureTag("cellar", "performer", "Second Billed", null);
 
         tagRepo.replaceFacet(MEDIA_A, "performer", [first, second], {
             userId: null,
@@ -199,7 +201,7 @@ describe("removing the last use of a tag", () => {
     const exists = (tagId: string): boolean => tagRepo.findById(tagId) !== undefined;
 
     it("deletes the tag when the last item is untagged", () => {
-        const typo = tagRepo.ensureTag("tag", "beahc", null);
+        const typo = tagRepo.ensureTag("cellar", "tag", "beahc", null);
         tagRepo.assign({ mediaId: MEDIA_A, tagId: typo, userId: null, createdById: USER });
 
         tagRepo.unassign(MEDIA_A, typo, null);
@@ -208,7 +210,7 @@ describe("removing the last use of a tag", () => {
     });
 
     it("keeps the tag while another item still carries it", () => {
-        const beach = tagRepo.ensureTag("tag", "beach", null);
+        const beach = tagRepo.ensureTag("cellar", "tag", "beach", null);
         tagRepo.assign({ mediaId: MEDIA_A, tagId: beach, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_B, tagId: beach, userId: null, createdById: USER });
 
@@ -218,8 +220,8 @@ describe("removing the last use of a tag", () => {
     });
 
     it("deletes a tag a replace dropped, and keeps one it kept", () => {
-        const kept = tagRepo.ensureTag("performer", "Jane Doe", null);
-        const typo = tagRepo.ensureTag("performer", "Jnae Doe", null);
+        const kept = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        const typo = tagRepo.ensureTag("cellar", "performer", "Jnae Doe", null);
         const options = { userId: null, createdById: USER };
 
         tagRepo.replaceFacet(MEDIA_A, "performer", [kept, typo], options);
@@ -230,7 +232,7 @@ describe("removing the last use of a tag", () => {
     });
 
     it("keeps a tag that has aliases", () => {
-        const tag = tagRepo.ensureTag("performer", "Jane Smith", null);
+        const tag = tagRepo.ensureTag("cellar", "performer", "Jane Smith", null);
         tagRepo.setAliases(tag, ["Jane Doe"], USER);
         tagRepo.assign({ mediaId: MEDIA_A, tagId: tag, userId: null, createdById: USER });
 
@@ -242,8 +244,8 @@ describe("removing the last use of a tag", () => {
     it("leaves alone a tag that was never applied", () => {
         // Coined on the Tags page, ahead of use. Nothing was taken from it, so it is not a
         // candidate — even though another tag's removal is what triggered the check.
-        const coined = tagRepo.ensureTag("tag", "someday", null);
-        const typo = tagRepo.ensureTag("tag", "beahc", null);
+        const coined = tagRepo.ensureTag("cellar", "tag", "someday", null);
+        const typo = tagRepo.ensureTag("cellar", "tag", "beahc", null);
         tagRepo.assign({ mediaId: MEDIA_A, tagId: typo, userId: null, createdById: USER });
 
         tagRepo.unassign(MEDIA_A, typo, null);
@@ -254,9 +256,9 @@ describe("removing the last use of a tag", () => {
 
 describe("listForMedia", () => {
     it("shows public tags and the viewer's own, but not another user's", () => {
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
-        const theirs = tagRepo.ensureTag("tag", "Theirs", OTHER_USER);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
+        const theirs = tagRepo.ensureTag("cellar", "tag", "Theirs", OTHER_USER);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: shared, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: mine, userId: USER, createdById: USER });
@@ -281,8 +283,8 @@ describe("listForMedia", () => {
      * it -- because a public tag could be carried both ways at once. It cannot any more.
      */
     it("reports privacy from the tag rather than from the assignment", () => {
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: shared, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: mine, userId: USER, createdById: USER });
@@ -295,7 +297,7 @@ describe("listForMedia", () => {
 
     /** Who applied it, which is the only record a public tag has of where it came from. */
     it("names whoever applied the tag", () => {
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: shared, userId: null, createdById: USER });
 
@@ -310,7 +312,7 @@ describe("the two systems do not cross", () => {
      * privately gives a shared chip a second, invisible meaning.
      */
     it("refuses a private tag assigned to anybody but its owner", () => {
-        const mine = tagRepo.ensureTag("tag", "Mine", USER);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Mine", USER);
 
         expect(() =>
             tagRepo.assign({ mediaId: MEDIA_A, tagId: mine, userId: null, createdById: USER })
@@ -327,7 +329,7 @@ describe("the two systems do not cross", () => {
     });
 
     it("refuses a public tag assigned privately", () => {
-        const shared = tagRepo.ensureTag("genre", "Drama", null);
+        const shared = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         expect(() =>
             tagRepo.assign({ mediaId: MEDIA_A, tagId: shared, userId: USER, createdById: USER })
@@ -337,7 +339,7 @@ describe("the two systems do not cross", () => {
 
 describe("assign", () => {
     it("is a no-op when the tag is already there", () => {
-        const tag = tagRepo.ensureTag("genre", "Drama", null);
+        const tag = tagRepo.ensureTag("cellar", "genre", "Drama", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: tag, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: tag, userId: null, createdById: USER });
@@ -350,8 +352,8 @@ describe("mergeTags", () => {
     it("keeps the assignments of the tag being folded in", () => {
         // The reason to merge at all is the same performer arriving under two spellings, so
         // losing the assignments would defeat the purpose.
-        const source = tagRepo.ensureTag("performer", "Jane Doe", null);
-        const target = tagRepo.ensureTag("performer", "Jane D", null);
+        const source = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        const target = tagRepo.ensureTag("cellar", "performer", "Jane D", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: source, userId: null, createdById: USER });
         tagRepo.mergeTags(source, target);
@@ -363,8 +365,8 @@ describe("mergeTags", () => {
     it("survives an item that already carries both tags", () => {
         // The unique index would otherwise abort the merge partway through — on exactly the
         // duplicates that motivated the merge.
-        const source = tagRepo.ensureTag("performer", "Jane Doe", null);
-        const target = tagRepo.ensureTag("performer", "Jane D", null);
+        const source = tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
+        const target = tagRepo.ensureTag("cellar", "performer", "Jane D", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: source, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: target, userId: null, createdById: USER });
@@ -381,33 +383,35 @@ describe("listByKind", () => {
     it("includes a tag nothing is tagged with", () => {
         // A freshly created tag that vanishes from the management list looks like the create
         // silently failed.
-        tagRepo.ensureTag("genre", "Unused", null);
+        tagRepo.ensureTag("cellar", "genre", "Unused", null);
 
-        expect(tagRepo.listByKind("genre", null).map((tag) => tag.name)).toEqual(["Unused"]);
+        expect(tagRepo.listByKind("cellar", "genre", null).map((tag) => tag.name)).toEqual([
+            "Unused",
+        ]);
     });
 
     it("counts library assignments and orders by them", () => {
-        const popular = tagRepo.ensureTag("genre", "Popular", null);
-        const rare = tagRepo.ensureTag("genre", "Rare", null);
+        const popular = tagRepo.ensureTag("cellar", "genre", "Popular", null);
+        const rare = tagRepo.ensureTag("cellar", "genre", "Rare", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: popular, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_B, tagId: popular, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: rare, userId: null, createdById: USER });
 
-        expect(tagRepo.listByKind("genre", null)).toEqual([
+        expect(tagRepo.listByKind("cellar", "genre", null)).toEqual([
             expect.objectContaining({ name: "Popular", mediaCount: 2 }),
             expect.objectContaining({ name: "Rare", mediaCount: 1 }),
         ]);
     });
 
     it("leaves out items the library would not show", () => {
-        const tag = tagRepo.ensureTag("genre", "Mixed", null);
+        const tag = tagRepo.ensureTag("cellar", "genre", "Mixed", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: tag, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_B, tagId: tag, userId: null, createdById: USER });
         sharedDb.prepare(`UPDATE "Media" SET "listable" = NULL WHERE "id" = ?`).run(MEDIA_B);
 
-        expect(tagRepo.listByKind("genre", null)).toEqual([
+        expect(tagRepo.listByKind("cellar", "genre", null)).toEqual([
             expect.objectContaining({ name: "Mixed", mediaCount: 1 }),
         ]);
     });
@@ -442,8 +446,8 @@ describe("listForSelection", () => {
         // The same viewer can carry a library tag and their own copy of it on one item -- the
         // two partial uniques permit exactly that -- and counting the rows would report "on 2
         // of 1", a fraction nothing on screen could explain.
-        const shared = tagRepo.ensureTag("tag", "Beach", null);
-        const mine = tagRepo.ensureTag("tag", "Beach", USER);
+        const shared = tagRepo.ensureTag("cellar", "tag", "Beach", null);
+        const mine = tagRepo.ensureTag("cellar", "tag", "Beach", USER);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: shared, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_A, tagId: mine, userId: USER, createdById: USER });
@@ -455,7 +459,7 @@ describe("listForSelection", () => {
     });
 
     it("leaves another account's private tagging out", () => {
-        const theirs = tagRepo.ensureTag("tag", "Theirs", OTHER_USER);
+        const theirs = tagRepo.ensureTag("cellar", "tag", "Theirs", OTHER_USER);
 
         tagRepo.assign({
             mediaId: MEDIA_A,
@@ -468,8 +472,8 @@ describe("listForSelection", () => {
     });
 
     it("orders by how much of the selection carries each, then by name", () => {
-        const both = tagRepo.ensureTag("tag", "Both", null);
-        const one = tagRepo.ensureTag("tag", "One", null);
+        const both = tagRepo.ensureTag("cellar", "tag", "Both", null);
+        const one = tagRepo.ensureTag("cellar", "tag", "One", null);
 
         tagRepo.assign({ mediaId: MEDIA_A, tagId: both, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: MEDIA_B, tagId: both, userId: null, createdById: USER });
@@ -483,7 +487,7 @@ describe("listForSelection", () => {
 
     it("truncates at the limit it is given", () => {
         for (const name of ["A", "B", "C"]) {
-            const tagId = tagRepo.ensureTag("tag", name, null);
+            const tagId = tagRepo.ensureTag("cellar", "tag", name, null);
 
             tagRepo.assign({ mediaId: MEDIA_A, tagId, userId: null, createdById: USER });
         }
@@ -499,7 +503,7 @@ describe("listForSelection", () => {
 describe("updateTag moving a facet", () => {
     /** The bug this covers: the column was never written, so the move silently did nothing. */
     it("moves the tag, and its assignments with it", () => {
-        const tagId = tagRepo.ensureTag("tag", "Jane Doe", null);
+        const tagId = tagRepo.ensureTag("cellar", "tag", "Jane Doe", null);
         tagRepo.assign({ mediaId: MEDIA_A, tagId, userId: null, createdById: USER });
 
         tagRepo.updateTag(tagId, { kind: "performer" });
@@ -511,7 +515,7 @@ describe("updateTag moving a facet", () => {
     });
 
     it("refuses to move a private tag to a facet that cannot be private", () => {
-        const tagId = tagRepo.ensureTag("tag", "mine", USER, USER);
+        const tagId = tagRepo.ensureTag("cellar", "tag", "mine", USER, USER);
 
         expect(() => tagRepo.updateTag(tagId, { kind: "performer" })).toThrow(/only tags can/);
         expect(tagRepo.findById(tagId)?.kind).toBe("tag");
@@ -526,7 +530,7 @@ describe("browsing a facet", () => {
         tagRepo.assign({ mediaId, tagId, userId: owner, createdById: USER });
 
     const browse = (owner: string | null, options: Partial<tagRepo.BrowseOptions> = {}) =>
-        tagRepo.browseTags(owner, {
+        tagRepo.browseTags("cellar", owner, {
             kind: "performer",
             sort: "count",
             viewerId: USER,
@@ -553,7 +557,7 @@ describe("browsing a facet", () => {
     });
 
     it("counts videos and photos apart, and only listable ones", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         tag(dad, MEDIA_A);
         tag(dad, PHOTO);
@@ -565,8 +569,8 @@ describe("browsing a facet", () => {
     });
 
     it("leaves out tags nothing visible carries", () => {
-        const unused = tagRepo.ensureTag("performer", "Nobody", null);
-        const gone = tagRepo.ensureTag("performer", "Only trashed", null);
+        const unused = tagRepo.ensureTag("cellar", "performer", "Nobody", null);
+        const gone = tagRepo.ensureTag("cellar", "performer", "Only trashed", null);
 
         tag(gone, TRASHED);
 
@@ -575,8 +579,8 @@ describe("browsing a facet", () => {
     });
 
     it("orders by items, by name, or by most recently tagged", () => {
-        const many = tagRepo.ensureTag("performer", "Zed", null);
-        const few = tagRepo.ensureTag("performer", "Amy", null);
+        const many = tagRepo.ensureTag("cellar", "performer", "Zed", null);
+        const few = tagRepo.ensureTag("cellar", "performer", "Amy", null);
 
         tag(many, MEDIA_A);
         tag(many, MEDIA_B);
@@ -594,9 +598,9 @@ describe("browsing a facet", () => {
     });
 
     it("orders by videos, with photos only breaking a tie", () => {
-        const photos = tagRepo.ensureTag("performer", "Amy", null);
-        const video = tagRepo.ensureTag("performer", "Zed", null);
-        const both = tagRepo.ensureTag("performer", "Bea", null);
+        const photos = tagRepo.ensureTag("cellar", "performer", "Amy", null);
+        const video = tagRepo.ensureTag("cellar", "performer", "Zed", null);
+        const both = tagRepo.ensureTag("cellar", "performer", "Bea", null);
 
         tag(photos, PHOTO);
         tag(photos, MEDIA_A);
@@ -609,7 +613,7 @@ describe("browsing a facet", () => {
     });
 
     it("finds a tag by one of its aliases", () => {
-        const mum = tagRepo.ensureTag("performer", "Mum", null);
+        const mum = tagRepo.ensureTag("cellar", "performer", "Mum", null);
 
         tag(mum, MEDIA_A);
         tagRepo.setAliases(mum, ["Mom"], USER);
@@ -619,7 +623,7 @@ describe("browsing a facet", () => {
 
     it("pages, with a total of the whole facet", () => {
         for (const name of ["A", "B", "C"]) {
-            tag(tagRepo.ensureTag("performer", name, null), MEDIA_A);
+            tag(tagRepo.ensureTag("cellar", "performer", name, null), MEDIA_A);
         }
 
         const page = browse(null, { sort: "name", limit: 2, offset: 2 });
@@ -629,7 +633,7 @@ describe("browsing a facet", () => {
     });
 
     it("shows one person's private tags to them alone", () => {
-        const mine = tagRepo.ensureTag("tag", "beach", USER);
+        const mine = tagRepo.ensureTag("cellar", "tag", "beach", USER);
 
         tag(mine, MEDIA_A, USER);
 
@@ -639,7 +643,7 @@ describe("browsing a facet", () => {
     });
 
     it("counts one tag's videos and photos apart, and only listable ones", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         expect(tagRepo.countByKind(dad, VIEWER)).toEqual({ videoCount: 0, imageCount: 0 });
 
@@ -656,7 +660,7 @@ describe("browsing a facet", () => {
      * cannot produce.
      */
     it("counts only what the viewer's grid would show", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         tag(dad, MEDIA_A);
         tag(dad, MEDIA_B);
@@ -701,7 +705,7 @@ describe("browsing a facet", () => {
      * the Tags page and a tag's own page can ask for.
      */
     it("reads kind and root from the index rather than from each item's row", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         tag(dad, MEDIA_A);
         tag(dad, PHOTO);
@@ -765,8 +769,8 @@ describe("sampleMediaIdsByTag", () => {
     });
 
     it("gives the same sample for the same seed, and caps it per tag", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
-        const mum = tagRepo.ensureTag("performer", "Mum", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
+        const mum = tagRepo.ensureTag("cellar", "performer", "Mum", null);
 
         for (const id of ids) {
             tagRepo.assign({ mediaId: id, tagId: dad, userId: null, createdById: USER });
@@ -781,7 +785,7 @@ describe("sampleMediaIdsByTag", () => {
     });
 
     it("changes with the seed", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         for (const id of ids) {
             tagRepo.assign({ mediaId: id, tagId: dad, userId: null, createdById: USER });
@@ -797,7 +801,7 @@ describe("sampleMediaIdsByTag", () => {
     });
 
     it("skips items the library would not show", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
         tagRepo.assign({ mediaId: ids[0], tagId: dad, userId: null, createdById: USER });
         tagRepo.assign({ mediaId: ids[1], tagId: dad, userId: null, createdById: USER });
@@ -808,8 +812,8 @@ describe("sampleMediaIdsByTag", () => {
 
     /** Videos unless you ask (§14e): a strip is the videos, or the photos of a tag with none. */
     it("draws only videos for a tag that has any, and photos for one that has none", () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
-        const mum = tagRepo.ensureTag("performer", "Mum", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
+        const mum = tagRepo.ensureTag("cellar", "performer", "Mum", null);
         const photos = new Set(ids.slice(2));
 
         sharedDb
@@ -835,10 +839,10 @@ describe("companions", () => {
 
     /** Dad and Mum on both items, Kid on one. */
     const family = () => {
-        const dad = tagRepo.ensureTag("performer", "Dad", null);
-        const mum = tagRepo.ensureTag("performer", "Mum", null);
-        const kid = tagRepo.ensureTag("performer", "Kid", null);
-        const place = tagRepo.ensureTag("tag", "beach", null);
+        const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
+        const mum = tagRepo.ensureTag("cellar", "performer", "Mum", null);
+        const kid = tagRepo.ensureTag("cellar", "performer", "Kid", null);
+        const place = tagRepo.ensureTag("cellar", "tag", "beach", null);
 
         for (const [media, tagId] of [
             [MEDIA_A, dad],
@@ -916,14 +920,14 @@ describe("companions", () => {
 /** §5b "One rule for names": the tag box searches the whole facet, by the server's rule. */
 describe("searchByKind", () => {
     const names = (search: string): { names: string[]; near: boolean } => {
-        const { rows, near } = tagRepo.searchByKind("performer", null, search, 50);
+        const { rows, near } = tagRepo.searchByKind("cellar", "performer", null, search, 50);
 
         return { names: rows.map((row) => row.name).sort(), near };
     };
 
     it("finds a name however it is typed — accents, separators, glued", () => {
-        tagRepo.ensureTag("performer", "Zoë Laine", null);
-        tagRepo.ensureTag("performer", "Mary-Kate", null);
+        tagRepo.ensureTag("cellar", "performer", "Zoë Laine", null);
+        tagRepo.ensureTag("cellar", "performer", "Mary-Kate", null);
 
         expect(names("zoe").names).toEqual(["Zoë Laine"]);
         expect(names("laine").names).toEqual(["Zoë Laine"]);
@@ -933,23 +937,25 @@ describe("searchByKind", () => {
 
     it("reaches every name, not only the most used ones", () => {
         for (let n = 0; n < 600; n += 1) {
-            tagRepo.ensureTag("performer", `Common ${n}`, null);
+            tagRepo.ensureTag("cellar", "performer", `Common ${n}`, null);
         }
-        tagRepo.ensureTag("performer", "Rarely Seen", null);
+        tagRepo.ensureTag("cellar", "performer", "Rarely Seen", null);
 
         expect(names("rarely").names).toEqual(["Rarely Seen"]);
     });
 
     it("says when it answered with close spellings because nothing matched", () => {
-        tagRepo.ensureTag("performer", "Aunt Margaret", null);
+        tagRepo.ensureTag("cellar", "performer", "Aunt Margaret", null);
 
         expect(names("margaret")).toEqual({ names: ["Aunt Margaret"], near: false });
         expect(names("margret")).toEqual({ names: ["Aunt Margaret"], near: true });
     });
 
     it("searches only the system it is asked about", () => {
-        tagRepo.ensureTag("performer", "Jane Doe", null);
+        tagRepo.ensureTag("cellar", "performer", "Jane Doe", null);
 
-        expect(tagRepo.searchByKind("performer", "someone-else", "jane", 50).rows).toEqual([]);
+        expect(
+            tagRepo.searchByKind("cellar", "performer", "someone-else", "jane", 50).rows
+        ).toEqual([]);
     });
 });

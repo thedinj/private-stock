@@ -49,6 +49,18 @@ export const matchVocabulary = (): TagNameEntry[] =>
 export const loadMatcher = (): TagMatcher => buildTagMatcher(matchVocabulary());
 
 /**
+ * The item `m` is in the room of the pair `o`'s tag (§21).
+ *
+ * Strings are matched against every room's names, since a string is not in any room: the same
+ * caption can be read on a Parlour video and a Cellar one. What a pair *counts, offers and tags*
+ * is narrowed to its tag's room, so a Cellar performer read on a Parlour item is never put on it.
+ * An item with no library to say passes, as `tagRepo.assign` lets it.
+ */
+const IN_TAG_ROOM = `NOT EXISTS (
+    SELECT 1 FROM "MediaRoot" r JOIN "Tag" g2 ON g2."id" = o."tagId"
+     WHERE r."id" = m."listRootId" AND r."domain" <> g2."domain")`;
+
+/**
  * How many items carry the pair's string and not its tag, for an `OcrTagMatch` aliased `o`.
  *
  * Only findings nobody dismissed, only items the library shows, and not the items somebody left
@@ -62,6 +74,7 @@ const PENDING_COUNT = `(
      WHERE t."textNorm" = o."textNorm"
        AND t."reviewState" IS NOT 'dismissed'
        AND m."listable" = 1
+       AND ${IN_TAG_ROOM}
        AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                         WHERE mt."mediaId" = t."mediaId" AND mt."tagId" = o."tagId"
                           AND mt."userId" IS NULL)
@@ -395,6 +408,7 @@ const RULE_OWED = `o."state" = 'accepted'
     AND t."createdAt" >= o."decidedAt"
     AND t."reviewState" IS NOT 'dismissed'
     AND m."listable" = 1
+    AND ${IN_TAG_ROOM}
     AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                      WHERE mt."mediaId" = t."mediaId" AND mt."tagId" = o."tagId"
                        AND mt."userId" IS NULL)
@@ -698,6 +712,7 @@ export const pruneOrphans = (): number => {
 const ITEM_OPEN = `o."state" IS NOT 'rejected' AND o."pendingCount" > 0 AND o."state" IS NULL
     AND t."reviewState" IS NOT 'dismissed'
     AND m."listable" = 1
+    AND ${IN_TAG_ROOM}
     AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                      WHERE mt."mediaId" = t."mediaId" AND mt."tagId" = o."tagId"
                        AND mt."userId" IS NULL)
@@ -878,16 +893,19 @@ export interface QueueString {
  * it stops being one.
  */
 export const listQueue = (query: {
+    /** The room whose tags' pairs to list (§21). */
+    domain: string;
     status: OcrMatchStatus;
     search?: string;
     after: StringCursor | null;
     limit: number;
 }): { rows: QueueString[]; next: StringCursor | null } => {
     const where = [
-        `EXISTS (SELECT 1 FROM "OcrTagMatch" o
-                  WHERE o."textNorm" = s."textNorm" AND ${STATUS_PAIR[query.status]})`,
+        `EXISTS (SELECT 1 FROM "OcrTagMatch" o JOIN "Tag" g ON g."id" = o."tagId"
+                  WHERE o."textNorm" = s."textNorm" AND g."domain" = ?
+                    AND ${STATUS_PAIR[query.status]})`,
     ];
-    const params: unknown[] = [];
+    const params: unknown[] = [query.domain];
 
     if (query.search) {
         where.push(`s."textNorm" LIKE ? ESCAPE '\\'`);
@@ -934,14 +952,16 @@ export interface CandidateRow {
     batchId: string | null;
     /** Live, not the stored count: this is the number somebody is about to act on. */
     untagged: number;
+    /** The room of the pair's tag (§21). */
+    tagDomain: string;
 }
 
 const CANDIDATE_COLUMNS = `o."id", o."textNorm", o."tagId", t."name" AS "tagName", t."kind" AS "tagKind",
-       o."kind", o."matchedText", o."score", o."state", o."batchId",
+       o."kind", o."matchedText", o."score", o."state", o."batchId", t."domain" AS "tagDomain",
        ${PENDING_COUNT} AS "untagged"`;
 
-/** Every pair of these strings, strongest first within each. */
-export const candidatesFor = (textNorms: string[]): CandidateRow[] =>
+/** Every pair of these strings with one room's tags (§21), strongest first within each. */
+export const candidatesFor = (textNorms: string[], domain: string): CandidateRow[] =>
     chunks(textNorms).flatMap(
         (chunk) =>
             db
@@ -949,9 +969,10 @@ export const candidatesFor = (textNorms: string[]): CandidateRow[] =>
                     `SELECT ${CANDIDATE_COLUMNS}
                        FROM "OcrTagMatch" o JOIN "Tag" t ON t."id" = o."tagId"
                       WHERE o."textNorm" IN (${chunk.map(() => "?").join(", ")})
+                        AND t."domain" = ?
                       ORDER BY o."textNorm", o."score" DESC, t."name"`
                 )
-                .all(...chunk) as CandidateRow[]
+                .all(...chunk, domain) as CandidateRow[]
     );
 
 /** These strings' pairs for these tags, as they stand now. */
@@ -994,6 +1015,7 @@ export const pendingMediaIds = (matchId: string): string[] =>
               WHERE o."id" = ?
                 AND t."reviewState" IS NOT 'dismissed'
                 AND m."listable" = 1
+                AND ${IN_TAG_ROOM}
                 AND NOT EXISTS (SELECT 1 FROM "MediaTag" mt
                                  WHERE mt."mediaId" = t."mediaId" AND mt."tagId" = o."tagId"
                                    AND mt."userId" IS NULL)

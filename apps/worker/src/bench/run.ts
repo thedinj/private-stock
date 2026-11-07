@@ -175,9 +175,13 @@ console.log("=== facets ===");
 // The two halves are timed apart on purpose. Listing is proportional to the vocabulary and
 // counting to how much has been tagged, and when the panel gets slow it matters which of
 // those grew -- a single number for "facets" hid exactly that and took a cap to fix.
-const facetIds = tagRepo.listFacetValues({ owner: null, limit: 20 }).map((row) => row.tagId);
+const facetIds = tagRepo
+    .listFacetValues({ domain: "cellar", owner: null, limit: 20 })
+    .map((row) => row.tagId);
 
-time(`listFacetValues top 20`, 200, () => tagRepo.listFacetValues({ owner: null, limit: 20 }));
+time(`listFacetValues top 20`, 200, () =>
+    tagRepo.listFacetValues({ domain: "cellar", owner: null, limit: 20 })
+);
 time(`facetCountsForTags unfiltered`, 200, () =>
     mediaRepo.facetCountsForTags(q(), userId, [rootId], facetIds, "public")
 );

@@ -23,6 +23,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
 import { vocabularyChanged } from "./ocrMatchHooks";
+import { inRoom, roomOf } from "./room";
 
 /**
  * New people (§5f "New people"): people in items who match nobody known, gathered across the
@@ -137,7 +138,8 @@ export const decideNewPeople = (
     }
 
     const coins =
-        decision.action === "name" && !tagRepo.resolveName("performer", decision.name, null);
+        decision.action === "name" &&
+        !tagRepo.resolveName(roomOf(auth), "performer", decision.name, null);
 
     const faceIds = people.flatMap((person) => person.faceIds);
     const verdict =
@@ -161,10 +163,21 @@ export const decideNewPeople = (
                     };
                 }
 
-                const tagId = tagRepo.ensureTag("performer", decision.name, null, auth.userId);
+                const tagId = tagRepo.ensureTag(
+                    roomOf(auth),
+                    "performer",
+                    decision.name,
+                    null,
+                    auth.userId
+                );
                 const tag = tagRepo.findById(tagId);
 
-                if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+                if (
+                    !tag ||
+                    tag.kind !== "performer" ||
+                    tag.ownerId !== null ||
+                    !inRoom(tag, auth)
+                ) {
                     throw new NotFoundError("Performer not found");
                 }
 

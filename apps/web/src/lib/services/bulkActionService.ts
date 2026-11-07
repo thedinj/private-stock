@@ -11,6 +11,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { notThem } from "./notThem";
 import { vocabularyChanged } from "./ocrMatchHooks";
+import { inRoom, roomOf } from "./room";
 import { writesTo } from "./tagService";
 import { trashMedia } from "./trashService";
 
@@ -91,10 +92,12 @@ export const applyBulkAction = async (
          * action rather than per item, so a selection cannot end up half in each.
          */
         const scope = writesTo(input.scope, auth);
-        const coins = input.names.some((name) => !tagRepo.resolveName(input.kind, name, scope));
+        const coins = input.names.some(
+            (name) => !tagRepo.resolveName(roomOf(auth), input.kind, name, scope)
+        );
 
         const tagIds = input.names.map((name) =>
-            tagRepo.ensureTag(input.kind, name, scope, auth.userId)
+            tagRepo.ensureTag(roomOf(auth), input.kind, name, scope, auth.userId)
         );
 
         // One transaction: a half-applied tagging is a set nobody can describe afterwards,
@@ -155,7 +158,9 @@ export const applyBulkAction = async (
              * hand-written request — and the answer to that is the same as every other read of
              * a private tag: it is not there (§6).
              */
-            .filter((tag) => tag.ownerId === null || tag.ownerId === auth.userId);
+            .filter(
+                (tag) => (tag.ownerId === null || tag.ownerId === auth.userId) && inRoom(tag, auth)
+            );
 
         succeeded = db.transaction(() => {
             let changed = 0;

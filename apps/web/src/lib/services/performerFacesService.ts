@@ -14,6 +14,7 @@ import { appearanceRepo, db, faceDecisionRepo, faceRepo, tagRepo } from "@privat
 import type { AuthContext } from "../auth/withAuth";
 import { confirmationsChanged, reviewFace } from "./faceService";
 import { lookupMedia } from "./mediaService";
+import { inRoom } from "./room";
 
 /**
  * A performer's Faces tab (§5f "Their faces"): everything faces say about them, each a card, each
@@ -36,10 +37,10 @@ const requireAdmin = (auth: AuthContext): void => {
     }
 };
 
-const libraryPerformer = (tagId: string) => {
+const libraryPerformer = (tagId: string, auth: AuthContext) => {
     const tag = tagRepo.findById(tagId);
 
-    if (!tag || tag.kind !== "performer" || tag.ownerId !== null) {
+    if (!tag || tag.kind !== "performer" || tag.ownerId !== null || !inRoom(tag, auth)) {
         throw new NotFoundError("Performer not found");
     }
 
@@ -56,7 +57,7 @@ const COMPARED = 5;
 export const faceComparison = (tagId: string, auth: AuthContext): FaceComparison => {
     requireAdmin(auth);
 
-    const tag = libraryPerformer(tagId);
+    const tag = libraryPerformer(tagId, auth);
     const { faces, confirmed } = faceRepo.comparisonFaces(tag.id, auth.accessibleRootIds, COMPARED);
 
     return { faces: faces.flatMap(reviewFace), confirmed };
@@ -106,7 +107,7 @@ export const performerPeople = (
 ): PerformerPeoplePage => {
     requireAdmin(auth);
 
-    const tag = libraryPerformer(tagId);
+    const tag = libraryPerformer(tagId, auth);
     const roots = auth.accessibleRootIds;
     const offset = query.page * query.limit;
     const noFace = faceRepo.noSingleFace(tag.id);
@@ -191,7 +192,7 @@ export const decidePerformerPeople = (
 ): { changed: number } => {
     requireAdmin(auth);
 
-    const tag = libraryPerformer(tagId);
+    const tag = libraryPerformer(tagId, auth);
     const visible = new Set(
         lookupMedia(
             decision.people.map((person) => person.mediaId),

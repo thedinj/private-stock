@@ -26,7 +26,7 @@ let filters: {
     position?: number;
 }[] = [];
 let playlists: { id: string; ownerId: string; name: string; visibility: string }[] = [];
-let tags: { id: string; name: string }[] = [];
+let tags: { id: string; name: string; domain: string }[] = [];
 /** Every query `listMedia` was asked to run, so a shelf's intent can be asserted. */
 let queries: MediaQuery[] = [];
 let recentlyViewedCalls: number[] = [];
@@ -342,7 +342,7 @@ describe("what each shelf asks for", () => {
 
     it("caps every shelf at the limit the layout asked for", () => {
         withLayout([{ source: "tag", tagId: "t1", limit: 3 }]);
-        tags = [{ id: "t1", name: "Sunsets" }];
+        tags = [{ id: "t1", name: "Sunsets", domain: "cellar" }];
 
         getHome(AUTH);
 
@@ -351,7 +351,7 @@ describe("what each shelf asks for", () => {
     });
 
     it("prefers a title the user chose over the one the source would supply", () => {
-        tags = [{ id: "t1", name: "Sunsets" }];
+        tags = [{ id: "t1", name: "Sunsets", domain: "cellar" }];
         withLayout([{ source: "tag", tagId: "t1", title: "Golden hour", limit: 3 }]);
 
         expect(getHome(AUTH).shelves[0].title).toBe("Golden hour");

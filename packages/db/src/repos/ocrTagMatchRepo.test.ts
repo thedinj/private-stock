@@ -162,7 +162,7 @@ describe("matching strings", () => {
         repo.rematchStrings(["jane doe at example site"]);
 
         const jane = repo
-            .candidatesFor(["jane doe at example site"])
+            .candidatesFor(["jane doe at example site"], "cellar")
             .find((pair) => pair.tagId === "jane")!;
 
         repo.decide([jane.id], "rejected", USER);
@@ -246,24 +246,24 @@ describe("pending counts", () => {
     });
 
     it("count every item the string was read on", () => {
-        expect(repo.candidatesFor(["jane doe"])[0].untagged).toBe(3);
+        expect(repo.candidatesFor(["jane doe"], "cellar")[0].untagged).toBe(3);
     });
 
     it("leave out items already tagged, unlisted, skipped or dismissed", () => {
-        const [pair] = repo.candidatesFor(["jane doe"]);
+        const [pair] = repo.candidatesFor(["jane doe"], "cellar");
 
         tagItem("m1", "jane");
         db.prepare(`UPDATE "Media" SET "listable" = NULL WHERE "id" = 'm2'`).run();
         repo.addSkips(pair.id, ["m3"]);
 
-        expect(repo.candidatesFor(["jane doe"])[0].untagged).toBe(0);
+        expect(repo.candidatesFor(["jane doe"], "cellar")[0].untagged).toBe(0);
         expect(repo.pendingMediaIds(pair.id)).toEqual([]);
 
         db.prepare(`UPDATE "Media" SET "listable" = 1 WHERE "id" = 'm2'`).run();
         const [row] = mediaTextRepo.listForMedia("m2");
 
         mediaTextRepo.setReviewState([row.id], "dismissed", USER);
-        expect(repo.candidatesFor(["jane doe"])[0].untagged).toBe(0);
+        expect(repo.candidatesFor(["jane doe"], "cellar")[0].untagged).toBe(0);
     });
 
     it("are stored when refreshed, and queue the items while above zero", () => {
@@ -315,7 +315,7 @@ describe("pending counts", () => {
     });
 
     it("are recomputed when written, not copied from the read", () => {
-        const [pair] = repo.candidatesFor(["jane doe"]);
+        const [pair] = repo.candidatesFor(["jane doe"], "cellar");
 
         tagItem("m1", "jane");
 
@@ -351,7 +351,7 @@ describe("which pairs a change can move", () => {
 
     const describePairs = (ids: string[]): string[] =>
         repo
-            .candidatesFor(["jane doe", "jill roe", "jane doe at example site"])
+            .candidatesFor(["jane doe", "jill roe", "jane doe at example site"], "cellar")
             .filter((pair) => ids.includes(pair.id))
             .map((pair) => `${pair.textNorm}|${pair.tagId}`)
             .sort();
@@ -405,7 +405,7 @@ describe("decisions", () => {
     });
 
     it("are reopened when the batch that accepted them is undone", () => {
-        const [pair] = repo.candidatesFor(["jane doe"]);
+        const [pair] = repo.candidatesFor(["jane doe"], "cellar");
 
         db.prepare(
             `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount") VALUES ('b1', ?, 's', 1)`
@@ -479,8 +479,8 @@ describe("the queue", () => {
     });
 
     it("drops an item once it is tagged, skipped or the pair is decided", () => {
-        const [jane] = repo.candidatesFor(["jane doe"]);
-        const [site] = repo.candidatesFor(["example site"]);
+        const [jane] = repo.candidatesFor(["jane doe"], "cellar");
+        const [site] = repo.candidatesFor(["example site"], "cellar");
 
         repo.addSkips(jane.id, ["m2"]);
         repo.recountPending([jane.id]);
@@ -526,14 +526,16 @@ describe("the Rules list", () => {
     });
 
     it("lists decided strings by state, most-read first", () => {
-        const [jane] = repo.candidatesFor(["jane doe"]);
-        const [site] = repo.candidatesFor(["example site"]);
+        const [jane] = repo.candidatesFor(["jane doe"], "cellar");
+        const [site] = repo.candidatesFor(["example site"], "cellar");
 
         repo.decide([jane.id], "accepted", USER);
         repo.decide([site.id], "rejected", USER);
 
         const list = (status: "accepted" | "rejected"): string[] =>
-            repo.listQueue({ status, after: null, limit: 10 }).rows.map((row) => row.textNorm);
+            repo
+                .listQueue({ domain: "cellar", status, after: null, limit: 10 })
+                .rows.map((row) => row.textNorm);
 
         expect(list("accepted")).toEqual(["jane doe"]);
         expect(list("rejected")).toEqual(["example site"]);
@@ -561,7 +563,7 @@ describe("rules", () => {
         mediaTextRepo.replaceMachineFindings("m1", [finding("Jane Doe")]);
         repo.rematchStrings(["jane doe"]);
         readAt("m1", "2026-01-01 00:00:00");
-        jane = repo.candidatesFor(["jane doe"])[0].id;
+        jane = repo.candidatesFor(["jane doe"], "cellar")[0].id;
         tagItem("m1", "jane");
         repo.decide([jane], "accepted", USER);
     });

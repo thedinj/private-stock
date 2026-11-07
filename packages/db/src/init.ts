@@ -800,6 +800,10 @@ export function initializeDatabase(db: Database): void {
         --
         -- A clip's tags ("ClipTag") follow the same rule with the clip's owner in place of
         -- "userId": a tag with an owner goes only on that owner's clips (§14d).
+        --
+        -- "domain" is the room whose vocabulary it is in (§21), as on "MediaRoot": a tag goes
+        -- only on items whose library is in its room, and the same name in two rooms is two
+        -- tags. Set when the tag is coined and never edited, so no trigger below watches it.
         CREATE TABLE IF NOT EXISTS "Tag" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "kind" TEXT NOT NULL CHECK(length("kind") BETWEEN 1 AND 40),
@@ -808,6 +812,7 @@ export function initializeDatabase(db: Database): void {
             "colorKey" TEXT CHECK("colorKey" IS NULL OR length("colorKey") <= 40),
             "description" TEXT CHECK("description" IS NULL OR length("description") <= 1000),
             "ownerId" TEXT,
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             /*
              * Who coined this name (§6).
              *
@@ -836,11 +841,12 @@ export function initializeDatabase(db: Database): void {
         -- Two partial uniques rather than one table constraint, the same shape "MediaTag"
         -- uses: one "beach" in the library, and one "beach" each for as many people as want
         -- their own. A single UNIQUE ("kind", "nameNorm") would let the first person to
-        -- coin a name take it from everybody else.
+        -- coin a name take it from everybody else. "domain" leads both: each room is a
+        -- vocabulary of its own, and every lookup by name names the room first.
         CREATE UNIQUE INDEX IF NOT EXISTS "idx_Tag_unique_library"
-            ON "Tag" ("kind", "nameNorm") WHERE "ownerId" IS NULL;
+            ON "Tag" ("domain", "kind", "nameNorm") WHERE "ownerId" IS NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS "idx_Tag_unique_owner"
-            ON "Tag" ("kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL;
+            ON "Tag" ("domain", "kind", "nameNorm", "ownerId") WHERE "ownerId" IS NOT NULL;
         -- Listing a person's own vocabulary, which every tag picker does.
         CREATE INDEX IF NOT EXISTS "idx_Tag_owner"
             ON "Tag" ("ownerId") WHERE "ownerId" IS NOT NULL;

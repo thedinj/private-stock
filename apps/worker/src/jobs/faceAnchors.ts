@@ -58,6 +58,10 @@ import { dataFile, readStoredFaces, unitFace } from "./faceVectorFiles.js";
  * the next best kept; the people who match nobody gathered into new people; and what the rule
  * would tag. Suggestions, New people and Would tag all read what it writes.
  *
+ * **Each room apart** (§21). A person is scored only against the performers of their item's room,
+ * and new people are gathered within one room, so a face in a Parlour video is never offered as a
+ * Cellar performer, nor grouped with a stranger from the Cellar.
+ *
  * **Only what changed** (§5f "Only what changed"). The first run in a process does the whole
  * library and keeps its work: every item's stored face vectors, every reference, every person and
  * their two best matches, and what the tables hold. After that a run takes what the `FaceStale`
@@ -324,6 +328,8 @@ interface Person {
     /** Clear enough and nobody decided about: a new person, if they match nobody. */
     stranger: boolean;
     ranked: Ranked;
+    /** Their item's room (§21): whose performers they are scored against. Null for none. */
+    domain: string | null;
 }
 
 /** What runs keep between them (§5f "Only what changed"); null until the first has run. */
@@ -333,6 +339,8 @@ interface Kept {
     /** Every item's people, in the order they were gathered. */
     people: Map<string, Person[]>;
     anchors: Map<string, FaceAnchor>;
+    /** Each reference's room (§21), by performer. */
+    anchorRooms: Map<string, string>;
     /** What the tables hold, so a run writes only what differs. */
     written: { anchors: Map<string, AnchorRow>; people: Map<string, NewAppearance> };
 }
@@ -382,6 +390,7 @@ const gatherItem = (
                 best.score >= NEW_PERSON_SCORE &&
                 person.members.every((index) => people[index].face.decided === 0),
             ranked: UNRANKED,
+            domain: best.domain,
         };
     });
 };
@@ -447,6 +456,25 @@ const asRow = (person: Person, newPersonId: string | null): NewAppearance => {
     };
 };
 
+const NO_ANCHORS: ReadonlyMap<string, FaceAnchor> = new Map();
+
+/** The references, room by room (§21). */
+const anchorsByRoom = (state: Kept): Map<string, Map<string, FaceAnchor>> => {
+    const out = new Map<string, Map<string, FaceAnchor>>();
+
+    for (const [tagId, anchor] of state.anchors) {
+        const room = state.anchorRooms.get(tagId);
+
+        if (room === undefined) continue;
+
+        const map = out.get(room) ?? new Map<string, FaceAnchor>();
+        map.set(tagId, anchor);
+        out.set(room, map);
+    }
+
+    return out;
+};
+
 const sameCentre = (a: Float32Array, b: Float32Array): boolean =>
     a.length === b.length && a.every((value, i) => value === b[i]);
 
@@ -508,6 +536,7 @@ const pass = async (): Promise<void> => {
         faces: new Map(),
         people: new Map(),
         anchors: new Map(),
+        anchorRooms: new Map(),
         written: {
             anchors: new Map(faceRepo.anchorRows().map((row) => [row.tagId, row])),
             people: new Map(appearanceRepo.writtenAppearances().map((row) => [row.id, row])),
@@ -569,9 +598,13 @@ const pass = async (): Promise<void> => {
         );
         const before = state.anchors.get(tagId);
 
-        if (anchor === null) {
+        const room = (confirmed.get(tagId) ?? tagged.get(tagId))?.[0]?.domain;
+
+        if (anchor === null || room === undefined) {
+            state.anchorRooms.delete(tagId);
             if (state.anchors.delete(tagId)) moved.add(tagId);
         } else {
+            state.anchorRooms.set(tagId, room);
             if (!before || !sameCentre(before.centre, anchor.centre)) moved.add(tagId);
             else if (
                 before.items !== anchor.items ||
@@ -587,16 +620,21 @@ const pass = async (): Promise<void> => {
         since = await breathe(since);
     }
 
-    // Everybody gathered again is ranked against every reference; everybody else only against
-    // the references that moved.
+    // Everybody gathered again is ranked against every reference of their room; everybody else
+    // only against the references that moved. A reference of another room is not in the map a
+    // person is ranked against, so it can neither match them nor be their runner-up.
+    const rooms = anchorsByRoom(state);
+    const roomOf = (person: Person): ReadonlyMap<string, FaceAnchor> =>
+        (person.domain === null ? undefined : rooms.get(person.domain)) ?? NO_ANCHORS;
+
     for (const [mediaId, people] of state.people) {
         if (regathered.has(mediaId)) {
             for (const person of people) {
-                person.ranked = rankAll(person.centre, state.anchors.values());
+                person.ranked = rankAll(person.centre, roomOf(person).values());
             }
         } else if (moved.size > 0) {
             for (const person of people) {
-                person.ranked = rerank(person.centre, person.ranked, moved, state.anchors);
+                person.ranked = rerank(person.centre, person.ranked, moved, roomOf(person));
             }
         } else {
             continue;
@@ -669,11 +707,32 @@ const writeChanges = async (
         }
     }
 
-    const newPersonOf = newPersonIds(
-        strangers,
-        gatherNewPeople(strangers.map(({ centre, mediaId }) => ({ centre, mediaId }))),
-        state.written.people
-    );
+    // Gathered room by room (§21): a stranger in the Parlour is never the same new person as one
+    // in the Cellar. Each room's gatherings are numbered past the last room's, so the ids are
+    // shared out in one pass and no two rooms can be handed the same one.
+    const ordered: Person[] = [];
+    const gatherings: (number | null)[] = [];
+    let base = 0;
+
+    for (const room of [...new Set(strangers.map((person) => person.domain))]) {
+        const members = strangers.filter((person) => person.domain === room);
+        const gathered =
+            room === null
+                ? members.map(() => null)
+                : gatherNewPeople(members.map(({ centre, mediaId }) => ({ centre, mediaId })));
+        let top = -1;
+
+        members.forEach((person, i) => {
+            const gathering = gathered[i];
+
+            ordered.push(person);
+            gatherings.push(gathering === null ? null : base + gathering);
+            if (gathering !== null && gathering > top) top = gathering;
+        });
+        base += top + 1;
+    }
+
+    const newPersonOf = newPersonIds(ordered, gatherings, state.written.people);
 
     // What differs from the tables, and only that, written.
     const rows = new Map<string, NewAppearance>();
