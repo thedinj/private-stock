@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TagScope } from "@private-stock/core";
 
 import { DEFAULT_VIEW, viewToParams, withLook } from "@/lib/libraryQuery";
+import { facetLabel } from "./facetLabels";
 
 /**
  * The header search (§14 "The header search"): one box on every page, asking one of five kinds of
@@ -27,14 +28,23 @@ export interface SearchTypeInfo {
 
 export const SEARCH_TYPE_INFO: Record<SearchType, SearchTypeInfo> = {
     library: { label: "Library", placeholder: "Search the library", suggest: null },
+    // Getters, because what a facet is called depends on the room (§21).
     performer: {
-        label: "Performer",
-        placeholder: "Find a performer",
+        get label() {
+            return facetLabel("performer");
+        },
+        get placeholder() {
+            return `Find a ${facetLabel("performer").toLowerCase()}`;
+        },
         suggest: { kind: "performer", scopes: ["public"] },
     },
     source: {
-        label: "Source",
-        placeholder: "Find a source",
+        get label() {
+            return facetLabel("source");
+        },
+        get placeholder() {
+            return `Find a ${facetLabel("source").toLowerCase()}`;
+        },
         suggest: { kind: "source", scopes: ["public"] },
     },
     keyword: {

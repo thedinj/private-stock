@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { facetLabel, facetLabelPlural } from "./facetLabels";
+let room = "cellar";
+vi.mock("./activeDomain", () => ({ getActiveDomain: () => room }));
+
+const { facetLabel, facetLabelPlural } = await import("./facetLabels");
 
 /**
  * The one place a facet gets its name (§5b).
@@ -20,6 +23,18 @@ describe("naming a facet", () => {
     it("names the other two", () => {
         expect(facetLabel("performer")).toBe("Performer");
         expect(facetLabelPlural("source")).toBe("Sources");
+    });
+
+    it("names them as the room does (§21)", () => {
+        room = "family";
+        expect(facetLabelPlural("performer")).toBe("People");
+
+        room = "games";
+        expect(facetLabel("performer")).toBe("Player");
+        expect(facetLabel("source")).toBe("Game");
+        expect(facetLabel("tag")).toBe("Keyword");
+
+        room = "cellar";
     });
 
     it("falls back to a facet's own name rather than hiding it", () => {

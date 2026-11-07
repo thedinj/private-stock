@@ -6,6 +6,7 @@ import { Box, CloseButton, NavLink, Text, type NavLinkProps } from "@mantine/cor
 
 import type { CollectionKind } from "@private-stock/core";
 
+import { facetLabelPlural } from "@/lib/facetLabels";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { usePlaylists } from "@/lib/api/playlists";
 import { useSavedFilters } from "@/lib/api/savedFilters";
@@ -51,10 +52,11 @@ const STUDIO_PAGES = [
     { href: "/reels", label: "Reels" },
 ];
 
-const TAG_PAGES = [
-    { href: "/tags/performers", label: "Performers" },
-    { href: "/tags/sources", label: "Sources" },
-    { href: "/tags/keywords", label: "Keywords" },
+/** A function, because the first three are named by the room (§21). */
+const tagPages = () => [
+    { href: "/tags/performers", label: facetLabelPlural("performer") },
+    { href: "/tags/sources", label: facetLabelPlural("source") },
+    { href: "/tags/keywords", label: facetLabelPlural("tag") },
     { href: "/tags/manage", label: "Manage" },
 ];
 
@@ -469,7 +471,7 @@ export const AppNavbar: React.FC<{
                 // entries -- a performer's page is not the Performers list.
                 active={
                     pathname.startsWith("/tags/") &&
-                    !TAG_PAGES.some((page) => pathname === page.href)
+                    !tagPages().some((page) => pathname === page.href)
                 }
                 color="brass"
                 style={navPadding}
@@ -479,7 +481,7 @@ export const AppNavbar: React.FC<{
                 three ways to look at the vocabulary and one to tidy it (§6 "Tags"). Always
                 listed: they used to unfold only inside the section, but the vocabulary is
                 reached for often enough that the extra click cost more than the four rows. */}
-            {TAG_PAGES.map((page) => (
+            {tagPages().map((page) => (
                 <RememberedNavLink
                     key={page.href}
                     path={page.href}

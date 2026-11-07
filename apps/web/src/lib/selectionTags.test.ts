@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { SelectionTag } from "@private-stock/core";
 
 import { describeCoverage, describePublicRemoval, groupByFacet } from "./selectionTags";
+
+/** In the cellar, whose names these were written against (§21). */
+vi.mock("./activeDomain", () => ({ getActiveDomain: () => "cellar" }));
 
 const tag = (name: string, scope: "public" | "private", kind = "tag"): SelectionTag => ({
     tagId: `t-${name}`,

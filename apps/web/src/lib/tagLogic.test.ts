@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { savedQuerySchema } from "@private-stock/core";
 
@@ -30,6 +30,9 @@ import {
     withAdvancedGroups,
     withPicks,
 } from "./tagLogic";
+
+/** In the cellar, whose names these were written against (§21). */
+vi.mock("./activeDomain", () => ({ getActiveDomain: () => "cellar" }));
 
 /**
  * The filter panel's tag chips as a state machine (§14e).

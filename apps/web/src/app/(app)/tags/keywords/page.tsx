@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 
 import { TagBrowsePage } from "@/components/tags/TagBrowsePage";
+import { facetLabelPlural } from "@/lib/facetLabels";
 
 /**
  * Keywords: private, then shared (§6 "Tags").
@@ -16,7 +17,7 @@ const KeywordsPage: React.FC = () => (
         <TagBrowsePage
             kind="tag"
             eyebrow="Tags"
-            title="Keywords"
+            title={facetLabelPlural("tag")}
             sections={[
                 { scope: "private", heading: "Private", empty: null },
                 {

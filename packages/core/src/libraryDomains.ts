@@ -79,7 +79,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         facets: {
             performer: { one: "Person", many: "People" },
             source: { one: "Source", many: "Sources" },
-            tag: { one: "Tag", many: "Tags" },
+            tag: { one: "Keyword", many: "Keywords" },
         },
         skipsStages: [],
     },
@@ -90,7 +90,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         facets: {
             performer: { one: "Performer", many: "Performers" },
             source: { one: "Source", many: "Sources" },
-            tag: { one: "Tag", many: "Tags" },
+            tag: { one: "Keyword", many: "Keywords" },
         },
         skipsStages: [],
     },
@@ -101,7 +101,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         facets: {
             performer: { one: "Player", many: "Players" },
             source: { one: "Game", many: "Games" },
-            tag: { one: "Tag", many: "Tags" },
+            tag: { one: "Keyword", many: "Keywords" },
         },
         // Players are still filed, by hand, from filenames and from what is read on screen.
         skipsStages: ["faces"],

@@ -15,6 +15,7 @@ import {
 
 import type { FaceReviewFace, ItemPeople, MediaTag, MentionField } from "@private-stock/core";
 
+import { facetLabelPlural } from "@/lib/facetLabels";
 import { SectionLabel } from "@/components/media/SectionLabel";
 import { FacetBox } from "@/components/TagEditor";
 import type { ItemMoment } from "@/components/tags/ItemTagChip";
@@ -417,7 +418,7 @@ export const ItemPerformers: React.FC<{
 
     return (
         <Stack gap="xs">
-            <SectionLabel>Performers</SectionLabel>
+            <SectionLabel>{facetLabelPlural("performer")}</SectionLabel>
             <FacetBox
                 mediaId={mediaId}
                 kind="performer"

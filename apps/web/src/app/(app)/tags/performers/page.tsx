@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 
 import { TagBrowsePage } from "@/components/tags/TagBrowsePage";
+import { facetLabel, facetLabelPlural } from "@/lib/facetLabels";
 
 /** The people in the library, each with a strip of what they are in (§6 "Tags"). */
 const PerformersPage: React.FC = () => (
@@ -10,12 +11,12 @@ const PerformersPage: React.FC = () => (
         <TagBrowsePage
             kind="performer"
             eyebrow="Tags"
-            title="Performers"
+            title={facetLabelPlural("performer")}
             layout="tiles"
             sections={[
                 {
                     scope: "public",
-                    empty: "Nobody has been tagged yet. Add a performer on any item's page.",
+                    empty: `Nobody has been tagged yet. Add a ${facetLabel("performer").toLowerCase()} on any item's page.`,
                 },
             ]}
         />
