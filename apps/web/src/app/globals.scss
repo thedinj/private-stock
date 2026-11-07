@@ -414,7 +414,9 @@ body {
 :root[data-domain="games"] {
     --font-display: var(--font-arcade-ui);
     --font-ui: var(--font-arcade-ui);
-    --font-label: var(--font-arcade-pixel);
+    // The pixel face signs the room's name and nothing else (`.ps-room-name`): as every page's
+    // title it stopped being a sign and became something to read.
+    --font-label: var(--font-arcade-ui);
 }
 
 /**

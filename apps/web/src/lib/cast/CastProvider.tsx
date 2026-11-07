@@ -195,7 +195,9 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let unbind = () => undefined as void;
 
         void loadCastSdk().then((ok) => {
-            if (!ok || cancelled) return;
+            // The sender can say it is available before its framework global exists -- seen on a
+            // local server, where it threw on every page load. No framework, no casting.
+            if (!ok || cancelled || typeof cast === "undefined") return;
 
             const context = cast.framework.CastContext.getInstance();
 
