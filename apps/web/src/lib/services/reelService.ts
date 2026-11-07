@@ -17,7 +17,7 @@ import {
 import { db, mediaRepo, reelRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
-import { inRequestDomain, requestDomain } from "./requestDomain";
+import { inRoom, roomOf } from "./room";
 import { coverUrl } from "./artService";
 import { clipsByIds, assertReelNameFree } from "./clipService";
 import { coverCandidates, coverMosaics } from "./coverMosaic";
@@ -78,7 +78,7 @@ const readable = (reelId: string, auth: AuthContext): reelRepo.ReelRow => {
 
     if (
         !row ||
-        !inRequestDomain(row.domain, auth) ||
+        !inRoom(row, auth) ||
         (row.ownerId !== auth.userId && row.visibility !== "shared")
     ) {
         throw new NotFoundError("Reel not found");
@@ -106,7 +106,7 @@ const writable = (reelId: string, auth: AuthContext): reelRepo.ReelRow => {
 
 export const listReels = (query: ReelQuery, auth: AuthContext): ReelListResponse => {
     const direction = query.direction ?? reelNaturalDirection(query.sort);
-    const rows = reelRepo.listVisibleTo(query, auth.userId, requestDomain(auth), direction);
+    const rows = reelRepo.listVisibleTo(query, auth.userId, roomOf(auth), direction);
     const covers = coversFor(rows, auth);
 
     return {
@@ -114,7 +114,7 @@ export const listReels = (query: ReelQuery, auth: AuthContext): ReelListResponse
         page: query.page,
         pageSize: query.limit,
         hasMore: rows.length === query.limit,
-        total: reelRepo.countVisibleTo(query, auth.userId, requestDomain(auth)),
+        total: reelRepo.countVisibleTo(query, auth.userId, roomOf(auth)),
     };
 };
 
@@ -133,7 +133,7 @@ export const createReel = (input: CreateReelInput, auth: AuthContext): Reel => {
     const id = db.transaction((): string => {
         const created = reelRepo.create({
             ownerId: auth.userId,
-            domain: requestDomain(auth),
+            domain: roomOf(auth),
             name: input.name,
             description: input.description ?? null,
             visibility: input.visibility,
