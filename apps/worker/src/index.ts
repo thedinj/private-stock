@@ -7,6 +7,7 @@ import {
     WEBSAFE_PROFILE,
     assertSafeRelativePath,
     assessPlayback,
+    domainSkipsStage,
     stagePolicySchema,
     findStage,
     isUnreadableSource,
@@ -474,6 +475,21 @@ const runJob = async (job: JobRow, throttled: boolean): Promise<void> => {
                 `Job ${job.kind} ${job.id} dropped: its ${waitingFor.name} has not settled`
             );
             abandon(db, job.id);
+            return;
+        }
+
+        /**
+         * The item's room does not use this stage (§21): faces in the Game Room. Settled as
+         * `skipped` rather than dropped, so the sweep does not offer it again, and decided here
+         * rather than in each handler so a room that skips a second stage needs no handler edit.
+         */
+        if (
+            findStage(job.kind) &&
+            job.fileId &&
+            domainSkipsStage(mediaRootRepo.domainOfFile(job.fileId), job.kind)
+        ) {
+            recordStageOutcome(job, "skipped");
+            complete(db, job.id);
             return;
         }
 

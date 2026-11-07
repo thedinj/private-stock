@@ -54,6 +54,13 @@ export interface DomainProfile {
     guarded: boolean;
     /** What each facet is called here. The stored kind never changes. */
     facets: Record<OfferedTagKind, FacetLabel>;
+    /**
+     * Pipeline stages that do not apply to this room's items (§21 "Stages a room does not
+     * use"), recorded `skipped` without being run. A fact about the content, not a setting: a
+     * face detector has nothing to find in a game's frames, and the CPU it would spend is the
+     * NAS's whole budget.
+     */
+    skipsStages: readonly string[];
 }
 
 /**
@@ -74,6 +81,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             source: { one: "Source", many: "Sources" },
             tag: { one: "Tag", many: "Tags" },
         },
+        skipsStages: [],
     },
     cellar: {
         kind: "cellar",
@@ -84,6 +92,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             source: { one: "Source", many: "Sources" },
             tag: { one: "Tag", many: "Tags" },
         },
+        skipsStages: [],
     },
     games: {
         kind: "games",
@@ -94,6 +103,8 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             source: { one: "Game", many: "Games" },
             tag: { one: "Tag", many: "Tags" },
         },
+        // Players are still filed, by hand, from filenames and from what is read on screen.
+        skipsStages: ["faces"],
     },
 };
 
@@ -101,4 +112,14 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
 export const parseDomain = (raw: string | null | undefined): DomainKind | null => {
     const parsed = domainKindSchema.safeParse(raw);
     return parsed.success ? parsed.data : null;
+};
+
+/**
+ * Whether an item in this room skips a stage. A domain the code does not know (a row written by
+ * a newer build, read by an older one) skips nothing: running a stage is the safe mistake.
+ */
+export const domainSkipsStage = (domain: string | null | undefined, stage: string): boolean => {
+    const known = parseDomain(domain);
+
+    return known !== null && domainProfiles[known].skipsStages.includes(stage);
 };

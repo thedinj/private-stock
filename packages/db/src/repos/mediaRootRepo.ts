@@ -40,6 +40,18 @@ export const listEnabledRoots = (): MediaRootRow[] =>
 export const findById = (id: string): MediaRootRow | undefined =>
     db.prepare(`SELECT * FROM "MediaRoot" WHERE "id" = ?`).get(id) as MediaRootRow | undefined;
 
+/** The domain of the library a file is in (§21), or undefined for a file that has gone. */
+export const domainOfFile = (fileId: string): string | undefined =>
+    (
+        db
+            .prepare(
+                `SELECT r."domain" FROM "MediaFile" f
+                   JOIN "MediaRoot" r ON r."id" = f."rootId"
+                  WHERE f."id" = ?`
+            )
+            .get(fileId) as { domain: string } | undefined
+    )?.domain;
+
 export const findByPath = (path: string): MediaRootRow | undefined =>
     db.prepare(`SELECT * FROM "MediaRoot" WHERE "path" = ?`).get(path) as MediaRootRow | undefined;
 

@@ -11894,11 +11894,25 @@ constraint and rebuilding two tables to relax it bought nothing for one person: 
 "Christmas" in another room is refused, and the refusal tells its owner only what they already
 know. Saved views had no constraint, so their names are per room.
 
+### Stages a room does not use
+
+The Game Room does not detect faces. A detector has nothing to find in a game's frames, and on an
+i3 every minute it spends is a minute the rooms that do need it wait. Players are still filed, by
+hand, from filenames and from what OCR reads on screen.
+
+**A fact in the profile, not a setting** (`skipsStages`). A per-room column on the Processing page
+was the obvious design, and it is three switches for every stage that would only ever be set one
+way. The admin page is not a cockpit. The worker checks the job's file's room before running any
+stage and records `skipped`, which settles the stage at its version (§7b "Outcomes"), so the sweep
+does not offer the item again; one check at dispatch rather than in each handler, so a second
+skipped stage is a profile edit. A version bump of `faces` re-offers every game clip once, and
+each is skipped without being read.
+
+The faces auto-tag stays one switch for the whole library: on in the Parlour as in the Cellar.
+
 ### Still to build
 
 - **Tag vocabulary per domain** (`Tag.domain`). Tags hang off no root, so the narrowed context
   does not reach them: until this lands the filter panel, the tag pages and face suggestions
   draw on every room's names. It is why this is not usable yet.
-- **Stage policy per domain** — faces off in the Game Room; the faces auto-tag stays on in the
-  Parlour as in the Cellar.
 - **A look per room**, chosen in rounds of mockups, and the facet labels read from the profile.
