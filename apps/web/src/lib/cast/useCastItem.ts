@@ -35,6 +35,11 @@ export interface CastControl {
     start: (positionMs: number) => void;
     /** End the session; answers where the TV had got to, to carry on from here. */
     stop: () => number;
+    /**
+     * After a session that ended by itself: where to carry on here, when the TV had this item --
+     * read once. Null when there is nothing to carry on from.
+     */
+    takeEndPosition: () => number | null;
 }
 
 interface CastItemOptions {
@@ -270,6 +275,11 @@ export const useCastItem = ({
             cast.disconnect();
 
             return at;
+        },
+        takeEndPosition: () => {
+            const lost = cast.takeLostPosition();
+
+            return lost && lost.mediaId === mediaId ? lost.positionMs : null;
         },
     };
 };

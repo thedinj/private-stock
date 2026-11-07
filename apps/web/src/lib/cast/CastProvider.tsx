@@ -82,6 +82,11 @@ interface CastValue {
     toggleMute: () => void;
     /** Stop the TV's media, keeping the session. */
     stopMedia: () => void;
+    /**
+     * Where the TV last said it was, when the session was ended for want of an answer -- once,
+     * then null. The bar's own clock kept counting after the TV went, so it is not the answer.
+     */
+    takeLostPosition: () => { mediaId: string | null; positionMs: number } | null;
 }
 
 const IDLE_TV: TvState = {
@@ -122,9 +127,48 @@ const queueItemFor = (link: CastLink, startMs: number): chrome.cast.media.QueueI
     return item;
 };
 
-/** The SDK's callback-style calls, as promises. */
-const call = (run: (done: () => void, fail: (error: chrome.cast.Error) => void) => void) =>
-    new Promise<void>((resolve, reject) => run(resolve, reject));
+/**
+ * How long a call to the TV may go unanswered before it counts as failed.
+ *
+ * The SDK answers every call with a callback -- except when the TV has gone away, when it can
+ * answer neither way, ever. A load that never settles held `busy` for good, and with it every
+ * sync and top-up after it: the page stopped following the TV and nothing said why.
+ */
+const CALL_TIMEOUT_MS = 30_000;
+
+/** The SDK's callback-style calls, as promises that settle even when the TV does not answer. */
+const call = (
+    run: (done: () => void, fail: (error: chrome.cast.Error) => void) => void,
+    timeoutMs: number = CALL_TIMEOUT_MS
+) =>
+    new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("The TV did not answer")), timeoutMs);
+
+        run(
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            }
+        );
+    });
+
+/**
+ * How often a connected TV is asked whether it is still there, and how many unanswered asks in a
+ * row mean it is not.
+ *
+ * Turning a TV off does not end the session as the phone sees it: Chrome on Android can go on
+ * reporting it connected for many minutes, and the clock in the bar keeps counting, because the
+ * SDK estimates it locally between reports. Meanwhile the player here is held paused for a TV that
+ * is not there. So the sender asks, and ends the session itself when nobody answers. Two misses
+ * rather than one, so a moment of bad Wi-Fi does not drop a cast that is working.
+ */
+const PROBE_EVERY_MS = 10_000;
+const PROBE_TIMEOUT_MS = 8_000;
+const PROBE_MISSES = 2;
 
 const mediaIdOf = (info: chrome.cast.media.MediaInfo | null | undefined): string | null => {
     const data: unknown = info?.customData;
@@ -140,6 +184,7 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [deviceName, setDeviceName] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const book = useRef<CastBook>(emptyBook());
+    const lostRef = useRef<{ mediaId: string | null; positionMs: number } | null>(null);
     const playerRef = useRef<{
         player: cast.framework.RemotePlayer;
         controller: cast.framework.RemotePlayerController;
@@ -197,6 +242,8 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // bookkeeping with it.
                 if (event.castState !== cast.framework.CastState.CONNECTED) {
                     book.current = emptyBook();
+                    // Whatever was in flight was for the session that ended.
+                    setBusy(false);
                 }
 
                 read();
@@ -227,6 +274,72 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
             unbind();
         };
     }, []);
+
+    const connected = castState === "CONNECTED";
+
+    /** Ask the TV, now and then, whether it is still there; end the session when it is not. */
+    useEffect(() => {
+        if (!connected) return;
+
+        let misses = 0;
+        let asking = false;
+        let heard: { mediaId: string | null; positionMs: number } | null = null;
+
+        const probe = () => {
+            // A hidden page is frozen or throttled on Android, and an ask it makes there would
+            // time out for the page's sake rather than the TV's. It asks again on its return.
+            if (asking || document.visibilityState !== "visible") return;
+
+            const context = cast.framework.CastContext.getInstance();
+            // Only a TV with media loaded can be asked; one that has finished its queue is
+            // showing its idle screen, and a stuck session there costs nothing but a cover.
+            const media = context.getCurrentSession()?.getMediaSession();
+
+            if (!media) {
+                misses = 0;
+
+                return;
+            }
+
+            asking = true;
+            call(
+                (done, fail) =>
+                    media.getStatus(new chrome.cast.media.GetStatusRequest(), done, fail),
+                PROBE_TIMEOUT_MS
+            )
+                .then(() => {
+                    misses = 0;
+                    heard = {
+                        mediaId: mediaIdOf(media.media),
+                        positionMs: media.getEstimatedTime() * 1000,
+                    };
+                })
+                .catch(() => {
+                    misses += 1;
+
+                    if (misses >= PROBE_MISSES) {
+                        misses = 0;
+                        lostRef.current = heard;
+                        book.current = emptyBook();
+                        // `false`: do not ask the TV to stop. It is not answering, and if it is
+                        // only out of reach for a while it can be rejoined where it got to.
+                        context.endCurrentSession(false);
+                    }
+                })
+                .finally(() => {
+                    asking = false;
+                });
+        };
+
+        const timer = setInterval(probe, PROBE_EVERY_MS);
+
+        document.addEventListener("visibilitychange", probe);
+
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", probe);
+        };
+    }, [connected]);
 
     const connect = useCallback(async () => {
         try {
@@ -300,6 +413,14 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
         book.current.queuedIds = kept === -1 ? [] : book.current.queuedIds.slice(0, kept + 1);
     }, []);
 
+    const takeLostPosition = useCallback(() => {
+        const lost = lostRef.current;
+
+        lostRef.current = null;
+
+        return lost;
+    }, []);
+
     const togglePlay = useCallback(() => playerRef.current?.controller.playOrPause(), []);
     const toggleMute = useCallback(() => playerRef.current?.controller.muteOrUnmute(), []);
     const stopMedia = useCallback(() => playerRef.current?.controller.stop(), []);
@@ -320,7 +441,7 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // The SDK's `CastState` values, as strings: `cast` is not defined until the SDK has
             // loaded, and this runs before it has.
             available: castState !== null && castState !== "NO_DEVICES_AVAILABLE",
-            connected: castState === "CONNECTED",
+            connected,
             deviceName,
             tv,
             book,
@@ -335,9 +456,11 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
             seekTo,
             toggleMute,
             stopMedia,
+            takeLostPosition,
         }),
         [
             castState,
+            connected,
             deviceName,
             tv,
             busy,
@@ -350,6 +473,7 @@ export const CastProvider: React.FC<{ children: React.ReactNode }> = ({ children
             seekTo,
             toggleMute,
             stopMedia,
+            takeLostPosition,
         ]
     );
 

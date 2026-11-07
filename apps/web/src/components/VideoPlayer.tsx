@@ -1154,6 +1154,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         video.currentTime = ms / 1000;
     }, []);
 
+    /**
+     * A cast that ended by itself -- from the TV's remote, or because the TV went away and stopped
+     * answering (`CastProvider`) -- leaves the film here where the TV had got to, paused, rather
+     * than where casting started. Stopping from here has already done this, and doing it twice
+     * moves nothing.
+     *
+     * A TV that went away is placed at what it last said, not at the bar's clock: that one is the
+     * SDK's estimate and went on counting for as long as nobody noticed the TV was gone.
+     */
+    const lastRemoteRef = useRef<{ mediaId: string | null; positionMs: number } | null>(null);
+    const wasCastingRef = useRef(false);
+
+    if (remote) {
+        lastRemoteRef.current = { mediaId: remote.mediaId, positionMs: remote.positionMs };
+    }
+
+    useEffect(() => {
+        if (casting) {
+            wasCastingRef.current = true;
+
+            return;
+        }
+
+        if (!wasCastingRef.current) return;
+
+        wasCastingRef.current = false;
+
+        const last = lastRemoteRef.current;
+        const at =
+            cast?.takeEndPosition() ??
+            (last && last.mediaId === mediaId && last.positionMs > 0 ? last.positionMs : null);
+
+        lastRemoteRef.current = null;
+
+        if (at !== null) {
+            seekTo(at);
+        }
+        // `cast` is read at the moment casting ends; a new object every render is no reason to
+        // run this again.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [casting, mediaId, seekTo]);
+
     useEffect(() => {
         const video = videoEl;
         if (!video) return;

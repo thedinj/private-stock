@@ -6162,6 +6162,18 @@ fetched by the TV, and a copy downloading to the phone is NAS reads for nobody (
 The session lives in the `(app)` layout (`CastProvider`), not the player, so it survives Next
 and Prev moving to another page and is rejoined when a sleeping phone's tab comes back.
 
+**A TV that is turned off is noticed by asking it** (2026-11-06). Switching the TV off does not
+end the session as Chrome on Android sees it -- it went on showing "Playing on the TV" for many
+minutes, with the bar's clock still counting (the SDK estimates it locally) and the player here
+held paused for a TV that was not there. So while connected and visible, the sender asks the TV
+for its status every ten seconds; two unanswered asks in a row end the session from this side,
+without asking the TV to stop (it may only be out of reach, and can be rejoined). The film here
+is then left paused where the TV last _said_ it was, not where the bar's clock had drifted to. A
+session that ends any other way -- the TV's own remote -- leaves it at the TV's last position.
+Every other call to the TV has a timeout too: the SDK answers neither way when the TV has gone,
+and one load that never settled used to hold the session busy for good, so the page silently
+stopped following the TV.
+
 Both force the `websafe` variant rather than the original wherever the original failed
 playback assessment — Samsung and Chromecast disagree about HEVC, subtitles, and HLS variants.
 An original that passed assessment is already the profile receivers want, and is served as-is;
