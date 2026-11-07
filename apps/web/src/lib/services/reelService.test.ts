@@ -73,7 +73,12 @@ const clipSummary = (row: ClipFixture) => ({
 vi.mock("@private-stock/db", () => ({
     db: { transaction: (fn: () => unknown) => () => fn() },
     reelRepo: {
-        findById: (id: string) => reels.find((reel) => reel.id === id),
+        findById: (id: string) => {
+            const reel = reels.find((entry) => entry.id === id);
+
+            // A fixture written without a room is the cellar's (§21).
+            return reel ? { domain: "cellar", ...reel } : undefined;
+        },
         findSummary: (id: string) => {
             const row = reels.find((reel) => reel.id === id);
 
