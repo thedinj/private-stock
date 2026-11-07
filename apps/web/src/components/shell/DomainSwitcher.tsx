@@ -43,7 +43,8 @@ export const DomainSwitcher: React.FC = () => {
                     style={{ display: "flex", alignItems: "center" }}
                 >
                     <Group gap={4} wrap="nowrap">
-                        <Title order={4} style={{ whiteSpace: "nowrap" }}>
+                        {/* `ps-room-name`: each room may sign its own name (globals.scss). */}
+                        <Title order={4} className="ps-room-name" style={{ whiteSpace: "nowrap" }}>
                             {domainProfiles[active].label}
                         </Title>
                         <ChevronGlyph />

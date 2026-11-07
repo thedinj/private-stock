@@ -26,8 +26,16 @@ body {
 body {
     background-image:
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E"),
-        radial-gradient(84% 58% at 4% 106%, rgba(228, 185, 85, 0.2) 0%, rgba(228, 185, 85, 0) 58%),
-        radial-gradient(64% 46% at 97% -8%, rgba(155, 113, 32, 0.15) 0%, rgba(155, 113, 32, 0) 56%);
+        radial-gradient(
+            84% 58% at 4% 106%,
+            rgba(var(--ps-accent-rgb), 0.2) 0%,
+            rgba(var(--ps-accent-rgb), 0) 58%
+        ),
+        radial-gradient(
+            64% 46% at 97% -8%,
+            rgba(var(--ps-accent-rgb), 0.09) 0%,
+            rgba(var(--ps-accent-rgb), 0) 56%
+        );
     background-repeat: repeat, no-repeat, no-repeat;
     background-attachment: fixed;
 }
@@ -385,4 +393,63 @@ body {
         animation: none;
         background: var(--mantine-color-brass-5);
     }
+}
+
+/**
+ * The rooms (§21 "A look per room").
+ *
+ * Colours come from the room's Mantine theme (`roomThemes`); what is here is what a theme cannot
+ * say: which faces stand in for the cellar's, and each room's one piece of furniture. Keyed on
+ * `data-domain`, which the providers set on <html> before the first paint behind sign-in. The
+ * selector outranks the `next/font` class that defines the cellar's variables on the same
+ * element, so redefining them here is enough for every rule that reads them.
+ */
+:root[data-domain="family"] {
+    --font-display: var(--font-hearth-display);
+    --font-ui: var(--font-hearth-ui);
+    // The cellar's blackletter has no place by the fire; the plate label takes the display face.
+    --font-label: var(--font-hearth-display);
+}
+
+:root[data-domain="games"] {
+    --font-display: var(--font-arcade-ui);
+    --font-ui: var(--font-arcade-ui);
+    --font-label: var(--font-arcade-pixel);
+}
+
+/**
+ * The arcade's screen: scanlines over everything, media included. The one room where texture is
+ * allowed over the picture (§14 keeps it out of the cellar's), because a CRT is what the room is.
+ * Faint enough to read through, fixed so it does not scroll, and gone for anybody who asked the
+ * system for less motion and contrast noise.
+ */
+:root[data-domain="games"] body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+    mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce), (prefers-contrast: more) {
+    :root[data-domain="games"] body::after {
+        display: none;
+    }
+}
+
+/** The room's name in the header: a pixel sign, lit. */
+:root[data-domain="games"] .ps-room-name {
+    font-family: var(--font-arcade-pixel), monospace;
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: #ffe3f5;
+    text-shadow:
+        0 0 6px rgba(255, 63, 180, 0.9),
+        0 0 16px rgba(41, 227, 255, 0.55);
+}
+
+:root[data-domain="family"] .ps-room-name {
+    color: #f4c9a6;
 }

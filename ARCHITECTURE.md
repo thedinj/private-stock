@@ -11948,6 +11948,24 @@ each is skipped without being read.
 
 The faces auto-tag stays one switch for the whole library: on in the Parlour as in the Cellar.
 
-### Still to build
+### A look per room
 
-- **A look per room**, chosen in rounds of mockups. The facet labels already follow the room.
+Chosen in one round of mockups (2026-11-07): the **Parlour is Hearth** — charcoal wool, ember
+orange, Libre Caslon Display over Source Sans 3, and a low glow rising from the bottom of every
+picture. The **Game Room is Arcade Cabinet** — violet-black, magenta and phosphor cyan, Chakra
+Petch, the room's name in a lit pixel face, and scanlines over the whole screen.
+
+- **Each room is a Mantine theme over the cellar's** (`roomThemes`, `mergeThemeOverrides`), so
+  every component default stays shared. The accent keeps the name `brass` in every room: a
+  hundred call sites say `c="brass"`, and what they draw is whatever the room's tuple holds.
+- **The faces are swapped in CSS**, under `:root[data-domain]`, by redefining the role variables
+  `next/font` sets (`--font-display`, `--font-ui`, `--font-label`). The other rooms' faces are not
+  preloaded.
+- **Stylesheets that needed the accent at their own opacity** read `--ps-accent-rgb` and
+  `--ps-edge-rgb` rather than the literal gilt they used to carry.
+- The server cannot know a tab's room, so the first render is the default room's and the tab's
+  own replaces it before anything behind sign-in is drawn.
+- **The arcade's scanlines cover media**, the one deliberate exception to §14's rule that texture
+  stays out of the picture: the screen is the room's furniture. They go for anybody whose system
+  asks for reduced motion or more contrast.
+- The study (§14) drops towards black from each room's own ground.

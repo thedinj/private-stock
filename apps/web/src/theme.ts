@@ -1,6 +1,13 @@
 "use client";
 
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import {
+    createTheme,
+    mergeThemeOverrides,
+    type MantineColorsTuple,
+    type MantineThemeOverride,
+} from "@mantine/core";
+
+import type { DomainKind } from "@private-stock/core";
 
 /**
  * The wine-cellar theme — one source for the whole look (§14).
@@ -169,6 +176,16 @@ export const theme = createTheme({
         // Candle-warm glow on hover instead of a blue focus ring.
         // Body text on a warm panel -- the details drawer's values -- a step warmer than oak-1.
         textWarm: "#e6dccc",
+        /**
+         * The accent and the lit edge as bare RGB triples, for the stylesheets that need them at
+         * an opacity of their own (`rgba(var(--ps-accent-rgb), 0.45)`). They were literal
+         * `rgba(228, 185, 85, …)` in a dozen modules, which every room but this one would
+         * have had to fight (§21).
+         */
+        accentRgb: "228, 185, 85",
+        edgeRgb: "236, 218, 186",
+        // What rises from the bottom of a thumbnail's well. Nothing, in the cellar.
+        wellGlow: "0 0 transparent",
         hoverGlow: "0 0 0 1px rgba(228, 185, 85, 0.45), 0 4px 24px -6px rgba(228, 185, 85, 0.35)",
         // The showcase tile playing with sound (§14f): a solid brass ring and a wide halo, so
         // the one tile speaking can be found at a glance across the wall.
@@ -297,3 +314,177 @@ export const theme = createTheme({
         },
     },
 });
+
+/**
+ * The Parlour: Hearth (§21 "A look per room").
+ *
+ * Dark wool and ember: charcoal rather than oak, an ember orange where the cellar has gilt, and
+ * a low glow rising from the bottom of every picture as if the room were lit by the fire. The
+ * accent keeps the name `brass` because a hundred call sites say `c="brass"`; what the tuple
+ * holds is the room's, and so is everything those call sites draw.
+ */
+const ember: MantineColorsTuple = [
+    "#fff1e8",
+    "#fddcc8",
+    "#f9bb95",
+    "#f2995f",
+    "#e0703a",
+    "#d1612c",
+    "#bb5424",
+    "#9c441c",
+    "#7f3716",
+    "#632a10",
+];
+
+const wool: MantineColorsTuple = [
+    "#f4ece4",
+    "#e4d6ca",
+    "#cdbcae",
+    "#b3a193",
+    "#a8968a",
+    "#8f7e72",
+    "#7a6a5f",
+    "#66574d",
+    "#54473e",
+    "#433830",
+];
+
+const hearthDark: MantineColorsTuple = [
+    "#efe2d6",
+    "#cdbcae",
+    "#b3a193",
+    "#968579",
+    "#3b322c",
+    "#302823",
+    "#241e1a",
+    "#1d1815",
+    "#171311",
+    "#0d0b0a",
+];
+
+const hearth: MantineThemeOverride = {
+    colors: { brass: ember, oak: wool, dark: hearthDark },
+    other: {
+        textWarm: "#ecdfd3",
+        accentRgb: "224, 112, 58",
+        edgeRgb: "239, 226, 214",
+        wellGlow: "inset 0 -42px 46px -30px rgba(224, 112, 58, 0.42)",
+        hoverGlow: "0 0 0 1px rgba(224, 112, 58, 0.5), 0 4px 24px -6px rgba(224, 112, 58, 0.4)",
+        voiceGlow:
+            "0 0 0 3px rgba(224, 112, 58, 0.95), 0 0 48px 8px rgba(224, 112, 58, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
+        voiceGlowSoft:
+            "0 0 0 3px rgba(224, 112, 58, 0.8), 0 0 32px 4px rgba(224, 112, 58, 0.3), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
+        rackEdge: "inset 0 1px 0 rgba(239, 226, 214, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.6)",
+        groundDark: "#141110",
+        surfaceDark: "#221c19",
+        wellDark: "#0d0b0a",
+        hairline: "rgba(239, 226, 214, 0.10)",
+        hairlineStrong: "rgba(239, 226, 214, 0.20)",
+        hairlineFade:
+            "linear-gradient(90deg, rgba(224, 112, 58, 0.42) 0%, rgba(224, 112, 58, 0.10) 38%, rgba(224, 112, 58, 0) 100%)",
+        plateRule:
+            "linear-gradient(90deg, rgba(224, 112, 58, 0.92) 0%, rgba(224, 112, 58, 0.34) 30%, rgba(224, 112, 58, 0) 72%)",
+        diagPanel: "rgba(13, 11, 10, 0.86)",
+    },
+};
+
+/**
+ * The Game Room: Arcade Cabinet (§21 "A look per room").
+ *
+ * A CRT in a dark arcade: violet-black, magenta where the cellar has gilt and cyan where it has
+ * verdigris, so "ready" is still the one cool colour. Scanlines run over the whole screen,
+ * media included — the one room where §14's rule that texture stays out of the picture is set
+ * aside on purpose, because the screen *is* the furniture here (globals.scss).
+ */
+const neon: MantineColorsTuple = [
+    "#ffe8f6",
+    "#ffc9ea",
+    "#ff9bd6",
+    "#ff6cc3",
+    "#ff3fb4",
+    "#f02aa3",
+    "#d61b8f",
+    "#b01275",
+    "#8c0c5d",
+    "#690646",
+];
+
+const phosphor: MantineColorsTuple = [
+    "#e3fcff",
+    "#bdf6ff",
+    "#8ff0ff",
+    "#5fe9ff",
+    "#29e3ff",
+    "#14cbe6",
+    "#0aa9c2",
+    "#07879b",
+    "#056676",
+    "#034853",
+];
+
+const dusk: MantineColorsTuple = [
+    "#efedff",
+    "#d6d2f5",
+    "#b4aee0",
+    "#9a94cc",
+    "#8b86b8",
+    "#746fa0",
+    "#5f5a88",
+    "#4b476f",
+    "#393559",
+    "#282542",
+];
+
+const arcadeDark: MantineColorsTuple = [
+    "#e9e6ff",
+    "#c4bfe6",
+    "#9a94cc",
+    "#7d78ad",
+    "#2d2850",
+    "#241f42",
+    "#191530",
+    "#130f26",
+    "#0c0a18",
+    "#07060d",
+];
+
+const arcade: MantineThemeOverride = {
+    colors: { brass: neon, verdigris: phosphor, oak: dusk, dark: arcadeDark },
+    // Chakra Petch has real weights; the cellar's display face had only 400.
+    headings: { fontWeight: "600" },
+    other: {
+        textWarm: "#e4e0ff",
+        accentRgb: "255, 63, 180",
+        edgeRgb: "41, 227, 255",
+        wellGlow: "inset 0 0 0 1px rgba(41, 227, 255, 0.22)",
+        hoverGlow: "0 0 0 1px rgba(41, 227, 255, 0.7), 0 0 22px -2px rgba(41, 227, 255, 0.55)",
+        voiceGlow:
+            "0 0 0 3px rgba(255, 63, 180, 0.95), 0 0 48px 8px rgba(255, 63, 180, 0.5), 0 24px 48px -10px rgba(0, 0, 0, 0.9)",
+        voiceGlowSoft:
+            "0 0 0 3px rgba(255, 63, 180, 0.8), 0 0 32px 4px rgba(255, 63, 180, 0.35), 0 24px 48px -10px rgba(0, 0, 0, 0.9)",
+        rackEdge: "inset 0 1px 0 rgba(41, 227, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.7)",
+        groundDark: "#07060d",
+        surfaceDark: "#141128",
+        wellDark: "#0c0a18",
+        hairline: "rgba(139, 134, 184, 0.16)",
+        hairlineStrong: "rgba(139, 134, 184, 0.30)",
+        hairlineFade:
+            "linear-gradient(90deg, rgba(41, 227, 255, 0.5) 0%, rgba(41, 227, 255, 0.12) 38%, rgba(41, 227, 255, 0) 100%)",
+        plateRule:
+            "linear-gradient(90deg, rgba(255, 63, 180, 0.95) 0%, rgba(41, 227, 255, 0.45) 34%, rgba(41, 227, 255, 0) 72%)",
+        diagReady: phosphor[4],
+        diagPanel: "rgba(7, 6, 13, 0.88)",
+    },
+};
+
+/**
+ * Each room's theme (§21). The cellar's is the base and the others override it, so a component
+ * default, a heading scale or a radius set above applies in every room unless one says
+ * otherwise. Faces are swapped in CSS rather than here (globals.scss `data-domain`), because
+ * they arrive as variables from `next/font` and the theme already names the variables.
+ */
+export const roomThemes: Record<DomainKind, typeof theme> = {
+    cellar: theme,
+    family: mergeThemeOverrides(theme, hearth),
+    games: mergeThemeOverrides(theme, arcade),
+};

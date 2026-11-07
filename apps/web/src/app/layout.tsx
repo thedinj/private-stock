@@ -10,8 +10,12 @@ import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import type { Metadata, Viewport } from "next";
 import {
     Atkinson_Hyperlegible_Next,
+    Chakra_Petch,
     Grenze_Gotisch,
     Homemade_Apple,
+    Libre_Caslon_Display,
+    Press_Start_2P,
+    Source_Sans_3,
     Young_Serif,
 } from "next/font/google";
 
@@ -96,6 +100,39 @@ const hand = Homemade_Apple({
     display: "swap",
 });
 
+/**
+ * The other rooms' faces (§21 "A look per room"). Not preloaded: a page in the cellar should not
+ * fetch the arcade's pixel face, and each room's own faces are swapped in by `data-domain` in
+ * globals.scss before anything behind sign-in is drawn.
+ */
+const hearthDisplay = Libre_Caslon_Display({
+    subsets: ["latin"],
+    weight: ["400"],
+    variable: "--font-hearth-display",
+    preload: false,
+});
+
+const hearthUi = Source_Sans_3({
+    subsets: ["latin"],
+    variable: "--font-hearth-ui",
+    preload: false,
+});
+
+const arcadeUi = Chakra_Petch({
+    subsets: ["latin"],
+    weight: ["400", "500", "600", "700"],
+    variable: "--font-arcade-ui",
+    preload: false,
+});
+
+/** The room's name and nothing else: a pixel face is a sign, not something to read. */
+const arcadePixel = Press_Start_2P({
+    subsets: ["latin"],
+    weight: ["400"],
+    variable: "--font-arcade-pixel",
+    preload: false,
+});
+
 export const metadata: Metadata = {
     title: "private-stock",
     description: "Self-hosted media cataloger",
@@ -133,7 +170,9 @@ export const viewport: Viewport = {
 const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <html
         lang="en"
-        className={`${display.variable} ${ui.variable} ${label.variable} ${hand.variable}`}
+        className={[display, ui, label, hand, hearthDisplay, hearthUi, arcadeUi, arcadePixel]
+            .map((face) => face.variable)
+            .join(" ")}
         {...mantineHtmlProps}
     >
         <head>

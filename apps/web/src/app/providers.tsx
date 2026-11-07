@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { MantineProvider, type CSSVariablesResolver } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { DEFAULT_DOMAIN, type DomainKind } from "@private-stock/core";
 
 import { WarmingHud } from "@/components/debug/WarmingHud";
 import { CandleLight } from "@/components/shell/CandleLight";
 import { DomainGate } from "@/components/shell/DomainGate";
 import { ScreenLockProvider } from "@/components/shell/ScreenLock";
 import { AuthProvider } from "@/lib/api/AuthProvider";
-import { theme } from "@/theme";
+import { getActiveDomain } from "@/lib/activeDomain";
+import { roomThemes } from "@/theme";
 
 /**
  * `theme.other` as CSS variables, so the SCSS modules read the same tokens the TSX does.
@@ -31,6 +34,9 @@ const cssVariablesResolver: CSSVariablesResolver = (mantineTheme) => ({
         "--ps-voice-glow": mantineTheme.other.voiceGlow,
         "--ps-voice-glow-soft": mantineTheme.other.voiceGlowSoft,
         "--ps-rack-edge": mantineTheme.other.rackEdge,
+        "--ps-accent-rgb": mantineTheme.other.accentRgb,
+        "--ps-edge-rgb": mantineTheme.other.edgeRgb,
+        "--ps-well-glow": mantineTheme.other.wellGlow,
         /**
          * The display titles' warm cream, and the drawer's body text: one token each rather
          * than a hex repeated across six stylesheets.
@@ -71,6 +77,21 @@ const cssVariablesResolver: CSSVariablesResolver = (mantineTheme) => ({
  * into another's response.
  */
 export const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    /**
+     * The room's look (§21). The server cannot know which room a tab is in -- that lives in the
+     * browser's storage -- so the first render is the default room's, and the tab's own room
+     * replaces it before the first paint. Nothing behind sign-in is drawn by then: the shell
+     * waits for the session, which is only ever answered in the browser.
+     */
+    const [domain, setDomain] = useState<DomainKind>(DEFAULT_DOMAIN);
+
+    useLayoutEffect(() => {
+        const active = getActiveDomain();
+        // The faces and the room's texture are CSS, keyed on this (globals.scss).
+        document.documentElement.dataset.domain = active;
+        setDomain(active);
+    }, []);
+
     const [queryClient] = useState(
         () =>
             new QueryClient({
@@ -88,7 +109,7 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
 
     return (
         <MantineProvider
-            theme={theme}
+            theme={roomThemes[domain]}
             forceColorScheme="dark"
             cssVariablesResolver={cssVariablesResolver}
         >
