@@ -416,6 +416,7 @@ const {
 const ADMIN = {
     userId: "admin",
     accessibleRootIds: ["root"],
+    domain: null,
     scopes: ["admin"],
 } as unknown as AuthContext;
 

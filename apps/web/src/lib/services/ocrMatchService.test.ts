@@ -185,6 +185,7 @@ const auth: AuthContext = {
     displayName: "A",
     scopes: ["admin"],
     accessibleRootIds: ["root"],
+    domain: null,
     tokenEpoch: 0,
 };
 

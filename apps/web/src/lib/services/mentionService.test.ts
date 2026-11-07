@@ -48,6 +48,7 @@ const viewer = (scopes: AuthContext["scopes"]): AuthContext => ({
     displayName: "U",
     scopes,
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 0,
 });
 

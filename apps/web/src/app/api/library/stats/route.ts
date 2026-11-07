@@ -21,9 +21,10 @@ export async function GET(request: Request) {
     try {
         // Signed in to ask, though the answer is not the viewer's: root counts are what an empty
         // grid uses to explain itself, and they say nothing about what is in any library.
-        await requireAuth(request);
+        // The domain's own roots (§21): an empty room explains itself as empty.
+        const auth = await requireAuth(request);
 
-        return NextResponse.json(libraryStats());
+        return NextResponse.json(libraryStats(auth.domain));
     } catch (error) {
         return toErrorResponse(error, request);
     }

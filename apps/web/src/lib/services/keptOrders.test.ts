@@ -76,6 +76,7 @@ const auth = (userId = "u1", accessibleRootIds = ["r1"]): AuthContext => ({
     displayName: userId,
     scopes: [],
     accessibleRootIds,
+    domain: null,
     tokenEpoch: 0,
 });
 

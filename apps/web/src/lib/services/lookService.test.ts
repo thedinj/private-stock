@@ -87,6 +87,7 @@ const auth: AuthContext = {
     displayName: "U",
     scopes: [],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 0,
 };
 

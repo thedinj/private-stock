@@ -160,7 +160,7 @@ beforeEach(async () => {
 
 describe("adding", () => {
     it("accepts a real directory and names it after the folder", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
 
         expect(root.label).toBe("videos");
         expect(root.path).toBe(path.join(base, "videos"));
@@ -173,24 +173,30 @@ describe("adding", () => {
      * without this it would look like it worked and then find nothing forever.
      */
     it("refuses a directory that does not exist", async () => {
-        await expect(addLibrary(path.join(base, "nope"))).rejects.toThrow(/No such directory/);
+        await expect(addLibrary(path.join(base, "nope"), "cellar")).rejects.toThrow(
+            /No such directory/
+        );
         expect(rows).toEqual([]);
     });
 
     it("refuses a file", async () => {
-        await expect(addLibrary(path.join(base, "notes.txt"))).rejects.toThrow(/not a directory/);
+        await expect(addLibrary(path.join(base, "notes.txt"), "cellar")).rejects.toThrow(
+            /not a directory/
+        );
     });
 
     it("refuses a relative path, which would mean whatever the process happened to be in", async () => {
-        await expect(addLibrary("videos")).rejects.toThrow(/absolute/);
+        await expect(addLibrary("videos", "cellar")).rejects.toThrow(/absolute/);
     });
 });
 
 describe("nesting", () => {
     it("refuses the same directory twice", async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
-        await expect(addLibrary(path.join(base, "videos"))).rejects.toThrow(/already uses/);
+        await expect(addLibrary(path.join(base, "videos"), "cellar")).rejects.toThrow(
+            /already uses/
+        );
     });
 
     /**
@@ -198,17 +204,17 @@ describe("nesting", () => {
      * duplicate of itself — and the two rows can disagree about whether deletion is allowed.
      */
     it("refuses a directory inside an existing library", async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
-        await expect(addLibrary(path.join(base, "videos", "season one"))).rejects.toThrow(
+        await expect(addLibrary(path.join(base, "videos", "season one"), "cellar")).rejects.toThrow(
             /already inside/
         );
     });
 
     it("refuses a directory that contains an existing library", async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
-        await expect(addLibrary(base)).rejects.toThrow(/already contains/);
+        await expect(addLibrary(base, "cellar")).rejects.toThrow(/already contains/);
     });
 
     /**
@@ -220,14 +226,16 @@ describe("nesting", () => {
         process.env.PRIVATE_STOCK_DATA_DIR = path.join(base, "videos");
 
         try {
-            await expect(addLibrary(path.join(base, "videos"))).rejects.toThrow(/own data/);
-            await expect(addLibrary(path.join(base, "videos", "season one"))).rejects.toThrow(
+            await expect(addLibrary(path.join(base, "videos"), "cellar")).rejects.toThrow(
                 /own data/
             );
-            await expect(addLibrary(base)).rejects.toThrow(/own data/);
+            await expect(
+                addLibrary(path.join(base, "videos", "season one"), "cellar")
+            ).rejects.toThrow(/own data/);
+            await expect(addLibrary(base, "cellar")).rejects.toThrow(/own data/);
             expect(rows).toEqual([]);
 
-            await addLibrary(path.join(base, "photos"));
+            await addLibrary(path.join(base, "photos"), "cellar");
             expect(rows).toHaveLength(1);
         } finally {
             if (previous === undefined) {
@@ -239,8 +247,8 @@ describe("nesting", () => {
     });
 
     it("allows siblings", async () => {
-        await addLibrary(path.join(base, "videos"));
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
+        await addLibrary(path.join(base, "photos"), "cellar");
 
         expect(rows).toHaveLength(2);
     });
@@ -255,7 +263,7 @@ describe("nesting", () => {
  */
 describe("deletable", () => {
     it("can be allowed when the library is added", async () => {
-        const root = await addLibrary(path.join(base, "videos"), undefined, true);
+        const root = await addLibrary(path.join(base, "videos"), "cellar", undefined, true);
 
         expect(rows[0]?.writable).toBe(1);
         expect(root.id).toBe(rows[0]?.id);
@@ -264,22 +272,22 @@ describe("deletable", () => {
     it("refuses to add a deletable library on a read-only mount, and adds nothing", async () => {
         readOnly.add(path.join(base, "videos"));
 
-        await expect(addLibrary(path.join(base, "videos"), undefined, true)).rejects.toThrow(
-            /mounted read-only.*:rw/
-        );
+        await expect(
+            addLibrary(path.join(base, "videos"), "cellar", undefined, true)
+        ).rejects.toThrow(/mounted read-only.*:rw/);
         expect(rows).toEqual([]);
     });
 
     it("adds a read-only library that is not asked to be deletable", async () => {
         readOnly.add(path.join(base, "videos"));
 
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
         expect(rows[0]?.writable).toBeUndefined();
     });
 
     it("refuses to switch deletion on over a read-only mount", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
         readOnly.add(root.path);
 
         await expect(setLibraryWritable(root.id, true)).rejects.toThrow(/mounted read-only/);
@@ -287,7 +295,7 @@ describe("deletable", () => {
     });
 
     it("always lets deletion be switched off, mount or no mount", async () => {
-        const root = await addLibrary(path.join(base, "videos"), undefined, true);
+        const root = await addLibrary(path.join(base, "videos"), "cellar", undefined, true);
         readOnly.add(root.path);
 
         await setLibraryWritable(root.id, false);
@@ -305,7 +313,7 @@ describe("deletable", () => {
 
 describe("moving", () => {
     it("points a library somewhere else", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
 
         await repointLibrary(root.id, path.join(base, "photos"));
 
@@ -320,7 +328,7 @@ describe("moving", () => {
      * item. Scanning, because hiding without it would leave the library dark indefinitely.
      */
     it("hides the library, cancels queued work and starts a scan", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
         effects = [];
 
         await repointLibrary(root.id, path.join(base, "photos"));
@@ -329,7 +337,7 @@ describe("moving", () => {
     });
 
     it("does none of that when the path is refused", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
         effects = [];
 
         await expect(repointLibrary(root.id, path.join(base, "nope"))).rejects.toThrow();
@@ -344,14 +352,14 @@ describe("moving", () => {
      * rather than an error the admin has to puzzle over.
      */
     it("lets a library keep its own path", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
 
         await expect(repointLibrary(root.id, path.join(base, "videos"))).resolves.toBeDefined();
     });
 
     it("refuses to move onto another library", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
-        await addLibrary(path.join(base, "photos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
+        await addLibrary(path.join(base, "photos"), "cellar");
 
         await expect(repointLibrary(root.id, path.join(base, "photos"))).rejects.toThrow(
             /already uses/
@@ -359,7 +367,7 @@ describe("moving", () => {
     });
 
     it("leaves the old path in place when the new one is bad", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
 
         await expect(repointLibrary(root.id, path.join(base, "nope"))).rejects.toThrow();
         // Nothing is stored until the path checks out, so a typo cannot leave a library
@@ -377,13 +385,13 @@ describe("checking a path without writing", () => {
      * what says so.
      */
     it("gives the same reason the write would", async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
         const checked = await checkLibraryPath(path.join(base, "videos", "season one"));
 
         expect(checked.ok).toBe(false);
         expect(checked.ok === false && checked.reason).toMatch(/already inside/);
-        await expect(addLibrary(path.join(base, "videos", "season one"))).rejects.toThrow(
+        await expect(addLibrary(path.join(base, "videos", "season one"), "cellar")).rejects.toThrow(
             /already inside/
         );
     });
@@ -397,7 +405,7 @@ describe("checking a path without writing", () => {
 
     /** A library being moved must not collide with where it already is. */
     it("lets a library keep its own path when it is excluded", async () => {
-        const root = await addLibrary(path.join(base, "videos"));
+        const root = await addLibrary(path.join(base, "videos"), "cellar");
 
         expect((await checkLibraryPath(path.join(base, "videos"))).ok).toBe(false);
         expect((await checkLibraryPath(path.join(base, "videos"), root.id)).ok).toBe(true);
@@ -450,11 +458,11 @@ describe("the polled summary", () => {
      * who can reach none of three libraries needs to be told there are three.
      */
     it("reports every root, not only the reachable ones", async () => {
-        await addLibrary(path.join(base, "videos"));
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
+        await addLibrary(path.join(base, "photos"), "cellar");
         rows[1]!.enabled = null;
 
-        expect(libraryStats()).toEqual({
+        expect(libraryStats(null)).toEqual({
             scanning: false,
             rootsTotal: 2,
             rootsEnabled: 1,
@@ -468,27 +476,27 @@ describe("the polled summary", () => {
      * it used to include were 466 pages on the NAS — the whole web process stopped, per poll.
      */
     it("counts no items", async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
 
-        libraryStats();
+        libraryStats(null);
 
         expect(counted).toEqual([]);
     });
 
     it("answers a repeated ask, from anyone, without querying again", () => {
-        libraryStats();
-        libraryStats();
-        libraryStats();
+        libraryStats(null);
+        libraryStats(null);
+        libraryStats(null);
 
         expect(scanChecks).toBe(1);
     });
 
     it("is thrown away when the libraries change", async () => {
-        expect(libraryStats().rootsTotal).toBe(0);
+        expect(libraryStats(null).rootsTotal).toBe(0);
 
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "photos"), "cellar");
 
-        expect(libraryStats().rootsTotal).toBe(1);
+        expect(libraryStats(null).rootsTotal).toBe(1);
         expect(scanChecks).toBe(2);
     });
 });
@@ -504,8 +512,8 @@ describe("the library counts", () => {
      * `mediaService` buys. A library this viewer was denied is not counted at all.
      */
     it("counts each library this viewer can reach, as this viewer", async () => {
-        await addLibrary(path.join(base, "videos"));
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
+        await addLibrary(path.join(base, "photos"), "cellar");
         rows.push({ id: "r9", path: "/elsewhere", label: "Denied", enabled: 1, lastScanAt: null });
 
         const summaries = librarySummaries(AUTH);
@@ -523,8 +531,8 @@ describe("the library counts", () => {
     });
 
     it("leaves out a disabled library", async () => {
-        await addLibrary(path.join(base, "videos"));
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
+        await addLibrary(path.join(base, "photos"), "cellar");
         rows[1]!.enabled = null;
 
         expect(librarySummaries(AUTH).libraries.map((library) => library.id)).toEqual(["r1"]);
@@ -543,7 +551,7 @@ describe("the cache in front of the counts", () => {
     const AUTH = { userId: "u1", accessibleRootIds: ["r1", "r2"] } as AuthContext;
 
     beforeEach(async () => {
-        await addLibrary(path.join(base, "videos"));
+        await addLibrary(path.join(base, "videos"), "cellar");
         counted = [];
     });
 
@@ -582,7 +590,7 @@ describe("the cache in front of the counts", () => {
     it("is thrown away when the libraries change", async () => {
         librarySummaries(AUTH);
 
-        await addLibrary(path.join(base, "photos"));
+        await addLibrary(path.join(base, "photos"), "cellar");
 
         expect(librarySummaries(AUTH).total).toBe(10);
     });

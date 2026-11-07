@@ -91,6 +91,7 @@ const AUTH: AuthContext = {
     displayName: "Ada",
     scopes: [],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 0,
 };
 

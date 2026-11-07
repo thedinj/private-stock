@@ -14,6 +14,10 @@
  * so a closed leader hands over immediately and without anyone having to detect it.
  */
 
+import { DOMAIN_PARAM, type DomainKind } from "@private-stock/core";
+
+import { getActiveDomain } from "../activeDomain";
+
 export interface ChangeEvent {
     id: number;
     entity: "media" | "artifact" | "variant" | "scan" | "job";
@@ -35,8 +39,13 @@ export type LiveEvent =
     /** Too much changed to describe; refetch rather than patch. */
     | { type: "resync" };
 
-const CHANNEL_NAME = "private-stock-events";
-const LOCK_NAME = "private-stock-events-leader";
+/**
+ * One stream per room, not per browser (§21). Tabs in two rooms see two different libraries,
+ * so a leader in the cellar relaying to a tab in the family room would be relaying the wrong
+ * library's changes. Two rooms open is two connections, which the budget above allows.
+ */
+const channelName = (domain: DomainKind) => `private-stock-events:${domain}`;
+const lockName = (domain: DomainKind) => `private-stock-events-leader:${domain}`;
 
 type Listener = (event: LiveEvent) => void;
 
@@ -51,7 +60,8 @@ export const connectLiveUpdates = (onEvent: Listener): (() => void) => {
         return () => {};
     }
 
-    const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL_NAME) : null;
+    const domain = getActiveDomain();
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel(channelName(domain)) : null;
 
     let source: EventSource | null = null;
     let releaseLock: (() => void) | null = null;
@@ -74,7 +84,7 @@ export const connectLiveUpdates = (onEvent: Listener): (() => void) => {
         }
 
         // Credentials are the HttpOnly refresh cookie; EventSource cannot set a header.
-        source = new EventSource("/api/events");
+        source = new EventSource(`/api/events?${DOMAIN_PARAM}=${domain}`);
 
         source.addEventListener("change", (event) => {
             try {
@@ -103,7 +113,7 @@ export const connectLiveUpdates = (onEvent: Listener): (() => void) => {
     if (locks) {
         void locks
             .request(
-                LOCK_NAME,
+                lockName(domain),
                 () =>
                     new Promise<void>((resolve) => {
                         if (torndown) {

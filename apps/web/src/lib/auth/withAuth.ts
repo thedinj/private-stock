@@ -1,6 +1,15 @@
 import { cookies } from "next/headers";
 
-import { AuthenticationError, AuthorizationError, type Scope } from "@private-stock/core";
+import {
+    AuthenticationError,
+    AuthorizationError,
+    DOMAIN_HEADER,
+    DOMAIN_PARAM,
+    ValidationError,
+    parseDomain,
+    type DomainKind,
+    type Scope,
+} from "@private-stock/core";
 import { mediaRootRepo, refreshTokenRepo, userRepo } from "@private-stock/db";
 
 import { authContext, sessionUser } from "./authCache";
@@ -25,8 +34,17 @@ export interface AuthContext {
     email: string;
     displayName: string;
     scopes: Scope[];
-    /** Root ids this user may see. Every library query is scoped by these (§6). */
+    /**
+     * Root ids this user may see. Every library query is scoped by these (§6) — and, once a
+     * request names a domain, only that domain's roots (§21).
+     */
     accessibleRootIds: string[];
+    /**
+     * The domain this request is in (§21), or null for one that is not in any: a media byte
+     * request, which is authorised per item, and work done on somebody's behalf with no
+     * request in hand.
+     */
+    domain: DomainKind | null;
     /** Current password generation. Signed media tokens are minted against it (§12d). */
     tokenEpoch: number;
 }
@@ -56,7 +74,7 @@ const bearerFrom = (request: Request): string | null => {
  */
 export const requireAuth = async (
     request: Request,
-    options: { allowCookie?: boolean } = {}
+    options: { allowCookie?: boolean; anyDomain?: boolean } = {}
 ): Promise<AuthContext> => {
     let userId: string | null = null;
 
@@ -79,7 +97,70 @@ export const requireAuth = async (
         throw new AuthenticationError("Sign in to continue");
     }
 
-    return contextFor(userId);
+    const context = contextFor(userId);
+
+    return options.anyDomain ? context : inDomain(context, requestDomain(request));
+};
+
+/**
+ * The domain a request says it is in (§21).
+ *
+ * **Required, not defaulted.** The browser's client sends it with every call, so a request
+ * without one came from somewhere that forgot — and the safe answer to "which room is this
+ * for" is not a guess. Guessing the cellar would put the cellar on whatever screen forgot;
+ * guessing the family room would hide a fault that ought to be loud. A route serving one
+ * item's bytes to an element that cannot send a header opts out with `anyDomain`.
+ */
+const requestDomain = (request: Request): DomainKind => {
+    const sent =
+        request.headers.get(DOMAIN_HEADER) ?? new URL(request.url).searchParams.get(DOMAIN_PARAM);
+    const domain = parseDomain(sent);
+
+    if (!domain) {
+        throw new ValidationError("This request does not say which room it is for");
+    }
+
+    return domain;
+};
+
+/** Each cached context's roots with their domains, kept beside it rather than on it. */
+const rootDomains = new WeakMap<AuthContext, { id: string; domain: string }[]>();
+
+/** Each cached context, narrowed, so one domain's context is one object while it is cached. */
+const narrowed = new WeakMap<AuthContext, Map<DomainKind, AuthContext>>();
+
+/**
+ * A context narrowed to one domain's libraries.
+ *
+ * This is the whole of the separation between domains for anything scoped by roots: every
+ * service already filters by `accessibleRootIds`, so a request in the family room cannot read
+ * a cellar item, count one, search one or be offered one, without any of them knowing that
+ * domains exist.
+ */
+export const inDomain = (context: AuthContext, domain: DomainKind): AuthContext => {
+    let byDomain = narrowed.get(context);
+
+    if (!byDomain) {
+        byDomain = new Map();
+        narrowed.set(context, byDomain);
+    }
+
+    const existing = byDomain.get(domain);
+
+    if (existing) {
+        return existing;
+    }
+
+    const roots = rootDomains.get(context) ?? [];
+    const result: AuthContext = {
+        ...context,
+        domain,
+        accessibleRootIds: roots.filter((root) => root.domain === domain).map((root) => root.id),
+    };
+
+    byDomain.set(domain, result);
+
+    return result;
 };
 
 /**
@@ -119,14 +200,20 @@ const buildContext = (userId: string): AuthContext => {
         throw new AuthenticationError("Sign in to continue");
     }
 
-    return {
+    const roots = mediaRootRepo.accessibleRoots(user.id);
+    const context: AuthContext = {
         userId: user.id,
         email: user.email,
         displayName: user.displayName,
         scopes: parseScopeList(user.scopes),
-        accessibleRootIds: mediaRootRepo.accessibleRootIds(user.id),
+        accessibleRootIds: roots.map((root) => root.id),
+        domain: null,
         tokenEpoch: user.tokenEpoch,
     };
+
+    rootDomains.set(context, roots);
+
+    return context;
 };
 
 /** How a media request proved who it was. Decides whether CORS headers are safe to send. */

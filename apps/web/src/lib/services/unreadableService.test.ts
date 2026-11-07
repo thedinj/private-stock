@@ -57,6 +57,7 @@ const admin: AuthContext = {
     email: "a@example.com",
     scopes: ["admin"],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 0,
 } as AuthContext;
 

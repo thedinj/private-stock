@@ -124,12 +124,14 @@ const { applyBulkAction } = await import("./bulkActionService");
 const ADMIN = {
     userId: "admin",
     accessibleRootIds: ["root"],
+    domain: null,
     scopes: ["admin", "delete"],
 } as unknown as AuthContext;
 
 const ANNA = {
     userId: "anna",
     accessibleRootIds: ["root"],
+    domain: null,
     scopes: ["delete"],
 } as unknown as AuthContext;
 

@@ -204,6 +204,7 @@ const AUTH = { userId: "u1", accessibleRootIds: ["root"], scopes: [] } as unknow
 const OTHER = {
     userId: "u2",
     accessibleRootIds: ["root"],
+    domain: null,
     scopes: [],
 } as unknown as AuthContext;
 
@@ -211,6 +212,7 @@ const OTHER = {
 const ADMIN = {
     userId: "u3",
     accessibleRootIds: ["root"],
+    domain: null,
     scopes: ["admin"],
 } as unknown as AuthContext;
 

@@ -14,7 +14,6 @@ import {
     ScrollArea,
     Skeleton,
     Stack,
-    Title,
 } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 
@@ -27,6 +26,7 @@ import { HeaderSearch } from "@/components/shell/HeaderSearch";
 import { PageTurn } from "@/components/shell/PageTurn";
 import { useScreenLock } from "@/components/shell/ScreenLock";
 import { BusySeal } from "@/components/shell/BusySeal";
+import { DomainSwitcher } from "@/components/shell/DomainSwitcher";
 import { UpdateNotice } from "@/components/shell/UpdateNotice";
 import { RequireAuth, useAuth } from "@/lib/api/AuthProvider";
 import { useLibraryStats } from "@/lib/api/libraries";
@@ -91,17 +91,24 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                         <Group gap="sm" wrap="nowrap">
                             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                            {/* The wordmark is the way home, as it is everywhere else.
-                                The anchor wraps the heading rather than Title rendering as
-                                one: Title's polymorphism does not carry `href` through. */}
-                            <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
-                                <Group gap={8} wrap="nowrap">
+                            <Group gap={8} wrap="nowrap">
+                                <Link
+                                    href="/"
+                                    aria-label="Home"
+                                    style={{
+                                        color: "inherit",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        minWidth: 44,
+                                        minHeight: 44,
+                                    }}
+                                >
                                     <BusySeal size={26} />
-                                    <Title order={4} style={{ whiteSpace: "nowrap" }}>
-                                        private-stock
-                                    </Title>
-                                </Group>
-                            </Link>
+                                </Link>
+                                {/* The room's name, which is also the way to the others
+                                    (§21). The seal stays the way home. */}
+                                <DomainSwitcher />
+                            </Group>
                             {/* The plate's title, once the plate has scrolled away. */}
                             <HeaderPlateTitle />
                         </Group>

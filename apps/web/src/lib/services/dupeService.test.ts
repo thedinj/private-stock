@@ -85,6 +85,7 @@ const auth = (scopes: AuthContext["scopes"]): AuthContext => ({
     displayName: "Admin",
     scopes,
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 1,
 });
 

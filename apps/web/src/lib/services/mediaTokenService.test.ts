@@ -42,6 +42,7 @@ const AUTH = {
     displayName: "Viewer",
     scopes: [],
     accessibleRootIds: ["root-1"],
+    domain: null,
     tokenEpoch: 7,
 } as unknown as AuthContext;
 

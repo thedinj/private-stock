@@ -5,6 +5,7 @@ import {
     ConflictError,
     NotFoundError,
     ValidationError,
+    type DomainKind,
     type LibrariesResponse,
     type LibraryStats,
     type LibrarySummary,
@@ -165,7 +166,12 @@ const assertMountWritable = async (directory: string): Promise<void> => {
     }
 };
 
-export const addLibrary = async (candidate: string, label?: string, writable = false) => {
+export const addLibrary = async (
+    candidate: string,
+    domain: DomainKind,
+    label?: string,
+    writable = false
+) => {
     const resolved = await validatePath(candidate);
 
     if (writable) {
@@ -178,7 +184,8 @@ export const addLibrary = async (candidate: string, label?: string, writable = f
     // wants something else can rename it afterwards like any other setting.
     const root = mediaRootRepo.create(
         resolved,
-        label?.trim() || path.basename(resolved) || resolved
+        label?.trim() || path.basename(resolved) || resolved,
+        domain
     );
 
     if (writable) {
@@ -325,7 +332,8 @@ export const listCandidates = async (): Promise<string[]> => {
  */
 const STATS_TTL_MS = 3_000;
 
-let statsCache: { at: number; stats: LibraryStats } | null = null;
+/** Per domain (§21): an empty family room must say it is empty while the cellar is not. */
+const statsCache = new Map<string, { at: number; stats: LibraryStats }>();
 
 /**
  * How long a viewer's counts are reused.
@@ -354,7 +362,7 @@ const summariesCache = new Map<string, { at: number; summaries: LibrariesRespons
  * (the same failure `invalidateLibraries` exists for on the client).
  */
 export const clearLibraryCaches = (): void => {
-    statsCache = null;
+    statsCache.clear();
     summariesCache.clear();
     // Every one of those changes the processing totals too: a library's items join or leave
     // the denominator, a trashed item leaves it, a restored one returns.
@@ -372,14 +380,18 @@ export const clearLibraryCaches = (): void => {
  * from the roots this viewer can reach would report zero of zero and explain nothing at all.
  * That is also what makes this the same answer for everyone, and so one cache entry.
  */
-export const libraryStats = (): LibraryStats => {
+export const libraryStats = (domain: DomainKind | null): LibraryStats => {
     const now = Date.now();
+    const key = domain ?? "*";
+    const cached = statsCache.get(key);
 
-    if (statsCache && now - statsCache.at < STATS_TTL_MS) {
-        return statsCache.stats;
+    if (cached && now - cached.at < STATS_TTL_MS) {
+        return cached.stats;
     }
 
-    const roots = mediaRootRepo.listRoots();
+    const roots = mediaRootRepo
+        .listRoots()
+        .filter((root) => domain === null || root.domain === domain);
     const stats: LibraryStats = {
         scanning: scanRepo.isAnyRunning(),
         rootsTotal: roots.length,
@@ -388,7 +400,7 @@ export const libraryStats = (): LibraryStats => {
         playbackCheck: playbackCheckEnabled(),
     };
 
-    statsCache = { at: now, stats };
+    statsCache.set(key, { at: now, stats });
 
     return stats;
 };

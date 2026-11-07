@@ -53,6 +53,7 @@ const admin: AuthContext = {
     displayName: "U",
     scopes: ["admin"],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 0,
 };
 

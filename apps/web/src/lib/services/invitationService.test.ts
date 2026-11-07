@@ -78,6 +78,7 @@ const auth = (scopes: Scope[]) => ({
     displayName: "The Admin",
     scopes,
     accessibleRootIds: [],
+    domain: null,
     tokenEpoch: 0,
 });
 

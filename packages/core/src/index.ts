@@ -58,3 +58,4 @@ export * from "./schemas/settings.js";
 export * from "./schemas/trash.js";
 export * from "./schemas/unreadable.js";
 export * from "./schemas/faces.js";
+export * from "./libraryDomains.js";

@@ -88,6 +88,7 @@ const auth: AuthContext = {
     displayName: "Admin",
     scopes: ["admin", "delete"],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 1,
 };
 

@@ -295,11 +295,13 @@ const MAX_DIGITS = 8;
  * 64px, past the 44px floor, because this is the screen most often reached for half-awake.
  * A physical keyboard's digits, Backspace and Enter work too.
  */
-const LockScreen: React.FC<{
+export const LockScreen: React.FC<{
     showKeypad: boolean;
     displayName: string;
     onUnlock: () => void;
-}> = ({ showKeypad, displayName, onUnlock }) => {
+    /** A way out other than signing out: the domain gate's "back to the Parlour" (§21). */
+    leave?: { label: string; onLeave: () => void };
+}> = ({ showKeypad, displayName, onUnlock, leave }) => {
     const { signOut } = useAuth();
     const [digits, setDigits] = useState("");
     const [message, setMessage] = useState<string | null>(null);
@@ -462,6 +464,12 @@ const LockScreen: React.FC<{
                     >
                         Unlock
                     </Button>
+
+                    {leave && (
+                        <Button variant="light" color="gray" size="md" onClick={leave.onLeave}>
+                            {leave.label}
+                        </Button>
+                    )}
 
                     <Button variant="subtle" color="gray" size="sm" onClick={() => void signOut()}>
                         Forgot it? Sign out

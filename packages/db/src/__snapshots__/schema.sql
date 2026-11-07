@@ -513,6 +513,7 @@ CREATE TABLE "MediaRoot" (
             "label" TEXT NOT NULL CHECK(length("label") BETWEEN 1 AND 100),
             "enabled" INTEGER CHECK("enabled" IS NULL OR "enabled" = 1),
             "writable" INTEGER CHECK("writable" IS NULL OR "writable" = 1),
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "lastScanAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL

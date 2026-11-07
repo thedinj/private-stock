@@ -1,6 +1,13 @@
 "use client";
 
-import { loginResponseSchema, type LoginResponse, type SessionUser } from "@private-stock/core";
+import {
+    DOMAIN_HEADER,
+    loginResponseSchema,
+    type LoginResponse,
+    type SessionUser,
+} from "@private-stock/core";
+
+import { getActiveDomain } from "../activeDomain";
 
 /**
  * The browser-side API client.
@@ -336,6 +343,9 @@ export const api = async <T>(path: string, options: ApiOptions = {}): Promise<T>
     if (sent) {
         headers.set("Authorization", `Bearer ${sent}`);
     }
+
+    // Which room this tab is in (§21). Every authenticated route requires it.
+    headers.set(DOMAIN_HEADER, getActiveDomain());
 
     if (init.body && !headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");

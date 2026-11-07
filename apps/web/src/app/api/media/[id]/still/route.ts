@@ -17,7 +17,7 @@ export const fetchCache = "force-no-store";
  */
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
     try {
-        const auth = await requireAuth(request, { allowCookie: true });
+        const auth = await requireAuth(request, { allowCookie: true, anyDomain: true });
         const { id } = await context.params;
         const at = new URL(request.url).searchParams.get("at");
         const atMs = at === null ? null : Math.max(0, Math.floor(Number(at)));

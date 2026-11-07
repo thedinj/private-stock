@@ -206,6 +206,7 @@ const asUser = (userId: string, scopes: string[] = []): AuthContext =>
         displayName: userId,
         scopes,
         accessibleRootIds: ["root"],
+        domain: null,
     }) as AuthContext;
 
 /**

@@ -123,12 +123,16 @@ export function initializeDatabase(db: Database): void {
         --
         -- "writable" gates deletion and nothing else — deletion is the only write the app
         -- performs inside a library (§18.1).
+        --
+        -- "domain" is what kind of collection it is (§21) — domainKinds in core, unCHECKed
+        -- like Tag.kind so the list is code. Set when the library is added, never edited.
         CREATE TABLE IF NOT EXISTS "MediaRoot" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "path" TEXT NOT NULL UNIQUE CHECK(length("path") BETWEEN 1 AND 1024),
             "label" TEXT NOT NULL CHECK(length("label") BETWEEN 1 AND 100),
             "enabled" INTEGER CHECK("enabled" IS NULL OR "enabled" = 1),
             "writable" INTEGER CHECK("writable" IS NULL OR "writable" = 1),
+            "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "lastScanAt" DATETIME,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL

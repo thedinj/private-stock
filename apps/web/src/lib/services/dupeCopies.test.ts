@@ -84,6 +84,7 @@ const viewer: AuthContext = {
     displayName: "Viewer",
     scopes: ["delete"],
     accessibleRootIds: ["r1"],
+    domain: null,
     tokenEpoch: 1,
 };
 

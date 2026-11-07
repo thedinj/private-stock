@@ -123,6 +123,7 @@ const AUTH = {
     displayName: "Me",
     scopes: [],
     accessibleRootIds: ["root"],
+    domain: null,
 } as unknown as AuthContext;
 
 beforeEach(() => {

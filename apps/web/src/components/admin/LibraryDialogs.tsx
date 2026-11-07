@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import type { ScanStatus } from "@private-stock/core";
+import { domainProfiles, type ScanStatus } from "@private-stock/core";
 
+import { getActiveDomain } from "@/lib/activeDomain";
 import { PathPicker } from "@/components/PathPicker";
 import { api, ApiError } from "@/lib/api/client";
 import { invalidateLibraries } from "@/lib/api/libraries";
@@ -120,8 +121,12 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
                 // anyway: the service falls back to the directory name, and storing the same
                 // string explicitly would make a later change of mind look like a decision
                 // somebody had already made.
+                //
+                // A library joins the room it is added from (§21), with no picker: a picker
+                // would name every room, including the one that is not named outside itself.
                 body: JSON.stringify({
                     path,
+                    domain: getActiveDomain(),
                     ...(label && label !== basename(path) ? { label } : {}),
                     ...(writable ? { writable } : {}),
                 }),
@@ -157,7 +162,12 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
 
     return (
         <>
-            <Modal opened={adding} onClose={closeAndReset} title="Add library" centered>
+            <Modal
+                opened={adding}
+                onClose={closeAndReset}
+                title={`Add a library to the ${domainProfiles[getActiveDomain()].label}`}
+                centered
+            >
                 <Stack gap="md">
                     <PathPicker
                         value={pathDraft}

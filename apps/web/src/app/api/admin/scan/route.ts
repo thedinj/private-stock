@@ -38,17 +38,22 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             settings: readSettings(),
-            roots: mediaRootRepo.listRoots().map((root) => ({
-                id: root.id,
-                label: root.label,
-                path: root.path,
-                available: reachable.get(root.id) ?? false,
-                enabled: root.enabled === 1,
-                writable: root.writable === 1,
-                lastScanAt: root.lastScanAt,
-                fileCount: mediaFileRepo.countByRoot(root.id),
-                verifying: mediaFileRepo.countUnverifiedByRoot(root.id),
-            })),
+            // This room's libraries only (§21). The others are managed from inside them, so
+            // the admin page in one room never lists another room's paths.
+            roots: mediaRootRepo
+                .listRoots()
+                .filter((root) => root.domain === auth.domain)
+                .map((root) => ({
+                    id: root.id,
+                    label: root.label,
+                    path: root.path,
+                    available: reachable.get(root.id) ?? false,
+                    enabled: root.enabled === 1,
+                    writable: root.writable === 1,
+                    lastScanAt: root.lastScanAt,
+                    fileCount: mediaFileRepo.countByRoot(root.id),
+                    verifying: mediaFileRepo.countUnverifiedByRoot(root.id),
+                })),
             candidates: await listCandidates(),
             scanning: scanRepo.isAnyRunning(),
         });

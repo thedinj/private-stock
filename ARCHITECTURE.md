@@ -11810,3 +11810,81 @@ static/media/`, where its imports resolve to nothing. The pool now walks up from
 directory to `packages/db/dist/readThread.js`, as `findModelsDir` does for the models, and the
 thread loads the package's own compiled output rather than the bundle. Only an end-to-end run
 against `next start` shows this class of failure.
+
+## 21. Domains: the Parlour, the Cellar and the Game Room
+
+The app was built for one kind of collection. It now holds three, on one install: **family**
+videos with real people in them (the **Parlour**), the explicit library it was built for (the
+**Cellar**), and video-game highlights (the **Game Room**). Decided 2026-11-07. One person uses
+all three; the walls are about mode, not secrecy between accounts, which is still §6's
+per-library access and still unbuilt.
+
+### One app, not one container per domain
+
+A container per domain would isolate perfectly and cost twice: two job queues on an i3, two
+schedulers fighting for one disk (§15), two places to deploy. The scanner, the pipeline, dupes,
+clips, reels and casting are the same machinery whatever the files show, so they stay one
+process, and the domain is a filter over what the request can see.
+
+### Every library belongs to one domain, and a request is in one
+
+`MediaRoot.domain` is one of `domainKinds` (`libraryDomains.ts`), unCHECKed like `Tag.kind` so
+the list is code. Existing libraries became the cellar. A library joins the room it is added
+from, with no picker — a picker would have to name every room — and is never moved.
+
+The separation rests on a seam that already existed. Every service filters by
+`ctx.accessibleRootIds` (§6), so `requireAuth` reads the request's domain and hands back a
+context narrowed to that domain's roots (`inDomain`). A grid, a search, a facet count, a face
+search, the change feed and the home page in the Parlour cannot reach a Cellar item without any
+of them knowing domains exist. The cached context stays whole and the narrowed copies are kept
+beside it, so each room is one object while the account is cached.
+
+**The domain is required on every authenticated request**, as `x-ps-domain` or, for
+`EventSource`, `?domain=`. A missing or unknown value is a 400, not a default: defaulting to the
+cellar puts it on whatever screen forgot to say, and defaulting to the family room hides the
+fault. The routes that serve one item's bytes to an `<img>` opt out (`anyDomain`), because they
+are authorised per item, and media byte routes are outside it entirely (§12d).
+
+The admin library table lists the room's own libraries only, and the shell's library counts are
+per domain, so an empty Parlour says it is empty.
+
+### Which room a browser opens in
+
+A browser with no memory of one opens in the **Parlour**, never the Cellar: the browser that has
+forgotten where it was is the one most likely to be in front of somebody else. Otherwise it
+reopens where it last was (`localStorage`), and each tab keeps its own room across a reload
+(`sessionStorage`), so two tabs can sit in two rooms.
+
+**Changing room reloads the page.** Every cache, query and live stream belongs to the room it
+was fetched in, and an in-place switch is a window for a response from the old room to land in
+the new one's cache. A reload empties all of it, so query keys need no domain in them. The live
+stream is one per room rather than one per browser — a leader tab in one room relaying to a tab
+in another would relay the wrong library.
+
+### Getting into the cellar
+
+Entering a guarded room — switching to it, or reopening a browser that was last there — asks
+for the screen-lock PIN before anything underneath is mounted, so no query for it leaves the
+tab first. A reload of a tab that has passed does not ask again; a new tab does. Only a definite
+"this account has no PIN" opens it unasked; a failed read keeps the keypad up. While you are
+elsewhere the switcher shows the cellar as a bare lock.
+
+**This is a stopgap.** A lock says plainly that something is locked. A quieter entrance is to be
+designed.
+
+### Vocabulary is relabelled, never renamed
+
+A person in an item is a `performer` in every row and three hundred files. A domain changes what
+the box says (`domainProfiles[d].facets`): People in the Parlour; Players in the Game Room, where
+`source` is the Game. The kinds stay as they are, so no row moves and there is no second code
+path.
+
+### Still to build
+
+- **Tag vocabulary per domain** (`Tag.domain`). Tags hang off no root, so the narrowed context
+  does not reach them: until this lands the filter panel, the tag pages and face suggestions
+  draw on every room's names. It is why this is not usable yet.
+- **Playlists, reels, saved views and home layout per domain.**
+- **Stage policy per domain** — faces off in the Game Room; the faces auto-tag stays on in the
+  Parlour as in the Cellar.
+- **A look per room**, chosen in rounds of mockups, and the facet labels read from the profile.

@@ -22,6 +22,8 @@ export interface MediaRootRow {
     label: string;
     enabled: 1 | null;
     writable: 1 | null;
+    /** What kind of collection this is (§21). One of `domainKinds`; unCHECKed like `Tag.kind`. */
+    domain: string;
     lastScanAt: string | null;
     createdAt: string;
     updatedAt: string;
@@ -48,13 +50,18 @@ export const findByPath = (path: string): MediaRootRow | undefined =>
  * before anyone has said they want it indexed, is not a decision to make on someone's behalf
  * — and a mistyped path should cost nothing.
  */
-export const create = (path: string, label: string): MediaRootRow => {
+export const create = (
+    path: string,
+    label: string,
+    /** The column's own default, for the tests and tools that predate domains (§21). */
+    domain: string = "cellar"
+): MediaRootRow => {
     const id = randomUUID();
 
     db.prepare(
-        `INSERT INTO "MediaRoot" ("id", "path", "label", "updatedAt")
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
-    ).run(id, path, label);
+        `INSERT INTO "MediaRoot" ("id", "path", "label", "domain", "updatedAt")
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
+    ).run(id, path, label, domain);
 
     return findById(id)!;
 };
@@ -163,7 +170,14 @@ export const markScanned = (id: string): void => {
  * explicit grant per root would mean a freshly created account sees an empty library and
  * looks broken.
  */
-export const accessibleRootIds = (userId: string): string[] => {
+export const accessibleRootIds = (userId: string): string[] =>
+    accessibleRoots(userId).map((root) => root.id);
+
+/**
+ * The same roots with the domain each belongs to, so a request can be narrowed to one domain
+ * (§21) without reading the table a second time.
+ */
+export const accessibleRoots = (userId: string): { id: string; domain: string }[] => {
     const denied = db
         .prepare(`SELECT "rootId" FROM "LibraryAccess" WHERE "userId" = ? AND "allowed" IS NULL`)
         .all(userId) as { rootId: string }[];
@@ -171,6 +185,6 @@ export const accessibleRootIds = (userId: string): string[] => {
     const deniedSet = new Set(denied.map((row) => row.rootId));
 
     return listEnabledRoots()
-        .map((root) => root.id)
-        .filter((id) => !deniedSet.has(id));
+        .filter((root) => !deniedSet.has(root.id))
+        .map((root) => ({ id: root.id, domain: root.domain }));
 };

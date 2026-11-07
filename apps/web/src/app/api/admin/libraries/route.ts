@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { domainKindSchema } from "@private-stock/core";
+
 import { requireAuth, requireScope } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { addLibrary } from "@/lib/services/libraryService";
@@ -16,6 +18,8 @@ const addSchema = z.object({
     label: z.string().trim().min(1).max(100).optional(),
     /** Allow deletion from the start. Refused unless the directory is mounted writable. */
     writable: z.boolean().optional(),
+    /** What kind of collection it is (§21). Chosen once, here; never edited afterwards. */
+    domain: domainKindSchema,
 });
 
 /**
@@ -31,7 +35,9 @@ export async function POST(request: Request) {
 
         const body = addSchema.parse(await request.json());
 
-        return NextResponse.json({ root: await addLibrary(body.path, body.label, body.writable) });
+        return NextResponse.json({
+            root: await addLibrary(body.path, body.domain, body.label, body.writable),
+        });
     } catch (error) {
         return toErrorResponse(error, request);
     }

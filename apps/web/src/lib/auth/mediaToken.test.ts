@@ -40,7 +40,7 @@ vi.mock("@private-stock/db", () => ({
         },
     },
     mediaRootRepo: {
-        accessibleRootIds: () => accessibleRoots,
+        accessibleRoots: () => accessibleRoots.map((id) => ({ id, domain: "cellar" })),
     },
     refreshTokenRepo: {
         findLive: (token: string) =>
