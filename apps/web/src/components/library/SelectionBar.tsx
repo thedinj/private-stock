@@ -22,6 +22,7 @@ import { type BulkActionInput, type BulkActionResult } from "@private-stock/core
 import { api, ApiError } from "@/lib/api/client";
 import { useAddPlaylistItems, useCreatePlaylist, usePlaylists } from "@/lib/api/playlists";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { invalidateReviews, useReviewPasses } from "@/lib/api/reviewPasses";
 import { invalidateVocabulary, useRefuseMentions } from "@/lib/api/tags";
 import { invalidateListable } from "@/lib/api/trash";
 import { BulkTagDialog, type SuggestedTag } from "./BulkTagDialog";
@@ -34,9 +35,10 @@ import { CloseGlyph, TrashGlyph } from "@/components/media/Glyph";
 /**
  * What you can do to the items you have ticked (§14b).
  *
- * Four verbs: tag and untag, rate and favourite, add to a playlist, move to the bin. They
- * are the four because they are the ones that are tedious one at a time — everything else
- * about an item is either a single decision or something the pipeline does for you.
+ * The verbs: tag and untag, rate and favourite, mark reviewed for a pass (§14d), add to a
+ * playlist, move to the bin. They are these because they are the ones that are tedious one at
+ * a time — everything else about an item is either a single decision or something the pipeline
+ * does for you.
  *
  * **Fixed to the bottom of the viewport rather than sitting above the grid.** A selection is
  * made by scrolling and ticking, so an action bar that scrolls away is one you have to go
@@ -106,6 +108,7 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
     const [confirmTrash, setConfirmTrash] = useState(false);
 
     const playlists = usePlaylists();
+    const reviewPasses = useReviewPasses().data?.passes ?? [];
 
     const act = useMutation({
         mutationFn: (input: BulkAction) =>
@@ -129,6 +132,9 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
                 invalidateVocabulary(queryClient);
             } else if (input.action === "trash") {
                 invalidateListable(queryClient);
+            } else if (input.action === "review") {
+                // A mark is a membership test like a rating, and moves its pass's count.
+                invalidateReviews(queryClient);
             } else {
                 void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
                 void queryClient.invalidateQueries({ queryKey: queryKeys.home() });
@@ -318,6 +324,52 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
                             ))}
                         </Menu.Dropdown>
                     </Menu>
+
+                    {/* Review passes (§14d): mark the ticked items reviewed for one of yours in
+                        this room, or clear them. New passes are named from an item's Review
+                        menu, so with none this is absent. */}
+                    {reviewPasses.length > 0 && (
+                        <Menu withinPortal position="top">
+                            <Menu.Target>
+                                <Button size="compact-sm" variant="default" disabled={busy}>
+                                    Reviewed
+                                </Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                                <Menu.Label>Mark reviewed for</Menu.Label>
+                                {reviewPasses.map((pass) => (
+                                    <Menu.Item
+                                        key={`mark:${pass.id}`}
+                                        onClick={() =>
+                                            act.mutate({
+                                                action: "review",
+                                                passId: pass.id,
+                                                reviewed: true,
+                                            })
+                                        }
+                                    >
+                                        {pass.name}
+                                    </Menu.Item>
+                                ))}
+                                <Menu.Divider />
+                                <Menu.Label>Clear for</Menu.Label>
+                                {reviewPasses.map((pass) => (
+                                    <Menu.Item
+                                        key={`clear:${pass.id}`}
+                                        onClick={() =>
+                                            act.mutate({
+                                                action: "review",
+                                                passId: pass.id,
+                                                reviewed: false,
+                                            })
+                                        }
+                                    >
+                                        {pass.name}
+                                    </Menu.Item>
+                                ))}
+                            </Menu.Dropdown>
+                        </Menu>
+                    )}
 
                     {/* Absent rather than disabled without the scope: a greyed Trash button
                         invites somebody to work out why, and the answer is not something they

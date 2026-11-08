@@ -111,6 +111,17 @@ vi.mock("@private-stock/db", () => ({
 
 vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
+/** What the selection bar asked of the review service (§14d), which decides owner and room. */
+let reviewCalls: { mediaIds: string[]; passId: string; reviewed: boolean; userId: string }[] = [];
+
+vi.mock("./reviewPassService", () => ({
+    markItems: (mediaIds: string[], passId: string, reviewed: boolean, auth: AuthContext) => {
+        reviewCalls.push({ mediaIds, passId, reviewed, userId: auth.userId });
+
+        return mediaIds.length;
+    },
+}));
+
 vi.mock("./trashService", () => ({
     trashMedia: (mediaId: string) => {
         if (readOnly.has(mediaId)) {
@@ -156,6 +167,38 @@ beforeEach(() => {
     logged = [];
     coined = [];
     known = new Set(["genre:Noir:library", "genre:Noir:anna", "tag:Mine:anna"]);
+    reviewCalls = [];
+});
+
+describe("marking a selection reviewed for a pass", () => {
+    it("marks or clears what the viewer can see, as the viewer, and reports the rest", async () => {
+        const marked = await applyBulkAction(
+            {
+                action: "review",
+                mediaIds: ["m1", "elsewhere", "m2"],
+                passId: "players",
+                reviewed: true,
+            },
+            ANNA
+        );
+        const cleared = await applyBulkAction(
+            { action: "review", mediaIds: ["m3"], passId: "players", reviewed: false },
+            ANNA
+        );
+
+        expect(marked).toEqual({
+            succeeded: 2,
+            failed: [{ mediaId: "elsewhere", reason: "Media not found" }],
+        });
+        expect(cleared.succeeded).toBe(1);
+        expect(reviewCalls).toEqual([
+            { mediaIds: ["m1", "m2"], passId: "players", reviewed: true, userId: "anna" },
+            { mediaIds: ["m3"], passId: "players", reviewed: false, userId: "anna" },
+        ]);
+        // Private state: nothing broadcast, nothing re-indexed.
+        expect(logged).toEqual([]);
+        expect(reindexed).toEqual([]);
+    });
 });
 
 describe("what the viewer may touch", () => {

@@ -77,6 +77,16 @@ export const bulkActionSchema = z
         }),
         z.object({ action: z.literal("favorite"), mediaIds, favorite: z.boolean() }),
         /**
+         * Mark the selection reviewed for one of the viewer's passes, or clear it (§14d). The
+         * pass must be theirs and of the items' room, which the service decides.
+         */
+        z.object({
+            action: z.literal("review"),
+            mediaIds,
+            passId: z.string().min(1).max(64),
+            reviewed: z.boolean(),
+        }),
+        /**
          * Move the originals to the bin.
          *
          * The one destructive verb, and the one whose failures are ordinary rather than

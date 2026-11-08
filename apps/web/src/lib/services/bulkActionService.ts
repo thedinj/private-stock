@@ -10,6 +10,7 @@ import {
 
 import type { AuthContext } from "../auth/withAuth";
 import { notThem } from "./notThem";
+import { markItems } from "./reviewPassService";
 import { vocabularyChanged } from "./ocrMatchHooks";
 import { inRoom, roomOf } from "./room";
 import { writesTo } from "./tagService";
@@ -213,6 +214,14 @@ export const applyBulkAction = async (
 
             succeeded += 1;
         }
+
+        return { succeeded, failed };
+    }
+
+    if (input.action === "review") {
+        // One viewer's private state, like a rating: no ChangeLog (§13b). The pass's owner and
+        // room are checked once for the whole selection, so it cannot end up half-marked.
+        succeeded = markItems(targets, input.passId, input.reviewed, auth);
 
         return { succeeded, failed };
     }
