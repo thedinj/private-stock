@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    actionKeys,
     VIEWER_KEY_GROUPS,
     VIEWER_KEYS,
     facetField,
@@ -24,6 +25,13 @@ describe("the viewer's keys", () => {
         const repeated = presses.filter((press, index) => presses.indexOf(press) !== index);
 
         expect(repeated).toEqual([]);
+    });
+
+    it("gives each tooltip's control one binding, with keys to show", () => {
+        const actions = VIEWER_KEYS.flatMap((binding) => (binding.action ? [binding.action] : []));
+
+        expect(new Set(actions).size).toBe(actions.length);
+        for (const action of actions) expect(actionKeys(action).length).toBeGreaterThan(0);
     });
 
     it("gives every field exactly one key", () => {

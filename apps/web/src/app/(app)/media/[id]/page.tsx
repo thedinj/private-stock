@@ -11,7 +11,6 @@ import {
     Button,
     Center,
     Group,
-    Kbd,
     Loader,
     Menu,
     Popover,
@@ -20,7 +19,6 @@ import {
     Stack,
     Switch,
     Text,
-    Tooltip,
 } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
@@ -33,7 +31,7 @@ import { ItemPerformers } from "@/components/faces/ItemPerformers";
 import { WhoIsThis } from "@/components/faces/WhoIsThis";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
-import { KeyTip } from "@/components/KeyTip";
+import { ViewerKeyTip } from "@/components/KeyTip";
 import { CheckGlyph, LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
 import { SectionLabel } from "@/components/media/SectionLabel";
 import {
@@ -772,6 +770,18 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 return;
             }
 
+            /**
+             * Escape drops a marked clip -- the clip bar's Clear, from the keyboard. Reached
+             * only with no field focused: in the clip's tag box Escape first clears what was
+             * typed, then leaves the box, so dropping the span is always one more press, and
+             * never the press that was meant to leave a field.
+             */
+            if (event.key === "Escape" && selection !== null && !overlayOpen) {
+                event.preventDefault();
+                setSelection(null);
+                return;
+            }
+
             if (event.key === "n") {
                 event.preventDefault();
                 go(sequence.nextId);
@@ -870,6 +880,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         jumpToField,
         setOpinion,
         reviewAndNext,
+        selection,
         sequence.nextId,
         sequence.previousId,
     ]);
@@ -1103,20 +1114,6 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                                     value that could turn the show into a stroboscope. Present
                                     and disabled while the show is off, so the number is
                                     discoverable before it is needed. */}
-                                {/* Where the keys are written down, for anybody with a
-                                    keyboard to press them on. */}
-                                {!narrow && (
-                                    <Button
-                                        variant="subtle"
-                                        color="gray"
-                                        size="compact-sm"
-                                        onClick={openHelp}
-                                        rightSection={<Kbd size="xs">?</Kbd>}
-                                        aria-keyshortcuts="?"
-                                    >
-                                        Keyboard shortcuts
-                                    </Button>
-                                )}
 
                                 {dwellApplies && (
                                     <Stack gap={4}>
@@ -1289,13 +1286,13 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         where you decide you want it -- the decision is made watching the
                         thing, not later in a list of lists. */}
                     {/* Reviewed (§14d): the d key's mark, and the only way to take it back. */}
-                    <KeyTip
+                    <ViewerKeyTip
+                        action="review"
                         label={
                             data.reviewedAt
                                 ? "Reviewed. Click to take it back"
                                 : "Done with this one: mark it reviewed and go to the next"
                         }
-                        keys={["d"]}
                     >
                         <Button
                             variant={data.reviewedAt ? "light" : "default"}
@@ -1312,7 +1309,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         >
                             {narrow ? <CheckGlyph size={16} /> : "Reviewed"}
                         </Button>
-                    </KeyTip>
+                    </ViewerKeyTip>
 
                     <AddToPlaylist mediaId={data.id} iconOnly={narrow} />
 
@@ -1378,24 +1375,17 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         the bin, and it says the item can come back. Absent without the scope or
                         on a read-only root, like every other way in (§18.1). */}
                     {trashable === "allowed" && (
-                        <Tooltip
-                            label={
-                                <>
-                                    Move to trash <Kbd size="xs">Delete</Kbd>
-                                </>
-                            }
-                        >
+                        <ViewerKeyTip action="trash" label="Move to trash">
                             <ActionIcon
                                 variant="subtle"
                                 color="oxblood"
                                 size="input-sm"
                                 aria-label="Move to trash"
-                                aria-keyshortcuts="Delete"
                                 onClick={trashDialog.open}
                             >
                                 <TrashGlyph size={18} />
                             </ActionIcon>
-                        </Tooltip>
+                        </ViewerKeyTip>
                     )}
                 </Group>
             </Group>

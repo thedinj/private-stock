@@ -11,6 +11,7 @@ import {
     type CreateClipInput,
 } from "@private-stock/core";
 
+import { KeyTip, ViewerKeyTip } from "@/components/KeyTip";
 import { roomKey } from "@/lib/activeDomain";
 import { useClipLabels, useOwnReels } from "@/lib/api/reels";
 import { destinationsFor, type TagDestination } from "@/lib/tagDestinations";
@@ -145,13 +146,18 @@ export const ClipBar: React.FC<ClipBarProps> = ({
      * Marking without the mouse (§14d "Reviewing recordings for a reel").
      *
      * When `]` closes a span the tag box takes the keys: type a tag, Enter to add it, and Enter
-     * again on the empty box saves the clip. Escape in the empty box hands the keys back to the
-     * player without losing the span, so the out point can still be nudged with `]`.
+     * again on the empty box saves the clip. Escape on a half-typed tag clears it (leaving
+     * would add it -- the box accepts what was typed when it loses focus); Escape on the empty
+     * box hands the keys back to the player without losing the span, so the out point can still
+     * be nudged with `]`, and one more Escape drops the span (the page's, = Clear). Shift+Tab
+     * reaches the facet switch beside the box, whose arrows choose Players or Keywords, and Tab
+     * comes back.
      *
      * An effect on the out point, because that is the moment: a new `]` after the first moves
      * focus back here too. Nothing else in the bar takes focus on its own.
      */
     const tagsBox = useRef<HTMLDivElement>(null);
+    const [typed, setTyped] = useState("");
     const ready = complete ? endMs : null;
 
     useEffect(() => {
@@ -162,15 +168,20 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     const onTagKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
         const input = event.target;
 
-        if (!(input instanceof HTMLInputElement) || input.value.trim() !== "") return;
+        if (!(input instanceof HTMLInputElement)) return;
 
-        if (event.key === "Enter") {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typed !== "") setTyped("");
+            else input.blur();
+            return;
+        }
+
+        if (event.key === "Enter" && input.value.trim() === "") {
             event.preventDefault();
             event.stopPropagation();
             save();
-        } else if (event.key === "Escape") {
-            event.preventDefault();
-            input.blur();
         }
     };
 
@@ -264,12 +275,16 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                     >
                         Preview
                     </Button>
-                    <Button disabled={!complete || saving} loading={saving} onClick={save}>
-                        Save clip
-                    </Button>
-                    <Button variant="subtle" color="gray" onClick={onClear}>
-                        Clear
-                    </Button>
+                    <ViewerKeyTip action="saveClip" label="Save, from the empty tag box">
+                        <Button disabled={!complete || saving} loading={saving} onClick={save}>
+                            Save clip
+                        </Button>
+                    </ViewerKeyTip>
+                    <KeyTip label="Drop this clip, with no field focused" keys={["Esc"]}>
+                        <Button variant="subtle" color="gray" onClick={onClear}>
+                            Clear
+                        </Button>
+                    </KeyTip>
                 </Group>
 
                 {/* Tags, under the controls rather than among them: a box and a switch in the row
@@ -300,6 +315,8 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                                     ? "Tags, Enter — then Enter again to save"
                                     : "Tags — type and press Enter"
                             }
+                            searchValue={typed}
+                            onSearchChange={setTyped}
                             onChange={(next) => next.forEach(addTag)}
                             w={260}
                             maw="100%"

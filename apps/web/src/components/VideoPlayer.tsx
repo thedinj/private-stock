@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
+import { ViewerKeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { SkipButton } from "@/components/SkipButton";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
+import type { ViewerAction } from "@/lib/viewerKeys";
 import { api } from "@/lib/api/client";
 import type { CastControl } from "@/lib/cast/useCastItem";
 import {
@@ -2011,7 +2013,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     /** One control for both ends of a clip: the start, then -- past it -- the end (§14d). */
     const clipPending = selection !== null && selection.endMs === null;
-    const markLabel = clipPending ? "Mark the clip's end (])" : "Mark a clip's start ([)";
+    const markLabel = clipPending ? "Mark the clip's end" : "Mark a clip's start";
+
+    /**
+     * A control's tooltip with its key, from the viewer's table (§14 "Hotkeys") -- only while
+     * this player answers the keys at all. Inline, because in full screen the player is all
+     * that is drawn.
+     */
+    const keyTip = (
+        action: ViewerAction,
+        label: string,
+        control: React.ReactElement<{ "aria-keyshortcuts"?: string }>
+    ): React.ReactElement =>
+        hotkeys && !bare ? (
+            <ViewerKeyTip action={action} label={label} inline>
+                {control}
+            </ViewerKeyTip>
+        ) : (
+            control
+        );
     const markClip =
         onMarkIn && !timeline && !remote
             ? () => {
@@ -2156,20 +2176,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     )}
 
                     <Group gap={compact ? 4 : "xs"} wrap="nowrap" align="center">
-                        {steps && (
-                            <ActionIcon
-                                variant="subtle"
-                                color="brass"
-                                size={iconSize}
-                                className={classes.step}
-                                disabled={!steps.previous}
-                                onClick={steps.previous ?? undefined}
-                                aria-label="Previous item (p)"
-                                title="Previous item (p)"
-                            >
-                                <PreviousGlyph />
-                            </ActionIcon>
-                        )}
+                        {steps &&
+                            keyTip(
+                                "previous",
+                                "Previous item",
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="brass"
+                                    size={iconSize}
+                                    className={classes.step}
+                                    disabled={!steps.previous}
+                                    onClick={steps.previous ?? undefined}
+                                    aria-label="Previous item"
+                                >
+                                    <PreviousGlyph />
+                                </ActionIcon>
+                            )}
 
                         <SkipButton
                             direction="back"
@@ -2203,21 +2225,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
                         {/* Play between the two jumps, so the button that leaves the item is
                             never the one beside it. */}
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
-                            size={iconSize}
-                            onClick={remote ? remote.togglePlay : togglePlay}
-                            aria-label={shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play"}
-                        >
-                            {shownAtEnd ? (
-                                <ReplayGlyph />
-                            ) : shownPlaying ? (
-                                <PauseGlyph />
-                            ) : (
-                                <PlayGlyph />
-                            )}
-                        </ActionIcon>
+                        {keyTip(
+                            "play",
+                            shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play",
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                onClick={remote ? remote.togglePlay : togglePlay}
+                                aria-label={
+                                    shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play"
+                                }
+                            >
+                                {shownAtEnd ? (
+                                    <ReplayGlyph />
+                                ) : shownPlaying ? (
+                                    <PauseGlyph />
+                                ) : (
+                                    <PlayGlyph />
+                                )}
+                            </ActionIcon>
+                        )}
 
                         <SkipButton
                             direction="forward"
@@ -2259,20 +2287,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             }}
                         />
 
-                        {steps && (
-                            <ActionIcon
-                                variant="subtle"
-                                color="brass"
-                                size={iconSize}
-                                className={classes.step}
-                                disabled={!steps.next}
-                                onClick={steps.next ?? undefined}
-                                aria-label="Next item (n)"
-                                title="Next item (n)"
-                            >
-                                <NextGlyph />
-                            </ActionIcon>
-                        )}
+                        {steps &&
+                            keyTip(
+                                "next",
+                                "Next item",
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="brass"
+                                    size={iconSize}
+                                    className={classes.step}
+                                    disabled={!steps.next}
+                                    onClick={steps.next ?? undefined}
+                                    aria-label="Next item"
+                                >
+                                    <NextGlyph />
+                                </ActionIcon>
+                            )}
 
                         {!compact && (
                             <Text size="xs" c="dimmed" className={classes.time}>
@@ -2289,32 +2319,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             were the only way in, and nothing on the page said they existed.
                             One button for both ends: it marks the start, and once a start is
                             marked and the playhead is past it, the end. */}
-                        {!compact && markClip && (
-                            <ActionIcon
-                                variant="subtle"
-                                color={clipPending ? "brass" : "gray"}
-                                size={iconSize}
-                                onClick={markClip}
-                                aria-label={markLabel}
-                                title={markLabel}
-                            >
-                                <ScissorsGlyph />
-                            </ActionIcon>
-                        )}
+                        {!compact &&
+                            markClip &&
+                            keyTip(
+                                clipPending ? "markOut" : "markIn",
+                                markLabel,
+                                <ActionIcon
+                                    variant="subtle"
+                                    color={clipPending ? "brass" : "gray"}
+                                    size={iconSize}
+                                    onClick={markClip}
+                                    aria-label={markLabel}
+                                >
+                                    <ScissorsGlyph />
+                                </ActionIcon>
+                            )}
 
-                        {!compact && onCapture && !remote && (
-                            <ActionIcon
-                                variant="subtle"
-                                color={captureFailed ? "oxblood" : "brass"}
-                                size={iconSize}
-                                loading={capturing}
-                                onClick={captureHere}
-                                aria-label="Capture this frame (s)"
-                                title="Capture this frame (s)"
-                            >
-                                <CaptureGlyph />
-                            </ActionIcon>
-                        )}
+                        {!compact &&
+                            onCapture &&
+                            !remote &&
+                            keyTip(
+                                "capture",
+                                "Capture this frame",
+                                <ActionIcon
+                                    variant="subtle"
+                                    color={captureFailed ? "oxblood" : "brass"}
+                                    size={iconSize}
+                                    loading={capturing}
+                                    onClick={captureHere}
+                                    aria-label="Capture this frame"
+                                >
+                                    <CaptureGlyph />
+                                </ActionIcon>
+                            )}
 
                         {/* The speed as a word that opens a menu, not a form field: the Select
                             it replaces was too narrow on a phone to show its own value, and its
@@ -2326,32 +2363,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                 classNames={{ item: classes.menuItem }}
                             >
                                 <Menu.Target>
-                                    <Button
-                                        variant="subtle"
-                                        color="brass"
-                                        size="compact-sm"
-                                        h={coarse ? 44 : undefined}
-                                        aria-label="Playback speed (− and +)"
-                                        title="Playback speed (− and +)"
-                                    >
-                                        {speedLabel}
-                                    </Button>
+                                    {keyTip(
+                                        "speed",
+                                        "Playback speed",
+                                        <Button
+                                            variant="subtle"
+                                            color="brass"
+                                            size="compact-sm"
+                                            h={coarse ? 44 : undefined}
+                                            aria-label="Playback speed"
+                                        >
+                                            {speedLabel}
+                                        </Button>
+                                    )}
                                 </Menu.Target>
                                 <Menu.Dropdown>{speedItems}</Menu.Dropdown>
                             </Menu>
                         )}
 
-                        {!compact && (
-                            <ActionIcon
-                                variant="subtle"
-                                color="brass"
-                                size={iconSize}
-                                onClick={toggleMute}
-                                aria-label={shownMuted ? "Unmute" : "Mute"}
-                            >
-                                {shownMuted ? <MutedGlyph /> : <SoundGlyph />}
-                            </ActionIcon>
-                        )}
+                        {!compact &&
+                            keyTip(
+                                "mute",
+                                shownMuted ? "Unmute" : "Mute",
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="brass"
+                                    size={iconSize}
+                                    onClick={toggleMute}
+                                    aria-label={shownMuted ? "Unmute" : "Mute"}
+                                >
+                                    {shownMuted ? <MutedGlyph /> : <SoundGlyph />}
+                                </ActionIcon>
+                            )}
 
                         {/* Cast, beside fullscreen: both send the picture somewhere bigger. On a
                             phone it is in the "more" menu -- the row is full. The title sits on
@@ -2372,15 +2415,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             </span>
                         )}
 
-                        <ActionIcon
-                            variant="subtle"
-                            color="brass"
-                            size={iconSize}
-                            onClick={toggleFullscreen}
-                            aria-label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
-                        >
-                            <FullscreenGlyph />
-                        </ActionIcon>
+                        {keyTip(
+                            "fullscreen",
+                            isFullscreen ? "Leave full screen" : "Full screen",
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                onClick={toggleFullscreen}
+                                aria-label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
+                            >
+                                <FullscreenGlyph />
+                            </ActionIcon>
+                        )}
 
                         {/* On a phone, what did not fit; everywhere, the page's own actions --
                             the rating and the bin, which fullscreen otherwise puts out of reach

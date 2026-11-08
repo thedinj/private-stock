@@ -8315,8 +8315,12 @@ parser checks `?sort=` against it rather than keeping its own, because a copy th
 behind and read `?sort=bitrate` back as the default, so the menu choice was silently ignored.
 
 **Hotkeys** -- the item viewer's, as one map (2026-11-08). `lib/viewerKeys.ts` is the table; the
-`?` help view is drawn from it, the fields' tooltips read their key from it, and a unit test fails
-if any press is claimed twice. Three handlers answer it -- the page, the player and the still
+`?` help view is drawn from it, every control's tooltip reads its key from it (the fields, and the
+player's play, previous, next, mark, capture, speed, mute and full screen, Reviewed, trash, Save
+clip -- `ViewerKeyTip`, by an `action` in the table), and a unit test fails if any press is
+claimed twice or a tooltip's action has no keys. `?` is the one way to the help: the user knows it
+is there and asked for no button (2026-11-08), so the Playback popover's link was removed. The
+player's tooltips render inside the player, because in full screen it is all that is drawn. Three handlers answer it -- the page, the player and the still
 stage -- and each had grown its keys alone, so until the table nothing could say whether a key was
 free.
 
@@ -8329,7 +8333,17 @@ free.
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
 | Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
 
-Outside the viewer: `1`–`5` rate in the grid.
+Outside the viewer: `1`–`5` rate in the grid, and `Enter` with nothing focused opens a library
+grid's first item (`useEnterOpensFirst`) -- the keyboard's way into "To review", whose first tile
+is sixty Tabs away behind the sidebar and the filters.
+
+**The review pass never needs the mouse** (2026-11-08): `Enter` on the list, then per item `[` `]`,
+a tag and `Enter` to add it, `Enter` on the empty box to save the clip, `w`/`t` for the item's own
+boxes, `d`. Every `Esc` has one meaning per press, so none ever has to be undone with the pointer.
+In the clip's tag box the first `Esc` clears a half-typed tag (as a facet box does), the next leaves
+the box with the span kept, and one more -- with no field focused -- drops the span, which is the
+clip bar's Clear. Which facet the clip's tags go to (the switch beside it) is `Shift+Tab` from the
+box, the arrows, and `Tab` back.
 
 **The field keys follow the facet's role, not the room's word for it**: `w` for who, `o` for
 origin, `t` for tag, `r` for remark. A key per room label would give `p` to Players (taken by

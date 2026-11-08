@@ -49,6 +49,7 @@ import { PlayMenu } from "@/components/PlayMenu";
 import { SelectionBar } from "@/components/library/SelectionBar";
 import selectionClasses from "@/components/library/SelectionBar.module.scss";
 import { useAuth } from "@/lib/api/AuthProvider";
+import { useEnterOpensFirst } from "@/lib/useEnterOpensFirst";
 import { GALLERY_TRACKS, GRID_GAP, GRID_TRACKS, PRIORITY_TILES } from "@/lib/gridGeometry";
 import { api } from "@/lib/api/client";
 import { useSavedFilters } from "@/lib/api/savedFilters";
@@ -172,6 +173,9 @@ const NO_SELECTION: string[] = [];
 export const LibraryCellar: React.FC = () => {
     const router = useRouter();
     const searchParams = useSearchParams();
+
+    // Enter with nothing focused opens the first item: the keyboard's way into the set.
+    useEnterOpensFirst();
 
     const urlView = parseView(new URLSearchParams(searchParams.toString()));
 

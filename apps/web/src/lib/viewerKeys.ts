@@ -17,6 +17,26 @@ import type { TagScope } from "@private-stock/core";
 
 type ViewerKeyGroup = "transport" | "items" | "clips" | "review" | "fields" | "page";
 
+/**
+ * The controls whose tooltips name their key, so a re-key in this table reaches the tooltip,
+ * the help and the handler together.
+ */
+export type ViewerAction =
+    | "play"
+    | "speed"
+    | "mute"
+    | "fullscreen"
+    | "capture"
+    | "next"
+    | "previous"
+    | "markIn"
+    | "markOut"
+    | "saveClip"
+    | "review"
+    | "rate"
+    | "favourite"
+    | "trash";
+
 /** The fields a key jumps into. A facet's are named by the facet, not by the room's word. */
 export type ViewerField = "performer" | "source" | "tag" | "privateTag" | "note";
 
@@ -29,6 +49,10 @@ interface ViewerKey {
     /** What it does. A field's binding leaves this to `fieldTitle`, which knows the room. */
     does: string;
     field?: ViewerField;
+    /** The control whose tooltip shows this key, and the keys it shows. */
+    action?: ViewerAction;
+    /** How a tooltip writes the keys; several are alternatives, not a chord. */
+    tip?: readonly string[];
 }
 
 export const VIEWER_KEY_GROUPS: readonly { group: ViewerKeyGroup; title: string }[] = [
@@ -45,7 +69,14 @@ const digits = (prefix: "Digit" | "Numpad", from: number, to: number): string[] 
 
 export const VIEWER_KEYS: readonly ViewerKey[] = [
     // Transport: the player's, and the still stage's space and f.
-    { group: "transport", presses: ["Space", "k"], shown: "Space / k", does: "Play or pause" },
+    {
+        group: "transport",
+        presses: ["Space", "k"],
+        shown: "Space / k",
+        does: "Play or pause",
+        action: "play",
+        tip: ["Space", "k"],
+    },
     {
         group: "transport",
         presses: ["ArrowLeft", "ArrowRight"],
@@ -76,35 +107,93 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         presses: ["-", "_", "+", "="],
         shown: "- +",
         does: "Slower or faster",
+        action: "speed",
+        tip: ["−", "+"],
     },
-    { group: "transport", presses: ["m"], shown: "m", does: "Mute" },
-    { group: "transport", presses: ["f"], shown: "f", does: "Full screen" },
-    { group: "transport", presses: ["s"], shown: "s", does: "Capture this frame" },
+    { group: "transport", presses: ["m"], shown: "m", does: "Mute", action: "mute", tip: ["m"] },
+    {
+        group: "transport",
+        presses: ["f"],
+        shown: "f",
+        does: "Full screen",
+        action: "fullscreen",
+        tip: ["f"],
+    },
+    {
+        group: "transport",
+        presses: ["s"],
+        shown: "s",
+        does: "Capture this frame",
+        action: "capture",
+        tip: ["s"],
+    },
 
-    { group: "items", presses: ["n"], shown: "n", does: "Next item" },
-    { group: "items", presses: ["p"], shown: "p", does: "Previous item" },
+    { group: "items", presses: ["n"], shown: "n", does: "Next item", action: "next", tip: ["n"] },
+    {
+        group: "items",
+        presses: ["p"],
+        shown: "p",
+        does: "Previous item",
+        action: "previous",
+        tip: ["p"],
+    },
 
-    { group: "clips", presses: ["["], shown: "[", does: "Mark the in point" },
+    {
+        group: "clips",
+        presses: ["["],
+        shown: "[",
+        does: "Mark the in point",
+        action: "markIn",
+        tip: ["["],
+    },
     {
         group: "clips",
         presses: ["]"],
         shown: "]",
-        does: "Mark the out point. The clip's tag box takes the keys: Enter adds a tag, Enter again saves",
+        does: "Mark the out point. The clip's tag box takes the keys: Enter adds a tag; Shift+Tab, arrows and Tab choose where tags go",
+        action: "markOut",
+        tip: ["]"],
+    },
+    {
+        group: "clips",
+        presses: ["Enter"],
+        shown: "Enter",
+        does: "In the clip's empty tag box: save the clip (into the reel chosen)",
+        action: "saveClip",
+        tip: ["Enter"],
     },
 
-    { group: "review", presses: ["d"], shown: "d", does: "Done: mark it reviewed, go to the next" },
+    {
+        group: "review",
+        presses: ["d"],
+        shown: "d",
+        does: "Done: mark it reviewed, go to the next",
+        action: "review",
+        tip: ["d"],
+    },
     {
         group: "review",
         presses: digits("Numpad", 1, 5),
         shown: "Numpad 1–5",
         does: "Rate it. The same number again clears it",
+        action: "rate",
+        tip: ["Numpad 1–5"],
     },
-    { group: "review", presses: ["h"], shown: "h", does: "Favourite" },
+    {
+        group: "review",
+        presses: ["h"],
+        shown: "h",
+        does: "Favourite",
+        action: "favourite",
+        tip: ["h"],
+    },
     {
         group: "review",
         presses: ["Delete", "Backspace"],
         shown: "Delete",
         does: "Move to trash, then Enter to confirm",
+        action: "trash",
+        tip: ["Delete"],
     },
 
     // One letter per field, by what the field is rather than what the room calls it: w for who,
@@ -118,11 +207,16 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         group: "fields",
         presses: ["Escape"],
         shown: "Esc",
-        does: "Leave the field: the keys go back to the player",
+        does: "Leave the field: the keys go back to the player. Again, with a clip marked: drop the clip",
     },
 
     { group: "page", presses: ["/"], shown: "/", does: "Search" },
     { group: "page", presses: ["?"], shown: "?", does: "These keys" },
+];
+
+/** A control's keys, for its tooltip: alternatives, written as the tooltip should show them. */
+export const actionKeys = (action: ViewerAction): string[] => [
+    ...(VIEWER_KEYS.find((binding) => binding.action === action)?.tip ?? []),
 ];
 
 /** The facts about a keystroke that name it. A `KeyboardEvent` has all three. */
