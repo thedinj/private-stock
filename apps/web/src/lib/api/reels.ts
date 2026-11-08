@@ -6,6 +6,7 @@ import type {
     AddReelItemsInput,
     Clip,
     ClipDetail,
+    ClipIdsResponse,
     ClipListResponse,
     ClipQuery,
     ClipTagFacets,
@@ -177,6 +178,15 @@ export const useClips = (query: Partial<ClipQuery>) => {
         placeholderData: (previous) => previous,
     });
 };
+
+/**
+ * Every clip a filter matches, at most one reel's worth -- "Select all N matching" (§14d).
+ *
+ * A one-off read on a click rather than a cached query: the answer is a selection, used once,
+ * and a cached copy would be a selection of what the filter matched some time ago.
+ */
+export const fetchClipIds = (query: Partial<ClipQuery>): Promise<ClipIdsResponse> =>
+    api<ClipIdsResponse>(`/api/clips/ids?${serialise({ ...query, page: undefined })}`);
 
 /** Labels this person has used before, so a clip's name is offered rather than retyped. */
 export const useClipLabels = () =>

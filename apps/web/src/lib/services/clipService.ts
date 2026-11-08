@@ -2,6 +2,7 @@ import {
     AuthorizationError,
     ConflictError,
     NotFoundError,
+    REEL_ITEM_LIMIT,
     ValidationError,
     clampSpan,
     clipNaturalDirection,
@@ -10,6 +11,7 @@ import {
     type BulkTagResult,
     type Clip,
     type ClipDetail,
+    type ClipIdsResponse,
     type ClipListResponse,
     type ClipQuery,
     type ClipTag,
@@ -145,6 +147,17 @@ export const listClips = (query: ClipQuery, auth: AuthContext): ClipListResponse
         page: query.page,
         pageSize: query.limit,
         hasMore: rows.length === query.limit,
+        total: clipRepo.countSearch(query, scope),
+    };
+};
+
+/** Every clip the filter matches, for a selection that spans pages -- at most one reel's worth. */
+export const listClipIds = (query: ClipQuery, auth: AuthContext): ClipIdsResponse => {
+    const direction = query.direction ?? clipNaturalDirection(query.sort);
+    const scope = { userId: auth.userId, accessibleRootIds: auth.accessibleRootIds };
+
+    return {
+        ids: clipRepo.searchIds(query, scope, direction, REEL_ITEM_LIMIT),
         total: clipRepo.countSearch(query, scope),
     };
 };

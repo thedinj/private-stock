@@ -18,6 +18,7 @@ import {
 } from "@mantine/core";
 
 import {
+    REEL_ITEM_LIMIT,
     clipNaturalDirection,
     clipSorts,
     type Clip,
@@ -34,7 +35,13 @@ import { ClipViewer } from "@/components/media/ClipViewer";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
-import { useAddReelItems, useClips, useCreateReel, useOwnReels } from "@/lib/api/reels";
+import {
+    fetchClipIds,
+    useAddReelItems,
+    useClips,
+    useCreateReel,
+    useOwnReels,
+} from "@/lib/api/reels";
 import { useUndoBatch } from "@/lib/api/tags";
 import { settling } from "@/lib/settling";
 import selectionClasses from "@/components/library/SelectionBar.module.scss";
@@ -102,8 +109,13 @@ const clipsView = defineView("/clips", {
     clipNotTags: idListField("cnt"),
     clipMatch: enumField("cm", ["all", "any"], "all"),
     orVideo: idListField("orv"),
+    addedFrom: textField("af"),
+    addedTo: textField("at"),
     page: pageField(),
 });
+
+/** A whole calendar day, as a date box gives it. Anything else in the address is no filter. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** An empty list is no filter, and stays out of the request and its cache key. */
 const ids = (list: string[]): string[] | undefined => (list.length > 0 ? list : undefined);
@@ -149,13 +161,14 @@ const ClipsPage: React.FC = () => {
             view.clipTags.length +
             view.clipNotTags.length >
         0;
-    const filtering = Boolean(view.search) || unusedOnly || tagFiltering;
+    const dated = Boolean(view.addedFrom || view.addedTo);
+    const filtering = Boolean(view.search) || unusedOnly || tagFiltering || dated;
 
     const reels = useOwnReels();
     const addItems = useAddReelItems();
     const createReel = useCreateReel();
 
-    const { data, isLoading, isPlaceholderData, error, refetch } = useClips({
+    const clipQuery = {
         sort,
         direction: clipNaturalDirection(sort),
         search: view.search || undefined,
@@ -167,8 +180,26 @@ const ClipsPage: React.FC = () => {
         clipNotTags: ids(view.clipNotTags),
         clipMatch: view.clipTags.length > 1 ? view.clipMatch : undefined,
         orVideo: ids(view.orVideo),
+        addedFrom: DAY.test(view.addedFrom) ? view.addedFrom : undefined,
+        addedTo: DAY.test(view.addedTo) ? view.addedTo : undefined,
         page,
-    });
+    };
+    const { data, isLoading, isPlaceholderData, error, refetch } = useClips(clipQuery);
+
+    /**
+     * Every match, not just this page (§14d "Reviewing recordings for a reel"): a reel by period
+     * is everything added in October, which is rarely one page. Offered once a page is picked.
+     */
+    const [selectingAll, setSelectingAll] = useState(false);
+    const [selectAllFailed, setSelectAllFailed] = useState(false);
+    const selectAllMatching = () => {
+        setSelectingAll(true);
+        setSelectAllFailed(false);
+        fetchClipIds(clipQuery)
+            .then((result) => setSelected(result.ids))
+            .catch(() => setSelectAllFailed(true))
+            .finally(() => setSelectingAll(false));
+    };
 
     const items = useMemo(() => data?.items ?? [], [data?.items]);
     const pageIds = useMemo(() => items.map((clip) => clip.id), [items]);
@@ -343,6 +374,38 @@ const ClipsPage: React.FC = () => {
                             value={tagFilter}
                             onChange={(patch) => apply({ ...patch, page: 0 })}
                         />
+                        {/* When the clip's video was added, both ends inclusive: a reel by period
+                            (§14d "Reviewing recordings for a reel"). The browser's own date box. */}
+                        <Group gap={4} wrap="nowrap">
+                            <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                                Added
+                            </Text>
+                            <TextInput
+                                type="date"
+                                size="sm"
+                                w={150}
+                                value={view.addedFrom}
+                                max={view.addedTo || undefined}
+                                onChange={(event) =>
+                                    apply({ addedFrom: event.currentTarget.value, page: 0 })
+                                }
+                                aria-label="Video added on or after"
+                            />
+                            <Text size="sm" c="dimmed">
+                                –
+                            </Text>
+                            <TextInput
+                                type="date"
+                                size="sm"
+                                w={150}
+                                value={view.addedTo}
+                                min={view.addedFrom || undefined}
+                                onChange={(event) =>
+                                    apply({ addedTo: event.currentTarget.value, page: 0 })
+                                }
+                                aria-label="Video added on or before"
+                            />
+                        </Group>
                         {/* A choice between two layouts, shown as the two of them. It was a button
                             labelled with the state it was *not* in, which reads as the state it
                             is in -- the switch-says-what-it-does trap `PlaylistDetail` records. */}
@@ -463,6 +526,28 @@ const ClipsPage: React.FC = () => {
                         <Text size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
                             {selected.length} selected
                         </Text>
+                        {/* Past one reel's worth there is nothing a bigger selection is for, so the
+                            offer stops there and says why. */}
+                        {total > selected.length && selected.length < REEL_ITEM_LIMIT && (
+                            <Button
+                                size="sm"
+                                variant="subtle"
+                                color={selectAllFailed ? "oxblood" : undefined}
+                                loading={selectingAll}
+                                onClick={selectAllMatching}
+                            >
+                                {selectAllFailed
+                                    ? "Could not select them. Try again"
+                                    : total > REEL_ITEM_LIMIT
+                                      ? `Select the first ${REEL_ITEM_LIMIT} of ${total.toLocaleString()}`
+                                      : `Select all ${total.toLocaleString()} matching`}
+                            </Button>
+                        )}
+                        {total > selected.length && selected.length >= REEL_ITEM_LIMIT && (
+                            <Text size="sm" c="dimmed">
+                                A reel holds {REEL_ITEM_LIMIT}
+                            </Text>
+                        )}
                         <Button size="sm" variant="default" onClick={() => setTagging(true)}>
                             Tag…
                         </Button>

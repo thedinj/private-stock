@@ -409,3 +409,38 @@ describe("searching clips by tag", () => {
         expect(counts(facets.video)).toEqual({ pool: 2, Mia: 2 });
     });
 });
+
+describe("clips by when their video was added (§14d)", () => {
+    const addedOn = (mediaId: string, at: string): void => {
+        db.prepare(`UPDATE "Media" SET "addedAt" = ? WHERE "id" = ?`).run(at, mediaId);
+    };
+
+    it("takes both ends inclusively, the whole of the last day included", () => {
+        const before = newClip(addMedia("sep"));
+        const first = newClip(addMedia("oct-1"));
+        const last = newClip(addMedia("oct-31"));
+        const after = newClip(addMedia("nov"));
+
+        addedOn("sep", "2026-09-30 23:59:59");
+        addedOn("oct-1", "2026-10-01 00:00:00");
+        addedOn("oct-31", "2026-10-31 23:30:00");
+        addedOn("nov", "2026-11-01 00:00:00");
+
+        expect(find({ addedFrom: "2026-10-01", addedTo: "2026-10-31" })).toEqual([first, last]);
+        expect(find({ addedFrom: "2026-10-31" })).toEqual([last, after]);
+        expect(find({ addedTo: "2026-09-30" })).toEqual([before]);
+    });
+
+    it("lists every match's id in the browser's order, up to the cap", () => {
+        const media = addMedia("many");
+        const ids = [newClip(media), newClip(media), newClip(media)];
+        const query = { sort: "startMs", limit: 1, page: 0 } as ClipQuery;
+        const scope = { userId: USER, accessibleRootIds: null };
+
+        expect(clipRepo.searchIds(query, scope, "asc", 200)).toEqual(ids);
+        expect(clipRepo.searchIds(query, scope, "asc", 2)).toEqual(ids.slice(0, 2));
+        expect(
+            clipRepo.searchIds(query, { userId: FRIEND, accessibleRootIds: null }, "asc", 200)
+        ).toEqual([]);
+    });
+});

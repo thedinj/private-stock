@@ -282,7 +282,39 @@ const buildSearch = (
         params.maxDurationMs = query.maxDurationMs;
     }
 
+    if (query.addedFrom) {
+        clauses.push(`m."addedAt" >= :addedFrom`);
+        params.addedFrom = query.addedFrom;
+    }
+
+    if (query.addedTo) {
+        // Inclusive of the whole last day: "2026-10-31 18:00:00" is on the 31st.
+        clauses.push(`m."addedAt" < date(:addedTo, '+1 day')`);
+        params.addedTo = query.addedTo;
+    }
+
     return { where: `WHERE ${clauses.join(" AND ")}`, params };
+};
+
+/** The ids `search` would page through, in its order, up to `cap` (§14d "Select all matching"). */
+export const searchIds = (
+    query: ClipQuery,
+    scope: SearchScope,
+    direction: "asc" | "desc",
+    cap: number
+): string[] => {
+    const { where, params } = buildSearch(query, scope);
+    const order = direction === "asc" ? "ASC" : "DESC";
+
+    return (
+        db
+            .prepare(
+                `${SUMMARY_SELECTION} ${where}
+                  ORDER BY ${SORT_COLUMNS[query.sort]} ${order}, c."id" ASC
+                  LIMIT :cap`
+            )
+            .all({ ...params, cap }) as { id: string }[]
+    ).map((row) => row.id);
 };
 
 export const search = (

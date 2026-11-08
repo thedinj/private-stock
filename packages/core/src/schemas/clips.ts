@@ -251,6 +251,9 @@ export type TagMatch = z.infer<typeof tagMatchSchema>;
  * Flat lists rather than `FilterGroup`s: groups carry rating, measure and root rules that mean
  * nothing to a clip, and the "or its video" mode would leak into `MediaQuery`.
  */
+/** A calendar day as an `<input type="date">` gives it: `2026-10-31`. */
+const calendarDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-31");
+
 const clipQueryShape = z.object({
     /** Free text over the label. */
     search: z.string().trim().max(200).optional(),
@@ -273,6 +276,13 @@ const clipQueryShape = z.object({
     unusedOnly: z.coerce.boolean().optional(),
     minDurationMs: z.coerce.number().int().min(0).optional(),
     maxDurationMs: z.coerce.number().int().min(0).optional(),
+    /**
+     * When the clip's **video** was added, inclusive at both ends (§14d "Reviewing recordings for
+     * a reel"): a reel by period is cut over the recordings, not over when somebody got round to
+     * marking them. Calendar days in the stored clock (UTC), as `Media.addedAt` is written.
+     */
+    addedFrom: calendarDaySchema.optional(),
+    addedTo: calendarDaySchema.optional(),
     sort: clipSortSchema.default("created"),
     direction: sortDirectionSchema.optional(),
     limit: z.coerce.number().int().min(1).max(200).default(60),
@@ -296,6 +306,14 @@ export const clipListResponseSchema = z.object({
     total: z.number(),
 });
 export type ClipListResponse = z.infer<typeof clipListResponseSchema>;
+
+/**
+ * Every clip a filter matches, as ids -- "Select all N matching" on /clips. Capped at what one
+ * reel can hold, which is the only thing a selection that large is for; `total` says how many
+ * matched, so a cut-off list can say so.
+ */
+export const clipIdsResponseSchema = z.object({ ids: z.array(z.string()), total: z.number() });
+export type ClipIdsResponse = z.infer<typeof clipIdsResponseSchema>;
 
 /** One tag in a /clips facet list, with how many of your clips it reaches. */
 export const clipTagFacetValueSchema = z.object({
