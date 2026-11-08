@@ -8,11 +8,24 @@ describe("domains (§21)", () => {
         expect(domainProfiles.cellar.guarded).toBe(true);
     });
 
-    it("skips faces in the game room and nowhere else", () => {
-        expect(domainSkipsStage("games", "faces")).toBe(true);
+    it("runs every stage in the cellar", () => {
+        for (const stage of ["faces", "embed", "ocr", "phash", "tileprint"]) {
+            expect(domainSkipsStage("cellar", stage)).toBe(false);
+        }
+    });
+
+    it("skips Look and OCR in the parlour, and keeps its faces", () => {
+        expect(domainSkipsStage("family", "embed")).toBe(true);
+        expect(domainSkipsStage("family", "ocr")).toBe(true);
         expect(domainSkipsStage("family", "faces")).toBe(false);
-        expect(domainSkipsStage("cellar", "faces")).toBe(false);
-        expect(domainSkipsStage("games", "ocr")).toBe(false);
+    });
+
+    it("skips faces, Look and OCR in the game room, and keeps the duplicate fingerprints", () => {
+        expect(domainSkipsStage("games", "faces")).toBe(true);
+        expect(domainSkipsStage("games", "embed")).toBe(true);
+        expect(domainSkipsStage("games", "ocr")).toBe(true);
+        expect(domainSkipsStage("games", "phash")).toBe(false);
+        expect(domainSkipsStage("games", "tileprint")).toBe(false);
     });
 
     it("runs a stage for a room it does not know, rather than silently skipping it", () => {

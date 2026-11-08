@@ -1,4 +1,10 @@
-import { DEFAULT_DOMAIN, LEGACY_DOMAIN, parseDomain, type DomainKind } from "@private-stock/core";
+import {
+    DEFAULT_DOMAIN,
+    domainSkipsStage,
+    LEGACY_DOMAIN,
+    parseDomain,
+    type DomainKind,
+} from "@private-stock/core";
 
 /**
  * Which domain this tab is in (§21 "Which room a browser opens in").
@@ -62,6 +68,13 @@ export const getActiveDomain = (): DomainKind => {
 
     return current;
 };
+
+/**
+ * Whether this room runs a pipeline stage (§21 "Stages a room does not use"). What a skipped stage
+ * would have fed -- Look, faces review, the OCR queue -- is not offered here: it could only ever
+ * be empty.
+ */
+export const roomRuns = (stage: string): boolean => !domainSkipsStage(getActiveDomain(), stage);
 
 /**
  * A browser-storage key for something that belongs to the room this tab is in (§21).

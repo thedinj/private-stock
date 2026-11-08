@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { Anchor, Badge, Card, Group, Stack, Text, Title, Tooltip } from "@mantine/core";
 
-import { transcodeEnabled } from "@private-stock/core";
+import {
+    domainKinds,
+    domainProfiles,
+    domainSkipsStage,
+    transcodeEnabled,
+} from "@private-stock/core";
 
 import { useAdminSettings } from "@/lib/api/adminSettings";
 
@@ -20,6 +25,15 @@ const CONFIGURED_ELSEWHERE: Record<string, { href: string; label: string }> = {
 };
 
 /** What runs across the whole library (§7b): one row per stage in the registry. */
+/** The rooms that skip a stage, named for a sentence: "Parlour or Game Room". Null when none. */
+const skippedIn = (stage: string): string | null => {
+    const rooms = domainKinds
+        .filter((kind) => domainSkipsStage(kind, stage))
+        .map((kind) => domainProfiles[kind].label);
+
+    return rooms.length === 0 ? null : rooms.join(" or the ");
+};
+
 export const StagesCard: React.FC = () => {
     const { data } = useAdminSettings();
 
@@ -63,6 +77,13 @@ export const StagesCard: React.FC = () => {
                                     <Text size="xs" c="dimmed">
                                         {stage.describe}
                                     </Text>
+                                    {/* The rooms that never run it, whatever the switch says
+                                        (§21 "Stages a room does not use"). */}
+                                    {skippedIn(stage.name) && (
+                                        <Text size="xs" c="dimmed">
+                                            Not in the {skippedIn(stage.name)}
+                                        </Text>
+                                    )}
                                     {/* The size of the commitment, where there is one to make.
                                         Absent once a stage runs: a number that only counts
                                         down is progress, which is the Activity tab's. */}

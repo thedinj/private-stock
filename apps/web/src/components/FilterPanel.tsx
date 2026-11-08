@@ -39,6 +39,7 @@ import {
     type Measure,
     type Orientation,
 } from "@/lib/libraryQuery";
+import { roomRuns } from "@/lib/activeDomain";
 import { facetLabel, facetLabelPlural } from "@/lib/facetLabels";
 import {
     advancedGroups,
@@ -491,9 +492,14 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                 )}
             </Group>
 
-            <SectionHeading label="Look" count={hasLook(view) ? 1 : 0} />
+            {/* Not in a room that does not embed (§21). */}
+            {roomRuns("embed") && (
+                <>
+                    <SectionHeading label="Look" count={hasLook(view) ? 1 : 0} />
 
-            <LookSection view={view} onChange={onChange} />
+                    <LookSection view={view} onChange={onChange} />
+                </>
+            )}
 
             <SectionHeading label="Your marks" count={markFilterCount} />
 

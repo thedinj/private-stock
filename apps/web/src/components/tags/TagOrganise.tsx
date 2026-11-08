@@ -14,6 +14,7 @@ import { ReviewKindFilter } from "@/components/review/ReviewKindFilter";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { useTagProfile } from "@/lib/api/tags";
+import { roomRuns } from "@/lib/activeDomain";
 import { facetLabel } from "@/lib/facetLabels";
 import { untaggedMentionsHref } from "@/lib/libraryQuery";
 import { defineView, enumField, useUrlView } from "@/lib/urlView";
@@ -72,14 +73,15 @@ const PerformerOrganise: React.FC<{ tagId: string; name: string }> = ({ tagId, n
 
     return (
         <Tabs
-            value={state.tab}
+            // A room without faces (§21) has no Faces tab, whatever the address says.
+            value={roomRuns("faces") ? state.tab : "check"}
             onChange={(value) => value && apply({ tab: value === "face" ? "face" : "check" })}
             color="brass"
             keepMounted={false}
         >
             <Tabs.List mb="lg">
                 <Tabs.Tab value="check">To check</Tabs.Tab>
-                <Tabs.Tab value="face">Faces</Tabs.Tab>
+                {roomRuns("faces") && <Tabs.Tab value="face">Faces</Tabs.Tab>}
             </Tabs.List>
 
             <Tabs.Panel value="check">

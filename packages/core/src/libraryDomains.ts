@@ -57,8 +57,9 @@ export interface DomainProfile {
     /**
      * Pipeline stages that do not apply to this room's items (§21 "Stages a room does not
      * use"), recorded `skipped` without being run. A fact about the content, not a setting: a
-     * face detector has nothing to find in a game's frames, and the CPU it would spend is the
-     * NAS's whole budget.
+     * face detector has nothing to find in a game's frames, OCR reads a HUD as noise, and the
+     * CPU either would spend is the NAS's whole budget. Subtracted from the Processing page's
+     * switches, never added to them.
      */
     skipsStages: readonly string[];
 }
@@ -81,7 +82,9 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             source: { one: "Source", many: "Sources" },
             tag: { one: "Keyword", many: "Keywords" },
         },
-        skipsStages: [],
+        // Look is for watching by look, which is the Cellar's idea; there is little text burned
+        // into a family video to read.
+        skipsStages: ["embed", "ocr"],
     },
     cellar: {
         kind: "cellar",
@@ -103,8 +106,10 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             source: { one: "Game", many: "Games" },
             tag: { one: "Keyword", many: "Keywords" },
         },
-        // Players are still filed, by hand, from filenames and from what is read on screen.
-        skipsStages: ["faces"],
+        // Players are filed by hand and from filenames. OCR would read the HUD -- ammo counts and
+        // killfeeds -- into the search index and the review queue. The duplicate fingerprints
+        // stay: a highlight saved raw, trimmed and re-encoded is the duplicate most worth finding.
+        skipsStages: ["faces", "embed", "ocr"],
     },
 };
 

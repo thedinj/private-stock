@@ -10,6 +10,7 @@ import type { DupeListResponse } from "@private-stock/core";
 import { api } from "@/lib/api/client";
 import { useOcrCounts } from "@/lib/api/ocr";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { roomRuns } from "@/lib/activeDomain";
 import { useRememberedHref } from "@/lib/rememberedPages";
 
 /**
@@ -47,14 +48,19 @@ const QueueLink: React.FC<{ path: string; label: string; count?: number }> = ({
     );
 };
 
+/** Its own component so a room without OCR does not ask for the counts. */
+const OcrQueueLink: React.FC = () => {
+    const ocr = useOcrCounts();
+
+    return <QueueLink path="/review/ocr" label="OCR" count={ocr.data?.waiting.video} />;
+};
+
 export const ReviewQueues: React.FC = () => {
     const { data: dupes } = useQuery({
         // The page's own request for its default view, so the two share a cache entry.
         queryKey: queryKeys.dupes.counts("video"),
         queryFn: () => api<DupeListResponse>("/api/dupes?limit=1&media=video"),
     });
-    const ocr = useOcrCounts();
-
     return (
         <Group gap={4} wrap="wrap" component="nav" aria-label="Review queues">
             <QueueLink
@@ -62,8 +68,9 @@ export const ReviewQueues: React.FC = () => {
                 label="Duplicates"
                 count={dupes ? dupes.pending.exact + dupes.pending.near : undefined}
             />
-            <QueueLink path="/review/ocr" label="OCR" count={ocr.data?.waiting.video} />
-            <QueueLink path="/review/faces" label="Faces" />
+            {/* Only the queues this room's stages fill (§21). */}
+            {roomRuns("ocr") && <OcrQueueLink />}
+            {roomRuns("faces") && <QueueLink path="/review/faces" label="Faces" />}
             <QueueLink path="/review/unreadable" label="Unreadable" />
             <QueueLink path="/review/trash" label="Trash" />
         </Group>

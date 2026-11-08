@@ -69,6 +69,7 @@ import { isTypingTarget } from "@/lib/typingTarget";
 import { useSpillLight } from "@/lib/useSpillLight";
 import { useWarmIntent } from "@/lib/warmMonitor";
 import { useStudyRoom } from "@/lib/useStudyRoom";
+import { roomRuns } from "@/lib/activeDomain";
 import { usePlaybackPref, useDwellSeconds } from "@/lib/playbackPrefs";
 import { DWELL_CHOICES, dwellMs, snapDwellSeconds, stageMode, stillSource } from "@/lib/stageDwell";
 import {
@@ -1144,40 +1145,46 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {/* "More like this", from the moment on screen (§5e): the library ordered
                         by how much it looks like this frame -- or this photograph. The whole
                         library rather than the set you came from, which may have been narrowed
-                        to something this frame has nothing to do with. */}
-                    <Button
-                        variant="default"
-                        onClick={() =>
-                            router.push(
-                                `/?${viewToParams({
-                                    ...DEFAULT_VIEW,
-                                    mode: "grid",
-                                    like:
-                                        data.kind === "video"
-                                            ? `${data.id}@${Math.round(positionRef.current)}`
-                                            : data.id,
-                                }).toString()}`
-                            )
-                        }
-                        leftSection={narrow ? undefined : <LookAlikeGlyph size={16} />}
-                        aria-label="More like this"
-                        title="More like this moment"
-                    >
-                        {narrow ? <LookAlikeGlyph size={16} /> : "More like this"}
-                    </Button>
+                        to something this frame has nothing to do with. Not in a room that
+                        does not embed (§21): it would always come back empty. */}
+                    {roomRuns("embed") && (
+                        <Button
+                            variant="default"
+                            onClick={() =>
+                                router.push(
+                                    `/?${viewToParams({
+                                        ...DEFAULT_VIEW,
+                                        mode: "grid",
+                                        like:
+                                            data.kind === "video"
+                                                ? `${data.id}@${Math.round(positionRef.current)}`
+                                                : data.id,
+                                    }).toString()}`
+                                )
+                            }
+                            leftSection={narrow ? undefined : <LookAlikeGlyph size={16} />}
+                            aria-label="More like this"
+                            title="More like this moment"
+                        >
+                            {narrow ? <LookAlikeGlyph size={16} /> : "More like this"}
+                        </Button>
+                    )}
 
                     {/* Who is this? (§5f): this frame's faces, found across the library.
                         Administrators', as every face surface is; a film's, being a moment. It
                         takes the keys while open, as the frame view does. */}
-                    {hasScope("admin") && data.kind === "video" && mode === "player" && (
-                        <WhoIsThis
-                            mediaId={data.id}
-                            positionRef={positionRef}
-                            elementRef={elementRef}
-                            iconOnly={narrow}
-                            onOpenChange={setWhoIsThisOpen}
-                        />
-                    )}
+                    {hasScope("admin") &&
+                        roomRuns("faces") &&
+                        data.kind === "video" &&
+                        mode === "player" && (
+                            <WhoIsThis
+                                mediaId={data.id}
+                                positionRef={positionRef}
+                                elementRef={elementRef}
+                                iconOnly={narrow}
+                                onOpenChange={setWhoIsThisOpen}
+                            />
+                        )}
 
                     <Button
                         variant="default"

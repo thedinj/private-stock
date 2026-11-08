@@ -37,6 +37,7 @@ import {
     type SearchType,
 } from "@/lib/headerSearch";
 import { isTypingTarget } from "@/lib/typingTarget";
+import { roomRuns } from "@/lib/activeDomain";
 
 import classes from "./HeaderSearch.module.scss";
 
@@ -203,26 +204,28 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({ compact }) => {
             </Menu.Target>
             <Menu.Dropdown>
                 <Menu.Label>Search for</Menu.Label>
-                {SEARCH_TYPES.map((option) => {
-                    const OptionGlyph = TYPE_GLYPH[option];
+                {SEARCH_TYPES.filter((option) => option !== "look" || roomRuns("embed")).map(
+                    (option) => {
+                        const OptionGlyph = TYPE_GLYPH[option];
 
-                    return (
-                        <Menu.Item
-                            key={option}
-                            leftSection={<OptionGlyph size={16} />}
-                            onClick={() => {
-                                setType(option);
-                                setLive(false);
-                                focusBox();
-                            }}
-                            data-active={option === type || undefined}
-                            className={classes.typeItem}
-                            mih={40}
-                        >
-                            {SEARCH_TYPE_INFO[option].label}
-                        </Menu.Item>
-                    );
-                })}
+                        return (
+                            <Menu.Item
+                                key={option}
+                                leftSection={<OptionGlyph size={16} />}
+                                onClick={() => {
+                                    setType(option);
+                                    setLive(false);
+                                    focusBox();
+                                }}
+                                data-active={option === type || undefined}
+                                className={classes.typeItem}
+                                mih={40}
+                            >
+                                {SEARCH_TYPE_INFO[option].label}
+                            </Menu.Item>
+                        );
+                    }
+                )}
             </Menu.Dropdown>
         </Menu>
     );
