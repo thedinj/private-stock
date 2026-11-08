@@ -12,8 +12,9 @@ import {
 } from "react";
 import { Box, Button, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 
-import { checkPin, usePinStatus } from "@/lib/api/account";
+import { usePinStatus } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
+import { canTry } from "@/lib/pinDigits";
 import {
     activeAtKey,
     lockedKey,
@@ -24,6 +25,7 @@ import {
     writeLockAfter,
     writeLocked,
 } from "@/lib/screenLock";
+import { usePinEntry } from "@/lib/usePinEntry";
 
 /**
  * The screen lock (§12c "The screen lock").
@@ -285,8 +287,6 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"] as const;
 
-const MAX_DIGITS = 8;
-
 /**
  * The cover and its keypad.
  *
@@ -295,58 +295,40 @@ const MAX_DIGITS = 8;
  * 64px, past the 44px floor, because this is the screen most often reached for half-awake.
  * A physical keyboard's digits, Backspace and Enter work too.
  */
-export const LockScreen: React.FC<{
+const LockScreen: React.FC<{
     showKeypad: boolean;
     displayName: string;
     onUnlock: () => void;
-    /** A way out other than signing out: the domain gate's "back to the Parlour" (§21). */
-    leave?: { label: string; onLeave: () => void };
-}> = ({ showKeypad, displayName, onUnlock, leave }) => {
+}> = ({ showKeypad, displayName, onUnlock }) => {
     const { signOut } = useAuth();
-    const [digits, setDigits] = useState("");
-    const [message, setMessage] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
+    const {
+        digits,
+        busy,
+        remaining,
+        unreachable,
+        wrong,
+        press: pressDigit,
+        back,
+        clear,
+        submit,
+    } = usePinEntry(onUnlock);
 
-    const submit = useCallback(async () => {
-        if (busy || digits.length < 4) return;
+    const message = unreachable
+        ? "Could not reach the library. Try again."
+        : wrong
+          ? remaining === 1
+              ? "Wrong PIN. One more wrong try signs this device out."
+              : `Wrong PIN. ${remaining} tries left.`
+          : null;
 
-        setBusy(true);
-        setMessage(null);
-
-        try {
-            const result = await checkPin(digits);
-
-            if (result.ok) {
-                setDigits("");
-                onUnlock();
-            } else if (result.signedOut) {
-                await signOut();
-            } else {
-                setDigits("");
-                setMessage(
-                    result.remaining === 1
-                        ? "Wrong PIN. One more wrong try signs this device out."
-                        : `Wrong PIN. ${result.remaining} tries left.`
-                );
-            }
-        } catch {
-            setMessage("Could not reach the library. Try again.");
-        } finally {
-            setBusy(false);
-        }
-    }, [busy, digits, onUnlock, signOut]);
-
-    const press = useCallback((key: (typeof KEYS)[number]) => {
-        setMessage(null);
-
-        if (key === "back") {
-            setDigits((current) => current.slice(0, -1));
-        } else if (key === "clear") {
-            setDigits("");
-        } else {
-            setDigits((current) => (current.length < MAX_DIGITS ? current + key : current));
-        }
-    }, []);
+    const press = useCallback(
+        (key: (typeof KEYS)[number]) => {
+            if (key === "back") back();
+            else if (key === "clear") clear();
+            else pressDigit(key);
+        },
+        [back, clear, pressDigit]
+    );
 
     // In the capture phase, and nothing else hears the key: the page underneath has shortcuts of
     // its own on `window` (the viewer's Space plays), and `inert` stops focus, not listeners.
@@ -459,17 +441,11 @@ export const LockScreen: React.FC<{
                         fullWidth
                         size="md"
                         loading={busy}
-                        disabled={digits.length < 4}
+                        disabled={!canTry(digits)}
                         onClick={() => void submit()}
                     >
                         Unlock
                     </Button>
-
-                    {leave && (
-                        <Button variant="light" color="gray" size="md" onClick={leave.onLeave}>
-                            {leave.label}
-                        </Button>
-                    )}
 
                     <Button variant="subtle" color="gray" size="sm" onClick={() => void signOut()}>
                         Forgot it? Sign out

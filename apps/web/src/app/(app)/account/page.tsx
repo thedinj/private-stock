@@ -17,10 +17,11 @@ import {
     Title,
 } from "@mantine/core";
 
-import { passwordSchema, pinSchema, type SessionUser } from "@private-stock/core";
+import { domainKinds, domainProfiles, passwordSchema, type SessionUser } from "@private-stock/core";
 
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useScreenLock } from "@/components/shell/ScreenLock";
+import { WineRack } from "@/components/shell/WineRack";
 import {
     checkPin,
     useChangePassword,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { ApiError } from "@/lib/api/client";
+import { canTry, withDigit } from "@/lib/pinDigits";
 import { DEFAULT_LOCK_AFTER_MINUTES, LOCK_AFTER_MINUTES } from "@/lib/screenLock";
 
 /**
@@ -287,6 +289,85 @@ const digitsOf = (value: string): string => value.replace(/\D/g, "");
 
 const PIN_FIELD = { inputMode: "numeric", maxLength: 8, autoComplete: "off" } as const;
 
+/** What the switcher's hidden line says, for the hint under the rack (§21). */
+const ENTRANCE = domainKinds.map((kind) => domainProfiles[kind]).find((p) => p.guarded)?.entrance;
+
+/**
+ * Choosing a new PIN on the cellar's wine rack (§21 "Getting into the cellar"): pulled once, then
+ * again to be sure. The rack is where the PIN is entered on the way down, so choosing it here is
+ * also learning the way in. `onChosen` hears the PIN once both pulls agree, and null when the
+ * choice is started again.
+ */
+const PinOnRack: React.FC<{ onChosen: (pin: string | null) => void }> = ({ onChosen }) => {
+    const [first, setFirst] = useState<string | null>(null);
+    const [digits, setDigits] = useState("");
+    const [chosen, setChosen] = useState(false);
+    const [note, setNote] = useState<string | null>(null);
+
+    const tryIt = () => {
+        if (!canTry(digits)) {
+            setNote("Four to eight bottles.");
+        } else if (first === null) {
+            setFirst(digits);
+            setNote(null);
+        } else if (digits === first) {
+            setChosen(true);
+            setNote(null);
+            onChosen(digits);
+        } else {
+            setFirst(null);
+            setNote("Those two were different. Start again.");
+        }
+        setDigits("");
+    };
+
+    const restart = () => {
+        setFirst(null);
+        setChosen(false);
+        setDigits("");
+        setNote(null);
+        onChosen(null);
+    };
+
+    return (
+        <Stack gap="xs" align="flex-start">
+            <Text size="sm" fw={600}>
+                {chosen ? "New PIN chosen" : first === null ? "New PIN" : "New PIN, again"}
+            </Text>
+            <Text size="sm" c="dimmed">
+                {chosen
+                    ? "Enter your password below to save it."
+                    : first === null
+                      ? "Pull the bottles in order, then turn the lever. Four to eight; six is a good length."
+                      : "Once more, to be sure."}
+            </Text>
+            <WineRack
+                label="New PIN"
+                count={digits.length}
+                onDigit={(digit) => {
+                    setNote(null);
+                    setDigits((current) => withDigit(current, digit));
+                }}
+                onBack={() => setDigits((current) => current.slice(0, -1))}
+                onClear={() => setDigits("")}
+                onTry={tryIt}
+                disabled={chosen}
+                note={note}
+            />
+            {(first !== null || chosen) && (
+                <Button variant="subtle" color="gray" size="xs" onClick={restart}>
+                    Start again
+                </Button>
+            )}
+            {ENTRANCE && (
+                <Text size="xs" c="dimmed">
+                    Hold the room name to find {ENTRANCE.toLowerCase()}.
+                </Text>
+            )}
+        </Stack>
+    );
+};
+
 /**
  * The screen lock (§12c): the account's PIN, and whether this device asks for it.
  *
@@ -301,8 +382,9 @@ const ScreenLockCard: React.FC = () => {
     const { lockAfter, setLockAfter } = useScreenLock();
 
     const [currentPassword, setCurrentPassword] = useState("");
-    const [pin, setPin] = useState("");
-    const [confirm, setConfirm] = useState("");
+    const [pin, setPin] = useState<string | null>(null);
+    /** Bumped after a save, so the rack starts empty again. */
+    const [rackKey, setRackKey] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
 
@@ -312,8 +394,6 @@ const ScreenLockCard: React.FC = () => {
     const [offBusy, setOffBusy] = useState(false);
 
     const hasPin = status?.set ?? false;
-    const pinValid = pinSchema.safeParse(pin).success;
-    const mismatch = confirm.length > 0 && confirm !== pin;
 
     const save = (next: string | null) => {
         setError(null);
@@ -324,8 +404,8 @@ const ScreenLockCard: React.FC = () => {
             {
                 onSuccess: () => {
                     setCurrentPassword("");
-                    setPin("");
-                    setConfirm("");
+                    setPin(null);
+                    setRackKey((current) => current + 1);
                     setDone(
                         next === null
                             ? "PIN removed. Devices that locked with it no longer lock."
@@ -388,23 +468,12 @@ const ScreenLockCard: React.FC = () => {
                     </Alert>
                 )}
 
-                <PasswordInput
-                    label="New PIN"
-                    description="4 to 8 digits. Six is a good length."
-                    value={pin}
-                    onChange={(event) => {
+                <PinOnRack
+                    key={rackKey}
+                    onChosen={(next) => {
                         setDone(null);
-                        setPin(digitsOf(event.currentTarget.value));
+                        setPin(next);
                     }}
-                    {...PIN_FIELD}
-                />
-
-                <PasswordInput
-                    label="New PIN, again"
-                    value={confirm}
-                    onChange={(event) => setConfirm(digitsOf(event.currentTarget.value))}
-                    error={mismatch ? "These do not match" : undefined}
-                    {...PIN_FIELD}
                 />
 
                 <PasswordInput
@@ -430,9 +499,9 @@ const ScreenLockCard: React.FC = () => {
                         </Button>
                     )}
                     <Button
-                        disabled={!currentPassword || !pinValid || confirm !== pin}
+                        disabled={!currentPassword || pin === null}
                         loading={savePin.isPending}
-                        onClick={() => save(pin)}
+                        onClick={() => pin !== null && save(pin)}
                     >
                         {hasPin ? "Change PIN" : "Set PIN"}
                     </Button>

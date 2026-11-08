@@ -14,6 +14,12 @@ describe("domains (§21)", () => {
         expect(domainProfiles.cellar.guarded).toBe(true);
     });
 
+    it("gives every guarded room a hidden line in the switcher, and no other room one", () => {
+        for (const profile of Object.values(domainProfiles)) {
+            expect(profile.entrance !== null).toBe(profile.guarded);
+        }
+    });
+
     it("runs every stage in the cellar", () => {
         for (const stage of ["faces", "embed", "ocr", "phash", "tileprint"]) {
             expect(domainSkipsStage("cellar", stage)).toBe(false);

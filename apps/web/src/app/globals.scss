@@ -433,3 +433,12 @@ body {
 :root[data-domain="family"] .ps-room-name {
     color: #f4c9a6;
 }
+
+// The room switcher's hidden line (§21 "Getting into the cellar") comes up slowly, the way a
+// doorway is noticed rather than announced. The global rule makes it immediate under reduced
+// motion.
+@keyframes ps-stair-in {
+    from {
+        opacity: 0;
+    }
+}

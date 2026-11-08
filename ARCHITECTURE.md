@@ -7013,6 +7013,10 @@ keypad until the account's PIN is entered. Asked for with a shared Samsung table
   reaches the server, so a tablet two people share can lock for one and not the other.
 - **4 to 8 digits**, chosen by the person; the form suggests six. The keypad needs no fixed
   length, so the range costs nothing.
+- **The PIN is chosen on the cellar's wine rack** (§21 "Getting into the cellar"), pulled twice
+  to be sure, because the rack is where it is entered on the way down: choosing it is learning
+  the way in. The lock itself keeps its keypad. Both share `usePinEntry`, so the attempt limit
+  is enforced in one place.
 - **Setting, changing or removing the PIN asks for the password** — otherwise a borrowed unlocked
   screen could set a PIN its owner does not know. Turning the lock _off_ on a device asks for
   the PIN, for the same reason; turning it on asks for nothing.
@@ -11912,14 +11916,39 @@ the room being left.
 
 ### Getting into the cellar
 
-Entering a guarded room — switching to it, or reopening a browser that was last there — asks
-for the screen-lock PIN before anything underneath is mounted, so no query for it leaves the
-tab first. A reload of a tab that has passed does not ask again; a new tab does. Only a definite
-"this account has no PIN" opens it unasked; a failed read keeps the keypad up. While you are
-elsewhere the switcher shows the cellar as a bare lock.
+Decided 2026-11-08: the way in should be findable by the person who knows it and pass unnoticed
+by someone looking on, on a desktop and on a phone. Other accounts were not the concern.
 
-**This is a stopgap.** A lock says plainly that something is locked. A quieter entrance is to be
-designed.
+- **The switcher does not list it.** The room menu shows the rooms anyone may see. A guarded
+  room's line appears, faintly, only when the menu is held: the pointer resting on the open menu
+  for 1.5 s, or the room name pressed and held for half a second (a finger, or a mouse button
+  kept down), which opens the menu with the line already there. Closing the menu hides it, and
+  nothing remembers it was shown. The line says the profile's `entrance` -- "The stair" -- never
+  the room's name.
+- **The PIN is pulled from a wine rack, not typed on a keypad.** A keypad says "locked"; the rack
+  is a piece of the house. Ten oak cubbies in the keypad's layout, each bottle tagged with a
+  vintage whose last figure is its digit. **A tugged bottle springs back**, because a PIN can
+  repeat a digit; a cork on the ledge records each digit, and the corks are alike, so a look
+  over the shoulder learns how many and not which. Tap the ledge to take one back; swipe across
+  the rack (or Escape) to push them all back. A lever under the rack tries the PIN -- four to
+  eight digits means the rack cannot tell by itself when you have finished -- and Enter turns
+  it.
+- **A wrong PIN says nothing.** The corks go and the rack is as it was. The one exception is the
+  try before the device is signed out, which gets a single dim line, since a sign-out with no
+  warning at all would be worse than a hint. The attempt limit is the screen lock's
+  (`usePinEntry`, shared with its keypad).
+- **A right PIN puts the lights out to one candle** -- the snuff's dark (`CandleDark`) -- and
+  the room comes up out of it. Under reduced motion it simply opens.
+- **The PIN is chosen on the same rack** (Settings, §12c), so choosing it teaches the way in,
+  with one line under it: "Hold the room name to find the stair." Anyone reading your Settings
+  reads that too; accepted.
+- **Unchanged:** nothing underneath mounts until the PIN is right, so no query for the room leaves
+  the tab first. A reload of a tab that has passed does not ask again; a new tab does. Only a
+  definite "this account has no PIN" opens it unasked; a failed read keeps the rack up. "Back
+  upstairs" returns to the Parlour.
+- **Not done:** the idle screen lock keeps its keypad. It covers every room, and a wine rack
+  over the Parlour would be the thing that draws a look. A keyboard-only way to show the hidden
+  line is not built; the pointer's dwell covers the desktop.
 
 ### Vocabulary is relabelled, never renamed
 

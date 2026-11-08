@@ -196,6 +196,25 @@ export const theme = createTheme({
         // top edge does the lifting, so it is the half worth spending on.
         rackEdge: "inset 0 1px 0 rgba(236, 218, 186, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.55)",
         /**
+         * The wine rack the cellar's PIN is entered on (§21 "Getting into the cellar"). Real
+         * furniture rather than the chrome's rack metaphor, so it has its own wood, glass, foil and
+         * paper. Set here only: the rack is the cellar's wherever it appears, so the other rooms'
+         * themes inherit it rather than restyle it.
+         */
+        rackWood: "linear-gradient(#4a311c, #2c1d10)",
+        rackCubby: "#120b06",
+        rackCubbyEdge: "#7d5532",
+        rackGlass: "#1d3a28",
+        rackGlassDeep: "#0b1710",
+        rackCapsule: "#7a1420",
+        rackTag: "#e8dcc2",
+        rackTagInk: "#3a2a1a",
+        rackCork: "#b08454",
+        // The lever's brass, fixed: `brass` is the accent, and another room's accent is not brass.
+        rackBrass: "#e4b955",
+        rackBrassLight: "#efd9a3",
+        rackBrassDeep: "#835e14",
+        /**
          * Three planes, far enough apart to be three.
          *
          * They used to be #17120f, #211a15 and #120e0b — a ground and a surface five points

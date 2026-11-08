@@ -52,6 +52,12 @@ export interface DomainProfile {
     label: string;
     /** Whether entering it asks for the screen-lock PIN (§21 "Getting into the cellar"). */
     guarded: boolean;
+    /**
+     * What the room switcher's hidden line says, for a guarded room (§21 "Getting into the
+     * cellar"): the line is not listed until the menu is held, and this is all it says. Null
+     * for a room that is listed like any other.
+     */
+    entrance: string | null;
     /** What each facet is called here. The stored kind never changes. */
     facets: Record<OfferedTagKind, FacetLabel>;
     /**
@@ -89,6 +95,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         kind: "family",
         label: "Parlour",
         guarded: false,
+        entrance: null,
         facets: {
             performer: { one: "Person", many: "People" },
             source: { one: "Source", many: "Sources" },
@@ -104,6 +111,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         kind: "cellar",
         label: "Cellar",
         guarded: true,
+        entrance: "The stair",
         facets: {
             performer: { one: "Performer", many: "Performers" },
             source: { one: "Source", many: "Sources" },
@@ -117,6 +125,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         kind: "games",
         label: "Game Room",
         guarded: false,
+        entrance: null,
         facets: {
             performer: { one: "Player", many: "Players" },
             source: { one: "Game", many: "Games" },

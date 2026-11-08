@@ -8,7 +8,17 @@ import { takeSnuffArrival } from "@/lib/candleSnuff";
 import classes from "./CandleArrival.module.scss";
 
 /** The flame's breath plus the lift, after which the dark is taken out of the page. */
-const HELD_MS = 900 + DURATION.arrive;
+export const CANDLE_HELD_MS = 900 + DURATION.arrive;
+
+/**
+ * The dark with a candle in it, lifting after a breath. Also the cellar's way in: the gate goes
+ * to black when the PIN is right and the room comes up out of this (§21).
+ */
+export const CandleDark: React.FC = () => (
+    <div className={classes.dark} aria-hidden>
+        <span className={classes.flame} />
+    </div>
+);
 
 /**
  * The other half of the snuff (§14, "Motion"): a tasting or the showcase opening out of the dark.
@@ -26,16 +36,12 @@ export const CandleArrival: React.FC = () => {
         if (!takeSnuffArrival()) return;
 
         setLit(true);
-        const timer = window.setTimeout(() => setLit(false), HELD_MS);
+        const timer = window.setTimeout(() => setLit(false), CANDLE_HELD_MS);
 
         return () => window.clearTimeout(timer);
     }, []);
 
     if (!lit) return null;
 
-    return (
-        <div className={classes.dark} aria-hidden>
-            <span className={classes.flame} />
-        </div>
-    );
+    return <CandleDark />;
 };

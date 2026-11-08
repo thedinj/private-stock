@@ -1,18 +1,18 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Group, Menu, Title, UnstyledButton } from "@mantine/core";
 
-import { domainKinds, domainProfiles, type DomainKind } from "@private-stock/core";
+import { domainKinds, domainProfiles } from "@private-stock/core";
 
 import { Glyph } from "@/components/media/Glyph";
 import { getActiveDomain, switchDomain } from "@/lib/activeDomain";
 
-const LockGlyph: React.FC = () => (
-    <Glyph size={18}>
-        <rect x="5" y="11" width="14" height="9" rx="2" />
-        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-    </Glyph>
-);
+/** Pointer resting on the open menu this long shows the hidden line. */
+const DWELL_MS = 1_500;
+
+/** Holding the room name this long opens the menu with the hidden line already showing. */
+const LONG_PRESS_MS = 500;
 
 const ChevronGlyph: React.FC = () => (
     <Glyph size={14}>
@@ -23,24 +23,87 @@ const ChevronGlyph: React.FC = () => (
 /**
  * The room name in the header, and the way to the others (§21).
  *
- * A guarded room is not named while you are outside it: it is a lock with no label, so a menu
- * opened in front of somebody does not announce what is behind it. **A stopgap**, like the
- * keypad that guards it; a quieter entrance is still to be designed.
+ * A guarded room is not listed. The menu shows the rooms anyone may see, and the way to a guarded
+ * one is a faint line that appears only when the menu is held: the pointer resting on the open
+ * menu for a second and a half, or the room name pressed and held (a finger, or a mouse button
+ * kept down). Closing the menu hides it again; nothing remembers it was shown. The line says only
+ * the room's `entrance` ("The stair"), never its name, and the rack at the bottom of it asks for
+ * the PIN (`DomainGate`).
  */
 export const DomainSwitcher: React.FC = () => {
     const active = getActiveDomain();
-    const others = domainKinds.filter((kind) => kind !== active);
+    const listed = domainKinds.filter((kind) => kind !== active && !domainProfiles[kind].guarded);
+    const hidden = domainKinds.filter((kind) => kind !== active && domainProfiles[kind].guarded);
 
-    const itemLabel = (kind: DomainKind) =>
-        domainProfiles[kind].guarded ? <LockGlyph /> : domainProfiles[kind].label;
+    const [opened, setOpened] = useState(false);
+    const [revealed, setRevealed] = useState(false);
+    const dwell = useRef<number | null>(null);
+    const press = useRef<number | null>(null);
+    /** A long press opened the menu; the click that ends it must not close it again. */
+    const swallowClick = useRef(false);
+
+    const stopTimer = (timer: React.MutableRefObject<number | null>) => {
+        if (timer.current !== null) window.clearTimeout(timer.current);
+        timer.current = null;
+    };
+
+    useEffect(
+        () => () => {
+            stopTimer(dwell);
+            stopTimer(press);
+        },
+        []
+    );
+
+    const onChange = (next: boolean) => {
+        if (!next && swallowClick.current) {
+            swallowClick.current = false;
+            return;
+        }
+
+        setOpened(next);
+
+        if (!next) {
+            stopTimer(dwell);
+            setRevealed(false);
+        }
+    };
 
     return (
-        <Menu position="bottom-start" withinPortal>
+        <Menu position="bottom-start" withinPortal opened={opened} onChange={onChange}>
             <Menu.Target>
                 <UnstyledButton
                     aria-label={`${domainProfiles[active].label}. Change room`}
                     mih={44}
-                    style={{ display: "flex", alignItems: "center" }}
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        userSelect: "none",
+                        WebkitUserSelect: "none",
+                        WebkitTouchCallout: "none",
+                    }}
+                    onPointerDown={() => {
+                        if (hidden.length === 0) return;
+                        swallowClick.current = false;
+                        stopTimer(press);
+                        press.current = window.setTimeout(() => {
+                            press.current = null;
+                            // The click that ends the press would toggle the menu shut again.
+                            // Swallowed once, and only for a moment, so a press that ends with
+                            // no click (the finger slid off) cannot eat a later close.
+                            swallowClick.current = true;
+                            window.setTimeout(() => (swallowClick.current = false), 600);
+                            setOpened(true);
+                            setRevealed(true);
+                        }, LONG_PRESS_MS);
+                    }}
+                    onPointerUp={() => stopTimer(press)}
+                    onPointerLeave={() => stopTimer(press)}
+                    onPointerCancel={() => stopTimer(press)}
+                    // A held finger otherwise brings up the browser's own menu.
+                    onContextMenu={(event) => {
+                        if (hidden.length > 0) event.preventDefault();
+                    }}
                 >
                     <Group gap={4} wrap="nowrap">
                         {/* `ps-room-name`: each room may sign its own name (globals.scss). */}
@@ -51,17 +114,35 @@ export const DomainSwitcher: React.FC = () => {
                     </Group>
                 </UnstyledButton>
             </Menu.Target>
-            <Menu.Dropdown>
-                {others.map((kind) => (
-                    <Menu.Item
-                        key={kind}
-                        mih={44}
-                        onClick={() => switchDomain(kind)}
-                        aria-label={domainProfiles[kind].guarded ? "Locked room" : undefined}
-                    >
-                        {itemLabel(kind)}
+            <Menu.Dropdown
+                onPointerEnter={(event) => {
+                    if (hidden.length === 0 || event.pointerType !== "mouse") return;
+                    stopTimer(dwell);
+                    dwell.current = window.setTimeout(() => setRevealed(true), DWELL_MS);
+                }}
+                onPointerLeave={() => {
+                    stopTimer(dwell);
+                    setRevealed(false);
+                }}
+            >
+                {listed.map((kind) => (
+                    <Menu.Item key={kind} mih={44} onClick={() => switchDomain(kind)}>
+                        {domainProfiles[kind].label}
                     </Menu.Item>
                 ))}
+                {revealed &&
+                    hidden.map((kind) => (
+                        <Menu.Item
+                            key={kind}
+                            mih={44}
+                            onClick={() => switchDomain(kind)}
+                            c="dimmed"
+                            fz="sm"
+                            style={{ animation: "ps-stair-in var(--ps-dur-signature) ease both" }}
+                        >
+                            {domainProfiles[kind].entrance}
+                        </Menu.Item>
+                    ))}
             </Menu.Dropdown>
         </Menu>
     );
