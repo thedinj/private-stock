@@ -20,6 +20,8 @@ let overlays: Record<string, OverlayRow[]> = {};
 let written: { userId: string; mediaId: string; overlay: UserOverlay }[] = [];
 let copiedTags = 0;
 let repointed = 0;
+let copiedMarks = 0;
+let markCopies: { from: string; to: string }[] = [];
 let changes: { entityId: string; detail?: string }[] = [];
 let reindexed: string[] = [];
 
@@ -41,7 +43,6 @@ const overlay = (userId: string, fields: Partial<UserOverlay>): OverlayRow => ({
     viewCount: 0,
     lastViewedAt: null,
     watchedAt: null,
-    reviewedAt: null,
     note: null,
     ...fields,
 });
@@ -58,6 +59,13 @@ vi.mock("@private-stock/db", () => ({
     },
     tagRepo: { copyAssignments: () => copiedTags },
     playlistRepo: { repointItems: () => repointed },
+    reviewPassRepo: {
+        copyMarks: (from: string, to: string) => {
+            markCopies.push({ from, to });
+
+            return copiedMarks;
+        },
+    },
     changeLogRepo: {
         record: (change: { entityId: string; detail?: string }) => changes.push(change),
     },
@@ -72,6 +80,8 @@ beforeEach(() => {
     written = [];
     copiedTags = 0;
     repointed = 0;
+    copiedMarks = 0;
+    markCopies = [];
     changes = [];
     reindexed = [];
 });
@@ -127,6 +137,7 @@ describe("merging a departing copy into the one that survives", () => {
             overlays: 0,
             tags: 0,
             playlists: 0,
+            reviewMarks: 0,
         });
         expect(changes).toEqual([]);
         expect(reindexed).toEqual([]);
@@ -140,6 +151,21 @@ describe("merging a departing copy into the one that survives", () => {
 
         expect(changes).toEqual([
             expect.objectContaining({ entityId: "b", detail: "merge:duplicate" }),
+        ]);
+    });
+
+    /**
+     * Each pass's mark comes across (§14d), every viewer's, and a merge that moved only marks
+     * is still news to an open grid filtered by them.
+     */
+    it("carries review marks to the heir and announces it", () => {
+        siblings = [candidate("b", 720), candidate("c", 1080)];
+        copiedMarks = 2;
+
+        expect(mergeIntoSurvivingCopy("a")).toMatchObject({ heirId: "c", reviewMarks: 2 });
+        expect(markCopies).toEqual([{ from: "a", to: "c" }]);
+        expect(changes).toEqual([
+            expect.objectContaining({ entityId: "c", detail: "merge:duplicate" }),
         ]);
     });
 

@@ -10,6 +10,7 @@ import {
     db,
     dupeRepo,
     playlistRepo,
+    reviewPassRepo,
     searchRepo,
     tagRepo,
     userMediaRepo,
@@ -45,6 +46,11 @@ export interface MergeOutcome {
     tags: number;
     /** Playlists in which the survivor took the departing copy's place. */
     playlists: number;
+    /**
+     * Review marks the survivor gained or had moved earlier (§14d): each pass's mark comes
+     * across with the earlier of the two dates, for the reason watched takes the earlier.
+     */
+    reviewMarks: number;
 }
 
 const overlayOf = (rows: OverlayRow[], userId: string): UserOverlay =>
@@ -94,8 +100,9 @@ export const mergeIntoSurvivingCopy = (mediaId: string): MergeOutcome | null => 
 
             const tags = tagRepo.copyAssignments(mediaId, heirId);
             const playlists = playlistRepo.repointItems(mediaId, heirId);
+            const reviewMarks = reviewPassRepo.copyMarks(mediaId, heirId);
 
-            if (overlays > 0 || tags > 0 || playlists > 0) {
+            if (overlays > 0 || tags > 0 || playlists > 0 || reviewMarks > 0) {
                 // In the same transaction as the change it describes (§13b): the heir's tile now
                 // carries a rating and tags it did not have, and an open grid has no other way to
                 // learn that.
@@ -107,7 +114,7 @@ export const mergeIntoSurvivingCopy = (mediaId: string): MergeOutcome | null => 
                 });
             }
 
-            return { heirId, overlays, tags, playlists };
+            return { heirId, overlays, tags, playlists, reviewMarks };
         })
         .immediate();
 

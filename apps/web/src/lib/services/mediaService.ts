@@ -36,6 +36,7 @@ import {
     mediaTextRepo,
     read,
     reelRepo,
+    reviewPassRepo,
     runNow,
     runOffThread,
     stageRepo,
@@ -467,7 +468,8 @@ export const getMediaDetail = (mediaId: string, auth: AuthContext): MediaDetail 
         frames: listFrames(mediaId, auth),
         clips: listClipsFor(mediaId, auth),
         hidden: row.hidden === 1,
-        reviewedAt: row.reviewedAt,
+        // The viewer's own passes, never anybody else's (§14d).
+        reviews: reviewPassRepo.marksFor(auth.userId, mediaId),
         // This viewer's own, straight off the overlay join -- never the shared filter
         // owner's, even when the list that led here was resolved as somebody else (§6).
         note: row.note,
