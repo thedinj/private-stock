@@ -7812,6 +7812,43 @@ reader's, which of their reels would be shortened, and that purging is when it h
 reels can be named because of the owner invariant; everybody else's clips are a bare count, since
 a count of spans discloses nothing and destroying work with no notice at all is the worse failure.
 
+### Reviewing recordings for a reel
+
+The Game Room's main work (2026-11-08): hundreds of short recordings, each saved after a moment,
+gone through in sittings at a keyboard, each yielding a clip or nothing. Reels are cut later by
+period or by a tag set by hand. Nothing here is a mode or a page; it is the item page walking a
+filtered set, with four additions.
+
+- **Reviewed is its own mark** (`UserMedia.reviewedAt`), set only by hand. Watched cannot be it:
+  watched is thirty seconds of playback (§14b), and a recording opened ten seconds before its end
+  never gets there. "I have been through this" is also a different fact from "I have seen it",
+  and a recording that yields nothing still has to leave the backlog. A filter of the viewer's
+  own, three-state, like watched; carried across a duplicate merge as the earlier of the two.
+  The backlog is the library at **Not reviewed**, oldest first, and the Game Room's sidebar
+  links straight to it as "To review" (§21).
+- **`d` is done-and-next.** It marks the item and steps to the next in one keystroke, reading the
+  next id *before* the write, since the item leaves a Not reviewed set as the mark lands. The
+  viewer already holds its set across that (§14b, as it does for rating inside "Unrated only"),
+  and the page the walk stands on keeps being refetched with the remaining items at its head, so
+  a shrinking backlog is walked without skipping. Nothing waits for the write; a failure is said
+  over whatever is on screen by then, naming "the last item". A held key does not repeat it, and
+  the Reviewed button on the row is the way back.
+- **A clip from the keyboard.** When `]` closes a span the clip bar's tag box takes the keys: a tag
+  and Enter adds it, Enter on the empty box saves, Escape hands the keys back to the player with
+  the span kept. Clip tags still start empty for every span: one clip per recording means
+  carrying them over would buy nothing.
+- **Into a reel as it is saved.** "Into reel" on the clip bar names a reel of your own, remembered
+  per room in the browser. The clip and its `ReelItem` are one transaction, so a reel that refuses
+  it — somebody else's, or full — leaves no clip behind.
+
+A reel by period is assembled on /clips: **Added**, a date range over the clip's *video's* date
+added (both ends inclusive, in the stored UTC days), with Clip has for the theme, then **Select
+all N matching** — the browser's own query as ids (`GET /api/clips/ids`), capped at one reel's
+200, since that is all a selection that size is for.
+
+**Not built:** the game as a tag. There is one game for now; when there are more, a folder rule
+per library is the likely shape, and the Game facet is already there to receive it.
+
 ### A limit worth stating
 
 Invalidation is per browser. Retiming a clip corrects the editor's own caches; another viewer
@@ -9777,6 +9814,10 @@ say "yes I have seen this" is the failure that matters.
 So: **an explicit `watchedAt` on `UserMedia`**, set automatically by the rule above and
 toggleable by hand. It survives a rewatch, and it is filterable, which is the point — the
 companion to "unrated only" is "unwatched only".
+
+**Reviewed is not watched.** `reviewedAt` is the explicit "done deciding about this one" a
+pass over a backlog leaves behind — the `d` key — and is filtered beside watched (§14d
+"Reviewing recordings for a reel").
 
 ### Nothing is resumed across visits
 
@@ -11976,6 +12017,28 @@ The sweep does not know rooms: it still offers each item a stage its room skips,
 worker settles it `skipped` without reading anything. Filtering by room in the sweep's query would
 add a join to the one query §20 tuned hardest, to save one cheap job per item. Until each is
 settled, the Processing page's waiting count includes them.
+
+### Where a room looks first
+
+A Game Room recording is about thirty seconds, saved by hand *after* the moment it was saved for,
+so the moment is at its end and the first twenty seconds are run-up. The profile says so as
+`tailMs` (10 s in the Game Room, null elsewhere), and three things follow it:
+
+- **The viewer opens there** (`tailStartMs`, `openingTarget`'s `roomStartMs`), unless the address
+  names a moment or the item was left part way this visit. The warmed next item buffers the same
+  point (§8b), or warming would warm the run-up nobody is shown.
+- **The tasting and showcase** draw their taste from the tail (`pickRoomSegment`), not from a
+  random point inside the trimmed middle.
+- **The hover preview** is cut from it: the worker asks the item's room, and the six samples run
+  evenly through the last ten seconds, the final one ending at the end of the file. Introduced by
+  a data migration that marks only the Game Room's existing preview outcomes stale. A recipe
+  version bump would have re-rendered every preview in every room for a change that is not about
+  the Cellar.
+
+A fact about the content, like `skipsStages`, so it is in the profile and not a setting. The
+profile's `reviewPass` is the other half of the same observation: the Game Room is worked
+through as a backlog, so its sidebar offers "To review" (§14d "Reviewing recordings for a
+reel").
 
 ### A look per room
 
