@@ -2,12 +2,13 @@ import { describeRange, parseLookFrame } from "@private-stock/core";
 
 import {
     MEASURE_LABELS,
+    describeDateFilter,
     describeGroup,
     describeRating,
     describeRule,
     type FilterNames,
 } from "./filterWords";
-import { MEASURES, type LibraryView, type Measure } from "./libraryQuery";
+import { DATE_AXES, MEASURES, NO_DATES, type LibraryView, type Measure } from "./libraryQuery";
 import { normalizeTagLogic } from "./tagLogic";
 import { formatTimecode } from "./timecode";
 
@@ -192,6 +193,27 @@ export const activeFilters = (
                 // control to go back to.
                 label: `${name}: ${described}`,
                 clear: withMeasureCleared(measure),
+            });
+        }
+    }
+
+    /**
+     * One chip per date, not one per end, for the reason the rating band has one: "since the
+     * 1st" and "until the 15th" are one thought, and the chip says it as one -- "Captured 1–15
+     * Oct 2025".
+     */
+    for (const axis of DATE_AXES) {
+        const label = describeDateFilter(axis, view.dates[axis]);
+
+        if (label) {
+            filters.push({
+                id: `date:${axis}`,
+                label,
+                clear: (current) => ({
+                    ...current,
+                    dates: { ...current.dates, [axis]: NO_DATES[axis] },
+                    page: 0,
+                }),
             });
         }
     }

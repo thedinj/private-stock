@@ -1155,6 +1155,7 @@ const buildFilters = (
     }
 
     appendMeasureFilters(query, where, params);
+    appendDateFilters(query, where, params);
 
     return { where, params, ratingAlias, source, driven };
 };
@@ -1339,6 +1340,46 @@ const appendMeasureFilters = (
 
     if (query.animated) {
         where.push(ANIMATED_SQL[query.animated]);
+    }
+};
+
+/** The date filters, by the column each one reads (§14e "Dates"). */
+const DATE_FILTERS: {
+    column: string;
+    from: "addedFrom" | "capturedFrom";
+    to: "addedTo" | "capturedTo";
+}[] = [
+    { column: `m."addedAt"`, from: "addedFrom", to: "addedTo" },
+    { column: `m."capturedAt"`, from: "capturedFrom", to: "capturedTo" },
+];
+
+/**
+ * When the item was added or captured, between two calendar days, both inclusive.
+ *
+ * Compared as text, as `/clips` compares its own `addedFrom`: both columns are written in UTC
+ * with the day first -- `addedAt` as `2026-10-31 18:00:00`, `capturedAt` as
+ * `2026-10-31T18:00:00.000Z` -- so a bare day sorts before every moment of itself, and the
+ * upper bound is "before the next day" rather than "at most this day", which would drop
+ * everything after midnight on the last one. Plain comparisons on the column, so the partial
+ * `idx_Media_list_addedAt` and `idx_Media_list_capturedAt` can serve them.
+ *
+ * An item with no captured date is NULL here and so matches no captured range, at either end.
+ */
+const appendDateFilters = (
+    query: MediaQuery,
+    where: string[],
+    params: Record<string, unknown>
+): void => {
+    for (const { column, from, to } of DATE_FILTERS) {
+        if (query[from]) {
+            where.push(`${column} >= :${from}`);
+            params[from] = query[from];
+        }
+
+        if (query[to]) {
+            where.push(`${column} < date(:${to}, '+1 day')`);
+            params[to] = query[to];
+        }
     }
 };
 

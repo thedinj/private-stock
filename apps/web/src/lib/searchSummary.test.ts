@@ -57,4 +57,12 @@ describe("the last search, in a few words", () => {
     it("counts the photos shelf as part of the search", () => {
         expect(summary("view=grid&kind=image")).toBe("Photos");
     });
+
+    // With the axis, unlike a measure: a day alone does not say which date it is.
+    it("says a date with what it is the date of", () => {
+        expect(summary("view=grid&addedFrom=2026-10-03")).toBe("Added since 3 Oct 2026");
+        expect(summary("view=grid&capturedFrom=2025-10-01&capturedTo=2025-10-15&tags=t1")).toBe(
+            "Alice +1"
+        );
+    });
 });

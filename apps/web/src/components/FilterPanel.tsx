@@ -28,11 +28,14 @@ import { facetParams, useFilterNames, useLibraryFacets, useTagNames } from "@/li
 import { useLibraryStats } from "@/lib/api/libraries";
 import { describeGroup } from "@/lib/filterWords";
 import {
+    DATE_AXES,
     MEASURES,
     clearFilters,
     fileFilterGroups,
     hasClearableFilters,
     hasLook,
+    isDateSet,
+    withDateRange,
     withMeasure,
     type FileFilterRow,
     type LibraryView,
@@ -62,6 +65,7 @@ import { FacetModal } from "@/components/library/FacetModal";
 import { ScopeLabel } from "@/components/tags/ScopeLabel";
 import { ChoiceFilter } from "@/components/library/ChoiceFilter";
 import { RangeFilter } from "@/components/library/RangeFilter";
+import { DateFilter } from "@/components/library/DateFilter";
 import { TriChip } from "@/components/library/TriChip";
 import { AdvancedFilterModal } from "@/components/library/AdvancedFilterModal";
 
@@ -255,6 +259,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         (view.watched ? 1 : 0) +
         (view.reviewed ? 1 : 0) +
         (view.minRating !== null || view.maxRating !== null ? 1 : 0);
+
+    const dateFilterCount = DATE_AXES.filter((axis) => isDateSet(view.dates[axis])).length;
 
     const fileFilterCount =
         MEASURES.filter(
@@ -633,6 +639,28 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                         }
                     />
                 </Group>
+            </Stack>
+
+            {/* Its own section rather than rows of "The file": when somebody added an item is
+                not a property of the file, and these two are not offered to the Advanced
+                editor's rules, which build from that section's rows (§14e "Dates"). Shares
+                the one-row-open state, so opening a date closes a measurement. */}
+            <SectionHeading label="Dates" count={dateFilterCount} />
+
+            <Stack gap={2}>
+                <DateFilter
+                    label="Date added"
+                    range={view.dates.added}
+                    onChange={(range) => onChange(withDateRange(view, "added", range))}
+                    {...rowProps("date:added")}
+                />
+                <DateFilter
+                    label="Date captured"
+                    hint="From the file's own metadata. Items that do not say when they were captured are left out."
+                    range={view.dates.captured}
+                    onChange={(range) => onChange(withDateRange(view, "captured", range))}
+                    {...rowProps("date:captured")}
+                />
             </Stack>
 
             <SectionHeading label="The file" count={fileFilterCount} />

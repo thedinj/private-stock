@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { clipSchema, spriteRectSchema } from "./clips.js";
+import { calendarDaySchema, clipSchema, spriteRectSchema } from "./clips.js";
 
 import { mediaKindSchema, sortDirectionSchema, type SortDirection } from "../domain.js";
 import { filterGroupsSchema, findsUntagged, type FilterGroup } from "./filterLogic.js";
@@ -279,6 +279,24 @@ export const mediaQuerySchema = z.object({
      * would make "stills only" return the entire film collection.
      */
     animated: z.enum(["yes", "no"]).optional(),
+
+    /**
+     * When the item was added and when it was captured, as calendar days inclusive at both ends
+     * (§14e "Dates").
+     *
+     * Either end may be absent: `addedFrom` alone is "on or after", `addedTo` alone "on or
+     * before", the two equal "on that day". Inclusive rather than half-open like the measures,
+     * because a day is what somebody names -- "added on the 3rd" has to hold the whole of the 3rd
+     * -- and nobody picks adjacent date bands that could double-count.
+     *
+     * Days in the stored clock, which is UTC for both columns, as `/clips` reads its own
+     * `addedFrom`. An item with no captured date matches no captured range: the camera did not
+     * say, and filing it under any day would be a guess.
+     */
+    addedFrom: calendarDaySchema.optional(),
+    addedTo: calendarDaySchema.optional(),
+    capturedFrom: calendarDaySchema.optional(),
+    capturedTo: calendarDaySchema.optional(),
 
     sort: mediaSortSchema.default("addedAt"),
     /**

@@ -1,7 +1,14 @@
 import { describeRange } from "@private-stock/core";
 
-import { MEASURE_LABELS, describeGroup, describeRating, type FilterNames } from "./filterWords";
 import {
+    MEASURE_LABELS,
+    describeDateFilter,
+    describeGroup,
+    describeRating,
+    type FilterNames,
+} from "./filterWords";
+import {
+    DATE_AXES,
     DEFAULT_VIEW,
     MEASURES,
     effectiveDirection,
@@ -73,6 +80,14 @@ const searchTerms = (view: LibraryView, names: SummaryNames): string[] => {
             view.measures[measure].max,
             unit
         );
+
+        if (described) terms.push(described);
+    }
+
+    // With its axis, unlike a measure: "since 3 Oct 2026" alone does not say whether it is when
+    // the file arrived or when it was shot.
+    for (const axis of DATE_AXES) {
+        const described = describeDateFilter(axis, view.dates[axis]);
 
         if (described) terms.push(described);
     }

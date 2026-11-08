@@ -12,6 +12,7 @@ import {
 } from "@private-stock/core";
 
 import { facetLabel, facetLabelPlural } from "./facetLabels";
+import type { DateAxis, DayRange } from "./libraryQuery";
 
 /**
  * A filter's rules and groups in words (§14e).
@@ -43,6 +44,68 @@ export const describeRating = (min: number | null, max: number | null): string =
         : min !== null
           ? `${min}+ stars`
           : `${max} stars or fewer`;
+
+/** What each date filter is called, at the front of its chip and on its row (§14e "Dates"). */
+const DATE_LABELS: Record<DateAxis, string> = {
+    added: "Added",
+    captured: "Captured",
+};
+
+/**
+ * Month names written out here rather than by `Intl`, so a chip reads the same on every device
+ * and in every test -- "3 Oct 2026", day first, which no locale setting can turn into 10/3.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const dayParts = (day: string): { year: string; month: string; date: number } => {
+    const [year = "", month = "", date = ""] = day.split("-");
+
+    return { year, month: MONTHS[Number(month) - 1] ?? month, date: Number(date) };
+};
+
+/**
+ * A date filter in words, or null when it is open at both ends: "since 3 Oct 2026", "until 3
+ * Oct 2026", "on 3 Oct 2026", "1–15 Oct 2025", "28 Sep – 3 Oct 2025".
+ *
+ * A range says its shared month and year once, as people write one. "Since" and "until" rather
+ * than "on or after" and "on or before": the chip has to be short, and the panel row it came
+ * from says that both ends are inclusive.
+ */
+export const describeDays = (range: DayRange): string | null => {
+    const { from, to } = range;
+
+    if (from === null && to === null) return null;
+
+    const whole = (day: string): string => {
+        const { year, month, date } = dayParts(day);
+
+        return `${date} ${month} ${year}`;
+    };
+
+    if (to === null) return `since ${whole(from as string)}`;
+    if (from === null) return `until ${whole(to)}`;
+    if (from === to) return `on ${whole(from)}`;
+
+    const start = dayParts(from);
+    const end = dayParts(to);
+
+    if (start.year === end.year && start.month === end.month) {
+        return `${start.date}–${end.date} ${end.month} ${end.year}`;
+    }
+
+    if (start.year === end.year) {
+        return `${start.date} ${start.month} – ${whole(to)}`;
+    }
+
+    return `${whole(from)} – ${whole(to)}`;
+};
+
+/** A date filter as its chip says it -- "Added since 3 Oct 2026" -- or null when it is unset. */
+export const describeDateFilter = (axis: DateAxis, range: DayRange): string | null => {
+    const days = describeDays(range);
+
+    return days === null ? null : `${DATE_LABELS[axis]} ${days}`;
+};
 
 /** How a filter names its tags and libraries; ids it cannot name are said to be unavailable. */
 export interface FilterNames {

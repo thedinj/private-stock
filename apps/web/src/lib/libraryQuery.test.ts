@@ -22,7 +22,9 @@ import {
     viewToSavedQuery,
     withLook,
     withSort,
+    withDateRange,
     type LibraryView,
+    NO_DATES,
     NO_MEASURES,
 } from "./libraryQuery";
 
@@ -56,6 +58,7 @@ describe("parseView", () => {
             new URLSearchParams(
                 "search=rain&kind=video&sort=title&tags=a,b&favorite=1&unrated=1" +
                     "&watched=no&reviewed=no&playback=blocked&minRating=3&view=gallery&notTags=c&mentions=e&lookText=neon" +
+                    "&addedFrom=2026-10-03&capturedFrom=2025-10-01&capturedTo=2025-10-15" +
                     `&groups=${encodeURIComponent(
                         JSON.stringify([
                             { match: "any", rules: [{ t: "unrated" }, { t: "tag", id: "d" }] },
@@ -97,6 +100,11 @@ describe("parseView", () => {
             measures: NO_MEASURES,
             orientation: null,
             animated: null,
+            // One end open is "on or after": no `addedTo` in the URL, so none here.
+            dates: {
+                added: { from: "2026-10-03", to: null },
+                captured: { from: "2025-10-01", to: "2025-10-15" },
+            },
             mode: "gallery",
             // Not in the URL, so this view did not come from a saved filter.
             filterId: null,
@@ -124,6 +132,14 @@ describe("parseView", () => {
             ["favorite=yes", { favorite: false }],
             ["tags=", { tags: [] }],
             ["tags=,,a,,", { tags: ["a"] }],
+            // A day the server would refuse is no filter, and ends written backwards are one
+            // range rather than an empty grid.
+            ["addedFrom=2026-02-30", { dates: NO_DATES }],
+            ["addedTo=yesterday", { dates: NO_DATES }],
+            [
+                "capturedFrom=2025-10-15&capturedTo=2025-10-01",
+                { dates: { ...NO_DATES, captured: { from: "2025-10-01", to: "2025-10-15" } } },
+            ],
         ];
 
         it.each(cases)("survives %j", (queryString, expected) => {
@@ -146,12 +162,24 @@ describe("viewToParams", () => {
             favorite: true,
             unrated: true,
             minRating: 4,
+            dates: {
+                added: { from: null, to: "2026-10-03" },
+                captured: { from: "2025-10-01", to: "2025-10-01" },
+            },
             mode: "gallery",
             page: 7,
             seed: 12_345,
         });
 
         expect(parseView(viewToParams(original))).toEqual(original);
+    });
+
+    it("writes a date as one readable pair per axis, either end optional", () => {
+        const params = viewToParams(
+            withDateRange(DEFAULT_VIEW, "added", { from: "2026-10-03", to: null })
+        );
+
+        expect(params.toString()).toBe("addedFrom=2026-10-03");
     });
 });
 
@@ -270,8 +298,11 @@ describe("isFiltered", () => {
         ["favorite", view({ favorite: true })],
         ["unrated", view({ unrated: true })],
         ["minRating", view({ minRating: 3 })],
+        ["a date added", withDateRange(view(), "added", { from: "2026-10-03", to: null })],
+        ["a date captured", withDateRange(view(), "captured", { from: null, to: "2025-10-15" })],
     ])("is true when %s narrows the library", (_label, filtered) => {
         expect(isFiltered(filtered)).toBe(true);
+        expect(isFiltered(clearFilters(filtered))).toBe(filtered.kind !== DEFAULT_VIEW.kind);
     });
 });
 
@@ -449,9 +480,15 @@ describe("saved filters", () => {
             tags: ["a", "b"],
             unrated: true,
             minRating: 3,
+            dates: {
+                added: { from: "2026-10-01", to: "2026-10-31" },
+                captured: { from: null, to: "2025-12-31" },
+            },
         });
 
         const reopened = openSavedFilter(original, "f1", viewToSavedQuery(original));
+
+        expect(reopened.dates).toEqual(original.dates);
 
         // Identical but for the marker saying which filter it came from.
         expect(viewToRequestParams(reopened).toString()).toBe(

@@ -251,8 +251,21 @@ export type TagMatch = z.infer<typeof tagMatchSchema>;
  * Flat lists rather than `FilterGroup`s: groups carry rating, measure and root rules that mean
  * nothing to a clip, and the "or its video" mode would leak into `MediaQuery`.
  */
-/** A calendar day as an `<input type="date">` gives it: `2026-10-31`. */
-const calendarDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-31");
+/**
+ * A calendar day as a date box gives it: `2026-10-31`. Shared with the library's date filters
+ * (`MediaQuery.addedFrom` and friends), so the two pages read a day the same way.
+ *
+ * A day that does not exist -- `2026-02-30` -- is refused rather than passed to SQLite, whose
+ * `date()` answers it with NULL and so would quietly match nothing.
+ */
+export const calendarDaySchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-31")
+    .refine((day) => {
+        const parsed = new Date(`${day}T00:00:00Z`);
+
+        return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day;
+    }, "Not a day on the calendar");
 
 const clipQueryShape = z.object({
     /** Free text over the label. */

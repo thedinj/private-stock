@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { bulkClipTagSchema, clipQuerySchema, createClipSchema } from "./clips.js";
+import {
+    bulkClipTagSchema,
+    calendarDaySchema,
+    clipQuerySchema,
+    createClipSchema,
+} from "./clips.js";
 
 /**
  * The clip tag contracts (§14d "Tagging clips"): the browser's two fields as the address spells
@@ -60,5 +65,20 @@ describe("a clip's facets", () => {
                 tags: [{ kind: "performer", name: "Mia", scope: "private" }],
             }).success
         ).toBe(false);
+    });
+});
+
+/** The day both /clips and the library's date filters read (§14e "Dates"). */
+describe("a calendar day", () => {
+    it("takes a day as the date control writes it", () => {
+        expect(calendarDaySchema.safeParse("2026-10-31").success).toBe(true);
+        expect(clipQuerySchema.parse({ addedFrom: "2026-10-01" }).addedFrom).toBe("2026-10-01");
+    });
+
+    it("refuses a day that is not on the calendar, or not a day at all", () => {
+        expect(calendarDaySchema.safeParse("2026-02-30").success).toBe(false);
+        expect(calendarDaySchema.safeParse("2026-13-01").success).toBe(false);
+        expect(calendarDaySchema.safeParse("31/10/2026").success).toBe(false);
+        expect(clipQuerySchema.safeParse({ addedTo: "2026-02-29" }).success).toBe(false);
     });
 });

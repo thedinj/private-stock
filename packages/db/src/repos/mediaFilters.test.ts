@@ -57,6 +57,10 @@ interface Fixture {
     fps?: number | null;
     sizeBytes?: number;
     animated?: boolean;
+    /** As SQLite's clock writes it: `2026-10-31 18:00:00`. */
+    addedAt?: string;
+    /** As the probe writes it: an ISO instant, or null when the file did not say. */
+    capturedAt?: string | null;
 }
 
 const givenMedia = (id: string, fields: Fixture = {}): string => {
@@ -64,8 +68,8 @@ const givenMedia = (id: string, fields: Fixture = {}): string => {
 
     db.prepare(
         `INSERT INTO "Media" ("id", "kind", "durationMs", "width", "height", "bitrate", "fps",
-                              "isAnimated", "addedAt", "updatedAt")
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+                              "isAnimated", "capturedAt", "addedAt", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)`
     ).run(
         id,
         fields.kind ?? "video",
@@ -74,7 +78,9 @@ const givenMedia = (id: string, fields: Fixture = {}): string => {
         fields.height === undefined ? 1080 : fields.height,
         fields.bitrate === undefined ? 5_000_000 : fields.bitrate,
         fields.fps === undefined ? 30 : fields.fps,
-        fields.animated ? 1 : null
+        fields.animated ? 1 : null,
+        fields.capturedAt ?? null,
+        fields.addedAt ?? null
     );
 
     db.prepare(
@@ -277,6 +283,68 @@ describe("ratings as a band", () => {
     it("includes both named ratings", () => {
         expect(matching({ minRating: 3, maxRating: 5 })).toEqual(["five", "three"]);
         expect(matching({ maxRating: 3 })).toEqual(["one", "three"]);
+    });
+});
+
+describe("dates", () => {
+    /**
+     * Both ends inclusive by calendar day: "added on the 3rd" holds the whole of the 3rd,
+     * whichever of the two clocks' spellings the column was written in.
+     */
+    beforeEach(() => {
+        givenMedia("before", {
+            addedAt: "2026-10-02 23:59:59",
+            capturedAt: "2025-09-30T23:59:59.000Z",
+        });
+        givenMedia("first", {
+            addedAt: "2026-10-03 00:00:00",
+            capturedAt: "2025-10-01T00:00:00.000Z",
+        });
+        givenMedia("last", {
+            addedAt: "2026-10-15 23:59:59",
+            capturedAt: "2025-10-15T23:59:59.000Z",
+        });
+        givenMedia("after", {
+            addedAt: "2026-10-16 00:00:00",
+            capturedAt: "2025-10-16T00:00:00.000Z",
+        });
+        givenMedia("undated", { addedAt: "2026-10-10 12:00:00", capturedAt: null });
+    });
+
+    it("includes both edge days of an added range", () => {
+        expect(matching({ addedFrom: "2026-10-03", addedTo: "2026-10-15" })).toEqual([
+            "first",
+            "last",
+            "undated",
+        ]);
+    });
+
+    it("reads one end alone as on or after, or on or before", () => {
+        expect(matching({ addedFrom: "2026-10-15" })).toEqual(["after", "last"]);
+        expect(matching({ addedTo: "2026-10-03" })).toEqual(["before", "first"]);
+    });
+
+    it("holds the whole of a single day", () => {
+        expect(matching({ addedFrom: "2026-10-15", addedTo: "2026-10-15" })).toEqual(["last"]);
+        expect(matching({ capturedFrom: "2025-10-01", capturedTo: "2025-10-01" })).toEqual([
+            "first",
+        ]);
+    });
+
+    it("includes both edge days of a captured range, written as ISO instants", () => {
+        expect(matching({ capturedFrom: "2025-10-01", capturedTo: "2025-10-15" })).toEqual([
+            "first",
+            "last",
+        ]);
+    });
+
+    it("leaves out an item with no captured date, at either end", () => {
+        expect(matching({ capturedFrom: "2000-01-01" })).not.toContain("undated");
+        expect(matching({ capturedTo: "2099-12-31" })).not.toContain("undated");
+    });
+
+    it("refuses a day that is not on the calendar", () => {
+        expect(() => matching({ addedFrom: "2026-02-30" })).toThrow();
     });
 });
 

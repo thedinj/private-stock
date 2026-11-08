@@ -4,6 +4,8 @@
 // two -- stars sat 13px high on a phone, the ground was Mantine's grey-brown rather than ours,
 // and nothing in development showed it.
 import "@mantine/core/styles.layer.css";
+// The date picker's calendar (`DateFilter`), in the same layer and for the same reason.
+import "@mantine/dates/styles.layer.css";
 import "./globals.scss";
 
 import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
