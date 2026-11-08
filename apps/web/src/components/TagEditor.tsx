@@ -1,11 +1,14 @@
 "use client";
 
-import { Badge, Group, Stack, Text } from "@mantine/core";
+import { useState } from "react";
+import { Badge, Box, Group, Stack, Text } from "@mantine/core";
 
 import { allowsPrivate, tagKinds, type MediaTag, type TagScope } from "@private-stock/core";
 
 import { useItemFacetTags } from "@/lib/api/itemTags";
 import { facetLabelPlural } from "@/lib/facetLabels";
+import { facetField, fieldKey, fieldTitle } from "@/lib/viewerKeys";
+import { KeyTip } from "@/components/KeyTip";
 import { SectionLabel } from "@/components/media/SectionLabel";
 import { ItemTagChip, type ItemMoment } from "@/components/tags/ItemTagChip";
 import { ScopeLabel } from "@/components/tags/ScopeLabel";
@@ -123,6 +126,42 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
     const who = scope === "public" ? contributors(shown) : [];
     const plural = facetLabelPlural(kind).toLowerCase();
 
+    /**
+     * The key that jumps here from anywhere on the viewer, and the way back out (§14 "Hotkeys").
+     *
+     * The page finds the box by `data-viewer-field`, so the key needs no ref threaded down
+     * through the sections. Escape on a half-typed name clears it -- a blur would add it, since
+     * the box accepts what was typed when it loses focus -- and Escape on an empty box leaves,
+     * which hands the keys back to the player: they listen on the document, so nothing has to
+     * take focus for `d` to work again.
+     */
+    const field = facetField(kind, scope);
+    const [search, setSearch] = useState("");
+
+    const onEscape = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Escape" || !(event.target instanceof HTMLInputElement)) return;
+
+        event.preventDefault();
+
+        if (search !== "") setSearch("");
+        else event.target.blur();
+    };
+
+    const input = (
+        <TagNameInput
+            kind={kind}
+            scope={scope}
+            value={[]}
+            exclude={chips.map((chip) => chip.name)}
+            placeholder={scope === "public" ? `Add ${plural}…` : `Add private ${plural}…`}
+            onChange={(next) => next.forEach(add)}
+            searchValue={search}
+            onSearchChange={setSearch}
+            error={error ?? undefined}
+            data-viewer-field={field ?? undefined}
+        />
+    );
+
     return (
         <Stack gap={4}>
             <Group
@@ -158,15 +197,16 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
                 Box first, chips under it. With the chips above, every box sat as low as its
                 facet had rows of chips -- out of line with its neighbours -- and the first chip
                 pushed the box being typed in down under the caret. */}
-            <TagNameInput
-                kind={kind}
-                scope={scope}
-                value={[]}
-                exclude={chips.map((chip) => chip.name)}
-                placeholder={scope === "public" ? `Add ${plural}…` : `Add private ${plural}…`}
-                onChange={(next) => next.forEach(add)}
-                error={error ?? undefined}
-            />
+            {field ? (
+                <KeyTip
+                    label={`${fieldTitle(field, facetLabelPlural)}, from anywhere on the page. Esc to leave`}
+                    keys={fieldKey(field)}
+                >
+                    <Box onKeyDownCapture={onEscape}>{input}</Box>
+                </KeyTip>
+            ) : (
+                input
+            )}
 
             {/* Those with a picture as cards, the rest as chips under them (§6 "A tag's
                 picture"): one row of each, rather than chips standing beside cards four times
