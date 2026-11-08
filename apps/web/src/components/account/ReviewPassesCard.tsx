@@ -139,14 +139,21 @@ export const ReviewPassesCard: React.FC = () => {
         <Card p="md">
             <Stack gap="md">
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
-                    <Stack gap={2}>
+                    {/* The text takes what is left; the button keeps its own width, or the
+                        nowrap row squeezed it until its caption no longer fit. */}
+                    <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                         <Title order={4}>Review passes</Title>
                         <Text size="sm" c="dimmed">
                             What you go through items for, one room at a time. New ones start from
                             an item&apos;s Review menu.
                         </Text>
                     </Stack>
-                    <Button variant="default" onClick={() => setOpen((current) => !current)}>
+                    <Button
+                        variant="default"
+                        style={{ flexShrink: 0 }}
+                        aria-expanded={open}
+                        onClick={() => setOpen((current) => !current)}
+                    >
                         {open ? "Hide" : "Show"}
                     </Button>
                 </Group>
