@@ -138,7 +138,10 @@ export const DomainSwitcher: React.FC = () => {
                     stopTimer(dwell);
                     dwell.current = window.setTimeout(() => setRevealed(true), DWELL_MS);
                 }}
-                onPointerLeave={() => {
+                onPointerLeave={(event) => {
+                    // A finger "leaves" the instant it lifts, before the click that follows. Hiding
+                    // the line then would take the stair away from under the tap meant for it.
+                    if (event.pointerType !== "mouse") return;
                     stopTimer(dwell);
                     setRevealed(false);
                 }}
