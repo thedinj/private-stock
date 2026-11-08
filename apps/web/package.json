@@ -16,6 +16,7 @@
     },
     "dependencies": {
         "@mantine/core": "^7.15.3",
+        "@mantine/dates": "^7.17.8",
         "@mantine/form": "^7.15.3",
         "@mantine/hooks": "^7.15.3",
         "@mantine/spotlight": "^7.15.3",
@@ -25,6 +26,7 @@
         "@tanstack/react-virtual": "^3.11.2",
         "bcryptjs": "^2.4.3",
         "better-sqlite3": "^11.8.1",
+        "dayjs": "^1.11.23",
         "hls.js": "^1.5.20",
         "jsonwebtoken": "^9.0.2",
         "next": "^15.1.6",

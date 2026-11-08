@@ -1,4 +1,5 @@
 import {
+    calendarDaySchema,
     filterGroupsSchema,
     mediaQuerySchema,
     mediaSortSchema,
@@ -131,6 +132,12 @@ export interface LibraryView {
     orientation: Orientation | null;
     /** Moving stills, still stills, or don't care. Images only. */
     animated: "yes" | "no" | null;
+    /**
+     * When the item was added and when it was captured, as calendar days inclusive at both ends
+     * (§14e "Dates"). Either end may be null: `from` alone is "on or after", `to` alone "on or
+     * before", the two equal "on that day".
+     */
+    dates: DateRanges;
     mode: LibraryMode;
     /**
      * The saved filter this view came from, or null (§14b).
@@ -172,6 +179,60 @@ export type Measure = (typeof MEASURES)[number];
 export type MeasureRanges = Record<Measure, { min: number | null; max: number | null }>;
 
 export type Orientation = "landscape" | "portrait" | "square";
+
+/**
+ * The two dates the library can be filtered by (§14e "Dates"): when the item was added and when
+ * the file says it was captured. A record like `MEASURES`, for the same reason -- each is
+ * parsed, written, cleared and saved identically.
+ */
+export const DATE_AXES = ["added", "captured"] as const;
+export type DateAxis = (typeof DATE_AXES)[number];
+
+/** `YYYY-MM-DD` at either end, or null for open. */
+export type DayRange = { from: string | null; to: string | null };
+type DateRanges = Record<DateAxis, DayRange>;
+
+export const NO_DATES: DateRanges = {
+    added: { from: null, to: null },
+    captured: { from: null, to: null },
+};
+
+/**
+ * The query parameter each end is written as: `addedFrom`, `capturedTo`. The query's own names,
+ * so a saved filter copies them across without a mapping.
+ */
+const dateParam = (
+    axis: DateAxis,
+    end: "from" | "to"
+): "addedFrom" | "addedTo" | "capturedFrom" | "capturedTo" =>
+    `${axis}${end === "from" ? "From" : "To"}`;
+
+/**
+ * One date filter from an address. A day the server would refuse is dropped, as a nonsense
+ * bound is; ends given the wrong way round are put the right way, since "between the 15th and
+ * the 1st" can only have meant the one range.
+ */
+const parseDayRange = (params: URLSearchParams, axis: DateAxis): DayRange => {
+    const day = (end: "from" | "to"): string | null => {
+        const raw = params.get(dateParam(axis, end));
+
+        return raw !== null && calendarDaySchema.safeParse(raw).success ? raw : null;
+    };
+    const from = day("from");
+    const to = day("to");
+
+    return from !== null && to !== null && from > to ? { from: to, to: from } : { from, to };
+};
+
+/** Whether a date filter narrows anything. */
+export const isDateSet = (range: DayRange): boolean => range.from !== null || range.to !== null;
+
+/** The view with one date filter set or cleared, back on the first page. */
+export const withDateRange = (view: LibraryView, axis: DateAxis, range: DayRange): LibraryView => ({
+    ...view,
+    dates: { ...view.dates, [axis]: range },
+    page: 0,
+});
 
 /** Every axis unbounded -- what "no measurement filter" looks like. */
 export const NO_MEASURES: MeasureRanges = {
@@ -232,6 +293,7 @@ export const DEFAULT_VIEW: LibraryView = {
     measures: NO_MEASURES,
     orientation: null,
     animated: null,
+    dates: NO_DATES,
     mode: "room",
     filterId: null,
     page: 0,
@@ -332,6 +394,10 @@ export const parseView = (params: URLSearchParams): LibraryView => {
                 : params.get("animated") === "no"
                   ? "no"
                   : null,
+        dates: {
+            added: parseDayRange(params, "added"),
+            captured: parseDayRange(params, "captured"),
+        },
         mode: isMode(rawMode) ? rawMode : defaultMode(root),
         filterId: params.get("filter") || null,
         page: Math.max(0, Number(params.get("page")) || 0),
@@ -395,6 +461,14 @@ export const viewToParams = (view: LibraryView): URLSearchParams => {
 
     if (view.orientation) params.set("orientation", view.orientation);
     if (view.animated) params.set("animated", view.animated);
+
+    for (const axis of DATE_AXES) {
+        const { from, to } = view.dates[axis];
+
+        if (from !== null) params.set(dateParam(axis, "from"), from);
+        if (to !== null) params.set(dateParam(axis, "to"), to);
+    }
+
     // Omitted when it is where this address would land anyway, so the room stays `/` and a
     // library stays `/?root=abc`.
     if (view.mode !== defaultMode(view.root)) params.set("view", view.mode);
@@ -504,6 +578,7 @@ export const isFiltered = (view: LibraryView): boolean =>
     view.maxRating !== null ||
     view.orientation !== null ||
     view.animated !== null ||
+    DATE_AXES.some((axis) => isDateSet(view.dates[axis])) ||
     MEASURES.some(
         (measure) => view.measures[measure].min !== null || view.measures[measure].max !== null
     );
@@ -641,6 +716,7 @@ export const clearFilters = (view: LibraryView): LibraryView => ({
     measures: NO_MEASURES,
     orientation: null,
     animated: null,
+    dates: NO_DATES,
     page: 0,
 });
 
@@ -821,6 +897,15 @@ export const savedQueryToParams = (query: SavedQuery): URLSearchParams => {
 
     if (query.orientation) params.set("orientation", query.orientation);
     if (query.animated) params.set("animated", query.animated);
+
+    for (const axis of DATE_AXES) {
+        for (const end of ["from", "to"] as const) {
+            const value = query[dateParam(axis, end)];
+
+            if (value) params.set(dateParam(axis, end), value);
+        }
+    }
+
     // `query.seed` is not copied: filters saved before the seed was dropped still carry one,
     // and opening them should deal a new shuffle like any other (`queryParams`).
 
@@ -872,6 +957,7 @@ const paramsToViewFields = (params: URLSearchParams): Partial<LibraryView> => {
         measures: parsed.measures,
         orientation: parsed.orientation,
         animated: parsed.animated,
+        dates: parsed.dates,
         seed: parsed.seed,
     };
 };

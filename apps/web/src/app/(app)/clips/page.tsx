@@ -19,6 +19,7 @@ import {
 
 import {
     REEL_ITEM_LIMIT,
+    calendarDaySchema,
     clipNaturalDirection,
     clipSorts,
     type Clip,
@@ -32,6 +33,7 @@ import { FlipWall } from "@/components/FlipWall";
 import { ClipCard } from "@/components/media/ClipCard";
 import { ClipTagFilter, type ClipTagFilterValue } from "@/components/media/ClipTagFilter";
 import { ClipViewer } from "@/components/media/ClipViewer";
+import { DateFilterButton } from "@/components/library/DateFilter";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
@@ -114,8 +116,9 @@ const clipsView = defineView("/clips", {
     page: pageField(),
 });
 
-/** A whole calendar day, as a date box gives it. Anything else in the address is no filter. */
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A whole calendar day, as the server reads one. Anything else in the address is no filter. */
+const day = (value: string): string | null =>
+    calendarDaySchema.safeParse(value).success ? value : null;
 
 /** An empty list is no filter, and stays out of the request and its cache key. */
 const ids = (list: string[]): string[] | undefined => (list.length > 0 ? list : undefined);
@@ -180,8 +183,8 @@ const ClipsPage: React.FC = () => {
         clipNotTags: ids(view.clipNotTags),
         clipMatch: view.clipTags.length > 1 ? view.clipMatch : undefined,
         orVideo: ids(view.orVideo),
-        addedFrom: DAY.test(view.addedFrom) ? view.addedFrom : undefined,
-        addedTo: DAY.test(view.addedTo) ? view.addedTo : undefined,
+        addedFrom: day(view.addedFrom) ?? undefined,
+        addedTo: day(view.addedTo) ?? undefined,
         page,
     };
     const { data, isLoading, isPlaceholderData, error, refetch } = useClips(clipQuery);
@@ -375,37 +378,20 @@ const ClipsPage: React.FC = () => {
                             onChange={(patch) => apply({ ...patch, page: 0 })}
                         />
                         {/* When the clip's video was added, both ends inclusive: a reel by period
-                            (§14d "Reviewing recordings for a reel"). The browser's own date box. */}
-                        <Group gap={4} wrap="nowrap">
-                            <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                                Added
-                            </Text>
-                            <TextInput
-                                type="date"
-                                size="sm"
-                                w={150}
-                                value={view.addedFrom}
-                                max={view.addedTo || undefined}
-                                onChange={(event) =>
-                                    apply({ addedFrom: event.currentTarget.value, page: 0 })
-                                }
-                                aria-label="Video added on or after"
-                            />
-                            <Text size="sm" c="dimmed">
-                                –
-                            </Text>
-                            <TextInput
-                                type="date"
-                                size="sm"
-                                w={150}
-                                value={view.addedTo}
-                                min={view.addedFrom || undefined}
-                                onChange={(event) =>
-                                    apply({ addedTo: event.currentTarget.value, page: 0 })
-                                }
-                                aria-label="Video added on or before"
-                            />
-                        </Group>
+                            (§14d "Reviewing recordings for a reel"). The library's own date
+                            control, so the two pages ask the question the same way. */}
+                        <DateFilterButton
+                            axis="added"
+                            label="Added"
+                            range={{ from: day(view.addedFrom), to: day(view.addedTo) }}
+                            onChange={(range) =>
+                                apply({
+                                    addedFrom: range.from ?? "",
+                                    addedTo: range.to ?? "",
+                                    page: 0,
+                                })
+                            }
+                        />
                         {/* A choice between two layouts, shown as the two of them. It was a button
                             labelled with the state it was *not* in, which reads as the state it
                             is in -- the switch-says-what-it-does trap `PlaylistDetail` records. */}

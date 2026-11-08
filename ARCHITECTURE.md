@@ -7842,9 +7842,9 @@ filtered set, with four additions.
   it — somebody else's, or full — leaves no clip behind.
 
 A reel by period is assembled on /clips: **Added**, a date range over the clip's *video's* date
-added (both ends inclusive, in the stored UTC days), with Clip has for the theme, then **Select
-all N matching** — the browser's own query as ids (`GET /api/clips/ids`), capped at one reel's
-200, since that is all a selection that size is for.
+added (both ends inclusive, in the stored UTC days; the library's date control, §14e "Dates"),
+with Clip has for the theme, then **Select all N matching** — the browser's own query as ids
+(`GET /api/clips/ids`), capped at one reel's 200, since that is all a selection that size is for.
 
 **Not built:** the game as a tag. There is one game for now; when there are more, a folder rule
 per library is the likely shape, and the Game facet is already there to receive it.
@@ -9966,7 +9966,7 @@ made, and undoing one filter is not a licence to undo another.
 
 ### Three sections, because they behave differently
 
-The panel divides into **Your marks**, **The file** and **Tags**, and the division is not
+The panel divides into **Your marks**, **Dates**, **The file** and **Tags**, and the division is not
 decoration. The first resolves against whoever is looking and travels differently in a shared
 filter (§6); the second is a fact about the file and reads the same for everybody; the third is
 a vocabulary that grows. A single column of switches makes three unlike things look like one.
@@ -10026,6 +10026,56 @@ Orientation and movement are rows like the rest. They are not measurements — t
 question, and two rows drawn differently in one section would suggest a difference in behaviour
 that does not exist. `FilterRow` is the shape they share; `ChoiceFilter` and `RangeFilter` are
 what goes inside it.
+
+### Dates
+
+**Date added** and **Date captured** are their own section of two rows, shaped like every other
+row (`FilterRow`, closed, sharing the one-open-at-a-time state) but not rows of "The file": when
+somebody added an item is not a property of the file, and The file's rows are also the subjects
+the Advanced editor builds rules from, which dates are not (yet).
+
+**The address holds a pair; the control offers a comparison.** Each date is `from` and `to` —
+`?addedFrom=2026-10-03`, `?capturedFrom=2025-10-01&capturedTo=2025-10-15` — either end optional,
+both inclusive, by calendar day. The names are `MediaQuery`'s own, so a saved filter copies them
+without a mapping and round-trips them like the measures. Nobody thinks in pairs, though, so the
+open row asks *Since / Until / Between / On* first and each word sets the pair: Since fills
+`from`, Until fills `to`, On fills both with one day. Switching keeps the day already picked, and
+a range is applied only once both ends are, so its first click does not refetch the library for
+a "since" nobody meant. A set filter shows its own comparison whatever was last clicked, so a
+view opened from a saved filter or the back button reads correctly.
+
+**Inclusive, unlike the measures.** The measures are half-open so adjacent bands do not
+double-count; a date is something somebody names, and "added on the 3rd" has to hold the whole
+of the 3rd. The SQL is `/clips`' — `>= :from` and `< date(:to, '+1 day')` — compared as text,
+which works for both columns' spellings (`addedAt` is SQLite's `2026-10-31 18:00:00`,
+`capturedAt` the probe's ISO instant) because a bare day sorts before every moment of itself.
+Plain comparisons on the column, so `idx_Media_list_addedAt` and `idx_Media_list_capturedAt` can
+serve them. Days are the stored clock's, UTC, as on /clips.
+
+**No captured date, no match.** Many files say nothing, and the probe discards a camera's dead
+clock as noise. Such an item's `capturedAt` is NULL and matches no captured range at either end —
+filing it under any day would be a guess — and the row says so.
+
+**`calendarDaySchema` is shared with /clips** and refuses a day that does not exist
+(`2026-02-30`), which SQLite's `date()` would otherwise answer with NULL and so match nothing.
+The address parser drops such a day as it drops a nonsense bound, and puts ends written backwards
+the right way round.
+
+**Chips** say it as a sentence, one chip per date: "Added since 3 Oct 2026", "Added until …",
+"Added on …", "Captured 1–15 Oct 2025", "Captured 28 Sep – 3 Oct 2025". Month names are written
+out rather than taken from `Intl`, so no locale turns a chip into 10/3. The sidebar's "Last
+search" keeps the axis word for a date, unlike a measure: "since 3 Oct" alone does not say which
+date.
+
+**Mantine's picker (`@mantine/dates`), not the browser's date box.** The native box draws its
+calendar in the operating system's colours — white on Windows whatever the room — and reads its
+text in the device's locale. `DatePickerInput` draws in the theme's accent and surfaces and reads
+"3 Oct 2026" everywhere. /clips' **Added** uses the same control behind a toolbar button
+(`DateFilterButton`), so the two pages ask the question the same way.
+
+**No "last 30 days".** A relative preset would be written into the address as the days it meant
+when pressed, and a saved view made from it would then mean those days for ever — "recently
+added" quietly going stale. A relative filter needs a field of its own; nothing has asked for one.
 
 ### The cellar's header
 
@@ -10351,8 +10401,6 @@ Proposed and left alone, with the reason:
 - **Codec, container, audio channels** — real, and a facet rather than a range. They are closed
   vocabularies with a handful of values, so they belong in the tag panel's shape (counted
   chips) rather than as a sixth number control.
-- **Date added / date captured ranges** — obviously useful and the only one here that needs a
-  control this pattern does not already have. A date picker is not a band chip.
 - **Aspect ratio** — orientation covers the question people actually ask; an exact ratio needs a
   tolerance, and a tolerance is a rule nobody can see.
 - **"Not measured"** — the hole named above. Needs `IS NULL`, which the range shape cannot say.
