@@ -503,7 +503,6 @@ const needsUserJoin = (query: MediaQuery): boolean =>
     // The viewer's own row, like `watched`, so here rather than in `readsRatingRow`.
     query.sort === "lastViewed" ||
     query.watched !== undefined ||
-    query.reviewed !== undefined ||
     groupsReadUserMedia(query.groups);
 
 const OVERLAY_JOIN = `
@@ -953,12 +952,26 @@ const buildFilters = (
         where.push(`um."watchedAt" IS NULL`);
     }
 
-    // Reviewed likewise (§14d): one viewer's decisions, never a shared filter owner's.
-    if (query.reviewed === "yes") {
-        where.push(`um."reviewedAt" IS NOT NULL`);
-    } else if (query.reviewed === "no") {
-        where.push(`um."reviewedAt" IS NULL`);
-    }
+    /**
+     * Review passes likewise (§14d): one viewer's decisions, never a shared filter owner's.
+     *
+     * Against the mark's primary key, and scoped to the viewer through the pass, so a pass id
+     * that is not theirs -- in somebody else's shared view -- has marked nothing for them:
+     * "reviewed for" it matches nothing and "not yet" everything. No `UserMedia` row is read.
+     */
+    const reviewMark = (param: string): string =>
+        `EXISTS (SELECT 1 FROM "ReviewMark" rm JOIN "ReviewPass" rp ON rp."id" = rm."passId"
+                  WHERE rm."passId" = :${param} AND rm."mediaId" = m."id"
+                    AND rp."ownerId" = :userId)`;
+
+    (query.reviewedFor ?? []).forEach((passId, i) => {
+        params[`reviewedFor${i}`] = passId;
+        where.push(reviewMark(`reviewedFor${i}`));
+    });
+    (query.notReviewedFor ?? []).forEach((passId, i) => {
+        params[`notReviewedFor${i}`] = passId;
+        where.push(`NOT ${reviewMark(`notReviewedFor${i}`)}`);
+    });
 
     if (rootIds.length === 0) {
         // No accessible roots must return nothing, not everything.
@@ -1889,8 +1902,6 @@ export interface MediaDetailRow extends MediaListRow {
     hidden: number | null;
     /** When this viewer finished with the item, or null (§14b). */
     watchedAt: string | null;
-    /** When this viewer finished deciding about the item, or null (§14d). */
-    reviewedAt: string | null;
     /**
      * This viewer's private note, or null (§6, §14b).
      *
@@ -1929,8 +1940,7 @@ export const findDetail = (
                     ${COVER_SELECTION},
                     spriteVtt."relPath" AS "spriteVttPath",
                     spriteVtt."generatedAt" AS "spriteVttGeneratedAt",
-                    um."rating", um."favorite", um."hidden", um."watchedAt",
-                    um."reviewedAt", um."note"
+                    um."rating", um."favorite", um."hidden", um."watchedAt", um."note"
              ${BASE_FROM}
              ${ORIGINAL_FILE_JOIN}
              JOIN "MediaRoot" r ON r."id" = f."rootId"

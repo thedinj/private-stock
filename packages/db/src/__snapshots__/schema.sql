@@ -903,6 +903,26 @@ CREATE TABLE "RefreshToken" (
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE
         );
 
+CREATE TABLE "ReviewMark" (
+            "passId" TEXT NOT NULL,
+            "mediaId" TEXT NOT NULL,
+            "reviewedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY ("passId", "mediaId"),
+            FOREIGN KEY ("passId") REFERENCES "ReviewPass" ("id") ON DELETE CASCADE,
+            FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE
+        );
+
+CREATE TABLE "ReviewPass" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL CHECK(length("domain") BETWEEN 1 AND 32),
+            "name" TEXT NOT NULL COLLATE NOCASE CHECK(length("name") BETWEEN 1 AND 60),
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" DATETIME NOT NULL,
+            FOREIGN KEY ("ownerId") REFERENCES "User" ("id") ON DELETE CASCADE,
+            UNIQUE ("ownerId", "domain", "name")
+        );
+
 CREATE TABLE "SavedFilter" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "userId" TEXT NOT NULL,
@@ -1117,7 +1137,6 @@ CREATE TABLE "UserMedia" (
             -- A timestamp rather than a flag, so "watched recently" stays askable and the
             -- column says when as well as whether. Null is unwatched; there is no 0.
             "watchedAt" DATETIME,
-            "reviewedAt" DATETIME,
             "note" TEXT CHECK("note" IS NULL OR length("note") <= 2000),
             "updatedAt" DATETIME NOT NULL,
             PRIMARY KEY ("userId", "mediaId"),
@@ -1426,6 +1445,8 @@ CREATE INDEX "idx_Reel_owner" ON "Reel" ("ownerId");
 CREATE INDEX "idx_Reel_updated" ON "Reel" ("updatedAt" DESC);
 
 CREATE INDEX "idx_RefreshToken_userId" ON "RefreshToken" ("userId");
+
+CREATE INDEX "idx_ReviewMark_mediaId" ON "ReviewMark" ("mediaId");
 
 CREATE INDEX "idx_Scan_rootId_startedAt" ON "Scan" ("rootId", "startedAt");
 

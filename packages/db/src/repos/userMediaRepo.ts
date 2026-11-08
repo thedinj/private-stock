@@ -60,24 +60,6 @@ export const setWatched = (userId: string, mediaId: string, watched: boolean): v
 };
 
 /**
- * Says whether this viewer has finished deciding about the item (§14d "Reviewing recordings
- * for a reel").
- *
- * Only ever set by hand -- the review key or the toggle -- never by playback, which is the
- * whole difference from `watchedAt`. Setting it again keeps the first time, so a second pass
- * over the same item does not move it forward.
- */
-export const setReviewed = (userId: string, mediaId: string, reviewed: boolean): void => {
-    ensureRow(userId, mediaId);
-    db.prepare(
-        `UPDATE "UserMedia"
-            SET "reviewedAt" = ${reviewed ? `COALESCE("reviewedAt", CURRENT_TIMESTAMP)` : "NULL"},
-                "updatedAt" = CURRENT_TIMESTAMP
-          WHERE "userId" = ? AND "mediaId" = ?`
-    ).run(userId, mediaId);
-};
-
-/**
  * The automatic half: thirty seconds of uninterrupted playback have gone by.
  *
  * **Only ever sets, and only when unset.** Two things follow from that, both wanted. A
@@ -161,7 +143,7 @@ export const listOverlays = (mediaId: string): OverlayRow[] =>
         db
             .prepare(
                 `SELECT "userId", "rating", "favorite", "hidden", "viewCount",
-                        "lastViewedAt", "watchedAt", "reviewedAt", "note"
+                        "lastViewedAt", "watchedAt", "note"
                    FROM "UserMedia" WHERE "mediaId" = ?`
             )
             .all(mediaId) as {
@@ -172,7 +154,6 @@ export const listOverlays = (mediaId: string): OverlayRow[] =>
             viewCount: number;
             lastViewedAt: string | null;
             watchedAt: string | null;
-            reviewedAt: string | null;
             note: string | null;
         }[]
     ).map((row) => ({ ...row, favorite: row.favorite === 1, hidden: row.hidden === 1 }));
@@ -189,7 +170,7 @@ export const writeOverlay = (userId: string, mediaId: string, overlay: UserOverl
     db.prepare(
         `UPDATE "UserMedia"
             SET "rating" = ?, "favorite" = ?, "hidden" = ?, "viewCount" = ?,
-                "lastViewedAt" = ?, "watchedAt" = ?, "reviewedAt" = ?, "note" = ?,
+                "lastViewedAt" = ?, "watchedAt" = ?, "note" = ?,
                 "updatedAt" = CURRENT_TIMESTAMP
           WHERE "userId" = ? AND "mediaId" = ?`
     ).run(
@@ -199,7 +180,6 @@ export const writeOverlay = (userId: string, mediaId: string, overlay: UserOverl
         overlay.viewCount,
         overlay.lastViewedAt,
         overlay.watchedAt,
-        overlay.reviewedAt,
         overlay.note,
         userId,
         mediaId

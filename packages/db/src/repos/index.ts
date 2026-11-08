@@ -12,6 +12,7 @@ export * as settingRepo from "./settingRepo.js";
 export * as scanRepo from "./scanRepo.js";
 export * as userMediaRepo from "./userMediaRepo.js";
 export * as userTagRepo from "./userTagRepo.js";
+export * as reviewPassRepo from "./reviewPassRepo.js";
 export * as tagRepo from "./tagRepo.js";
 export * as tagPictureRepo from "./tagPictureRepo.js";
 export * as faceRepo from "./faceRepo.js";

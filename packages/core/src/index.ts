@@ -52,6 +52,7 @@ export * from "./schemas/playlists.js";
 export * from "./schemas/captures.js";
 export * from "./schemas/clips.js";
 export * from "./schemas/reels.js";
+export * from "./schemas/reviewPasses.js";
 export * from "./schemas/tags.js";
 export * from "./schemas/tagBrowse.js";
 export * from "./schemas/settings.js";

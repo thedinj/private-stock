@@ -1739,13 +1739,9 @@ export function initializeDatabase(db: Database): void {
 
         -- The comments inside this table are part of its stored definition, so they stay as the
         -- baseline wrote them: "resumePositionMs" was dropped in place (§14b) and a rewrite here
-        -- would differ from every database that replayed the drop.
-        --
-        -- "reviewedAt" (added 2026-11-08, so explained here rather than inside): when this
-        -- viewer finished deciding about the item, or null (§14d "Reviewing recordings for a
-        -- reel"). Explicit, never set by playback -- a recording opened ten seconds before its
-        -- end never reaches the watched threshold, and "I have been through this" is a
-        -- different fact from "I have seen it".
+        -- would differ from every database that replayed the drop. "reviewedAt" went the same
+        -- way (2026-11-08): whether an item has been reviewed is a mark per review pass now, in
+        -- "ReviewMark" below.
         CREATE TABLE IF NOT EXISTS "UserMedia" (
             "userId" TEXT NOT NULL,
             "mediaId" TEXT NOT NULL,
@@ -1771,7 +1767,6 @@ export function initializeDatabase(db: Database): void {
             -- A timestamp rather than a flag, so "watched recently" stays askable and the
             -- column says when as well as whether. Null is unwatched; there is no 0.
             "watchedAt" DATETIME,
-            "reviewedAt" DATETIME,
             "note" TEXT CHECK("note" IS NULL OR length("note") <= 2000),
             "updatedAt" DATETIME NOT NULL,
             PRIMARY KEY ("userId", "mediaId"),
@@ -1812,6 +1807,42 @@ export function initializeDatabase(db: Database): void {
             ON "UserTag" ("userId", "tagId") WHERE "favorite" IS NOT NULL;
         -- The cascade from Tag, and a merge repointing a tag's rows, look up by tag.
         CREATE INDEX IF NOT EXISTS "idx_UserTag_tag" ON "UserTag" ("tagId");
+
+        -- A review pass (§14d "Reviewing recordings for a reel"): one person's question about
+        -- the items of one room -- "Players", "Wins" -- gone through item by item with the d
+        -- key. Per person because what somebody is looking for in a pass is theirs, and per
+        -- room ("domain", as on "Tag") because a pass is about one room's kind of content and
+        -- a mark only goes on an item of that room.
+        --
+        -- The name is unique per person per room, ignoring case, so "players" cannot sit
+        -- beside "Players" in a menu. Short, because it is said in a button and in chips.
+        CREATE TABLE IF NOT EXISTS "ReviewPass" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "ownerId" TEXT NOT NULL,
+            "domain" TEXT NOT NULL CHECK(length("domain") BETWEEN 1 AND 32),
+            "name" TEXT NOT NULL COLLATE NOCASE CHECK(length("name") BETWEEN 1 AND 60),
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" DATETIME NOT NULL,
+            FOREIGN KEY ("ownerId") REFERENCES "User" ("id") ON DELETE CASCADE,
+            UNIQUE ("ownerId", "domain", "name")
+        );
+
+        -- An item has been through a pass, and when (§14d). Present or absent: there is no
+        -- "not reviewed" row, so the backlog is a NOT EXISTS against the primary key. Whose
+        -- mark it is comes from the pass, never copied here. Set only by hand -- never by
+        -- playback, which is what separates it from "watchedAt" -- and setting it again keeps
+        -- the first date. Deleting a pass deletes its marks.
+        CREATE TABLE IF NOT EXISTS "ReviewMark" (
+            "passId" TEXT NOT NULL,
+            "mediaId" TEXT NOT NULL,
+            "reviewedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY ("passId", "mediaId"),
+            FOREIGN KEY ("passId") REFERENCES "ReviewPass" ("id") ON DELETE CASCADE,
+            FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE
+        );
+
+        -- The item page's chips, a duplicate merge, and the cascade from Media.
+        CREATE INDEX IF NOT EXISTS "idx_ReviewMark_mediaId" ON "ReviewMark" ("mediaId");
 
         CREATE TABLE IF NOT EXISTS "LibraryAccess" (
             "id" TEXT NOT NULL PRIMARY KEY,

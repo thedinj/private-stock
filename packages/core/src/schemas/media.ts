@@ -5,6 +5,7 @@ import { calendarDaySchema, clipSchema, spriteRectSchema } from "./clips.js";
 import { mediaKindSchema, sortDirectionSchema, type SortDirection } from "../domain.js";
 import { filterGroupsSchema, findsUntagged, type FilterGroup } from "./filterLogic.js";
 import { ocrReviewStateSchema } from "./ocr.js";
+import { itemReviewSchema } from "./reviewPasses.js";
 import { mediaTagSchema, tagIdListSchema } from "./tags.js";
 
 /**
@@ -200,10 +201,15 @@ export const mediaQuerySchema = z.object({
      */
     watched: z.enum(["yes", "no"]).optional(),
     /**
-     * Reviewed, not yet, or don't care (§14d "Reviewing recordings for a reel"). Three states
-     * and always the viewer's own, for the reasons `watched` gives.
+     * Review pass ids the item has been through, ANDed (§14d "Reviewing recordings for a reel").
+     *
+     * Always the viewer's own passes, for the reasons `watched` gives: a pass id that is not
+     * theirs marks nothing for them, so here it matches nothing -- and in `notReviewedFor`,
+     * everything. Comma-separated, like `tags`.
      */
-    reviewed: z.enum(["yes", "no"]).optional(),
+    reviewedFor: tagIdListSchema.optional(),
+    /** Review pass ids the item has not been through yet: "Not yet reviewed for Wins". */
+    notReviewedFor: tagIdListSchema.optional(),
     /**
      * Only videos whose original `assessPlayback` says a browser cannot play (§8).
      *
@@ -799,10 +805,10 @@ export const mediaDetailSchema = mediaListItemSchema.extend({
     /** Whether this viewer has hidden the item. */
     hidden: z.boolean(),
     /**
-     * When this viewer finished deciding about the item, or null (§14d). On the detail only:
-     * a tile does not show it, and the backlog is reached through the `reviewed` filter.
+     * The viewer's review passes this item has been through (§14d), oldest mark first. On the
+     * detail only: a tile does not show them, and a backlog is reached through the filter.
      */
-    reviewedAt: z.string().nullable(),
+    reviews: z.array(itemReviewSchema),
     /**
      * This viewer's private note, or null (§6, §14b).
      *

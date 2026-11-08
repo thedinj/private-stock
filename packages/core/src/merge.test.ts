@@ -74,18 +74,6 @@ describe("merging one viewer's two records", () => {
         ).toBe("2025-02-02 09:00:00");
     });
 
-    it("keeps a review decision made on either copy, and its first date", () => {
-        expect(
-            mergeOverlay(EMPTY_OVERLAY, overlay({ reviewedAt: "2026-11-01 09:00:00" })).reviewedAt
-        ).toBe("2026-11-01 09:00:00");
-        expect(
-            mergeOverlay(
-                overlay({ reviewedAt: "2026-11-05 09:00:00" }),
-                overlay({ reviewedAt: "2026-11-01 09:00:00" })
-            ).reviewedAt
-        ).toBe("2026-11-01 09:00:00");
-    });
-
     describe("last viewed", () => {
         it("is the later of the two", () => {
             const merged = mergeOverlay(

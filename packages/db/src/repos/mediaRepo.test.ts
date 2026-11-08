@@ -586,50 +586,70 @@ describe("watched", () => {
     });
 });
 
-describe("reviewed", () => {
-    // Explicit and the viewer's own (§14d): the backlog is "Not reviewed", walked while it shrinks.
-    it("filters both ways, counts an untouched item as not reviewed, and is the viewer's own", () => {
-        const done = addItem(1, { title: "Done", durationMs: 1, size: 1 });
-        const todo = addItem(2, { title: "Todo", durationMs: 1, size: 1 });
-
-        userMediaRepo.setReviewed(USER, done, true);
-        userMediaRepo.setReviewed(OWNER, todo, true);
-
-        const ids = (reviewed?: "yes" | "no", overlay?: string) =>
-            mediaRepo
-                .listMedia({ ...baseQuery, reviewed }, USER, [ROOT], overlay)
-                .rows.map((row) => row.id);
-
-        expect(ids("yes")).toEqual([done]);
-        expect(ids("no")).toEqual([todo]);
-        expect(ids("no", OWNER)).toEqual([todo]);
-        expect(new Set(ids())).toEqual(new Set([done, todo]));
-    });
-
-    it("keeps the first date when marked again, and can be taken back", () => {
-        const item = addItem(1, { title: "Again", durationMs: 1, size: 1 });
-        const read = () =>
-            sharedDb
-                .prepare(
-                    `SELECT "reviewedAt" FROM "UserMedia" WHERE "userId" = ? AND "mediaId" = ?`
-                )
-                .get(USER, item) as { reviewedAt: string | null };
-
-        userMediaRepo.setReviewed(USER, item, true);
-        const first = read();
-        expect(first.reviewedAt).not.toBeNull();
+describe("reviewed for a pass", () => {
+    const pass = (ownerId: string, name: string): string => {
+        const passId = `${ownerId.slice(0, 8)}-${name}`;
 
         sharedDb
             .prepare(
-                `UPDATE "UserMedia" SET "reviewedAt" = '2020-01-01 00:00:00' WHERE "mediaId" = ?`
+                `INSERT INTO "ReviewPass" ("id", "ownerId", "domain", "name", "updatedAt")
+                 VALUES (?, ?, 'cellar', ?, CURRENT_TIMESTAMP)`
             )
-            .run(item);
-        userMediaRepo.setReviewed(USER, item, true);
-        expect(read().reviewedAt).toBe("2020-01-01 00:00:00");
+            .run(passId, ownerId, name);
 
-        userMediaRepo.setReviewed(USER, item, false);
-        expect(read().reviewedAt).toBeNull();
-        expect(mediaRepo.findDetail(item, USER, [ROOT])?.reviewedAt).toBeNull();
+        return passId;
+    };
+
+    const ids = (query: Partial<typeof baseQuery>, overlay?: string) =>
+        mediaRepo
+            .listMedia({ ...baseQuery, ...query }, USER, [ROOT], overlay)
+            .rows.map((row) => row.id)
+            .sort();
+
+    // Explicit and the viewer's own (§14d): the backlog is "Not yet reviewed for", walked while
+    // it shrinks, and several passes combine.
+    it("filters with EXISTS and NOT EXISTS, and combines passes", () => {
+        const both = addItem(1, { title: "Both", durationMs: 1, size: 1 });
+        const players = addItem(2, { title: "Players", durationMs: 1, size: 1 });
+        const neither = addItem(3, { title: "Neither", durationMs: 1, size: 1 });
+        const who = pass(USER, "Players");
+        const wins = pass(USER, "Wins");
+
+        sharedDb
+            .prepare(`INSERT INTO "ReviewMark" ("passId", "mediaId") VALUES (?, ?), (?, ?), (?, ?)`)
+            .run(who, both, wins, both, who, players);
+
+        expect(ids({ reviewedFor: [who] })).toEqual([both, players].sort());
+        expect(ids({ notReviewedFor: [who] })).toEqual([neither]);
+        expect(ids({ reviewedFor: [who], notReviewedFor: [wins] })).toEqual([players]);
+        expect(ids({ reviewedFor: [who, wins] })).toEqual([both]);
+        expect(ids({})).toEqual([both, players, neither].sort());
+    });
+
+    it("is the viewer's own: another person's pass has marked nothing for them", () => {
+        const item = addItem(1, { title: "Theirs", durationMs: 1, size: 1 });
+        const theirs = pass(OWNER, "Players");
+
+        sharedDb
+            .prepare(`INSERT INTO "ReviewMark" ("passId", "mediaId") VALUES (?, ?)`)
+            .run(theirs, item);
+
+        expect(ids({ reviewedFor: [theirs] })).toEqual([]);
+        expect(ids({ notReviewedFor: [theirs] })).toEqual([item]);
+        // Even inside a filter resolved against that person's ratings.
+        expect(ids({ reviewedFor: [theirs] }, OWNER)).toEqual([]);
+    });
+
+    it("counts what it lists", () => {
+        const done = addItem(1, { title: "Done", durationMs: 1, size: 1 });
+        addItem(2, { title: "Todo", durationMs: 1, size: 1 });
+        const who = pass(USER, "Players");
+
+        sharedDb
+            .prepare(`INSERT INTO "ReviewMark" ("passId", "mediaId") VALUES (?, ?)`)
+            .run(who, done);
+
+        expect(mediaRepo.countMedia({ ...baseQuery, notReviewedFor: [who] }, USER, [ROOT])).toBe(1);
     });
 });
 
