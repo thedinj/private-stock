@@ -1,9 +1,9 @@
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
 
-import { type StageState, artifactRelPath } from "@private-stock/core";
+import { type StageState, artifactRelPath, domainTailMs } from "@private-stock/core";
 import { loadConfig } from "@private-stock/core/server";
-import { artifactRepo, db, mediaRepo } from "@private-stock/db";
+import { artifactRepo, db, mediaRepo, mediaRootRepo } from "@private-stock/db";
 
 import { renderPreview } from "../media/clips.js";
 import { imageDimensions } from "../media/frames.js";
@@ -57,7 +57,9 @@ export const runPreview = async (job: JobRow): Promise<StageState | void> => {
     const relPath = artifactRelPath(mediaId, "preview");
     const outputPath = path.resolve(config.dataDir, relPath);
 
-    const rendered = await renderPreview(source.absolutePath, outputPath, media.durationMs);
+    // Cut from the tail in a room that looks there (§21) -- the Game Room's recordings.
+    const tailMs = domainTailMs(mediaRootRepo.domainOfFile(job.fileId));
+    const rendered = await renderPreview(source.absolutePath, outputPath, media.durationMs, tailMs);
 
     if (!rendered) {
         // Too short to sample, or nothing decodable. A file that cannot have a preview is a

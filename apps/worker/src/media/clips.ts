@@ -40,7 +40,15 @@ const PREVIEW_FPS = 15;
  */
 const SEGMENT_FRACTIONS = [0.05, 0.2, 0.35, 0.5, 0.68, 0.85];
 
-export const previewOffsets = (durationMs: number | null): number[] => {
+/**
+ * `tailMs` is the room's (§21 "Where a room looks first"): a Game Room recording is saved after
+ * its moment, so its preview is taken from its last seconds, evenly, the final segment ending
+ * at the end of the file -- where a film's would be credits, a recording's is the payoff.
+ */
+export const previewOffsets = (
+    durationMs: number | null,
+    tailMs: number | null = null
+): number[] => {
     if (!durationMs || durationMs <= 0) {
         return [];
     }
@@ -53,8 +61,13 @@ export const previewOffsets = (durationMs: number | null): number[] => {
         return [0];
     }
 
-    const offsets = SEGMENT_FRACTIONS.slice(0, PREVIEW_SEGMENTS).map((fraction) =>
-        Math.floor(usable * fraction)
+    const from = tailMs === null ? 0 : Math.max(0, durationMs - tailMs);
+    const fractions =
+        tailMs === null
+            ? SEGMENT_FRACTIONS.slice(0, PREVIEW_SEGMENTS)
+            : Array.from({ length: PREVIEW_SEGMENTS }, (_, i) => i / (PREVIEW_SEGMENTS - 1));
+    const offsets = fractions.map((fraction) =>
+        Math.floor(from + Math.max(0, usable - from) * fraction)
     );
 
     // A very short clip maps several fractions onto the same second; one segment of it is
@@ -71,10 +84,11 @@ export const previewOffsets = (durationMs: number | null): number[] => {
 export const renderPreview = async (
     inputPath: string,
     outputPath: string,
-    durationMs: number | null
+    durationMs: number | null,
+    tailMs: number | null = null
 ): Promise<boolean> => {
     const ffmpeg = await resolveFfmpeg();
-    const offsets = previewOffsets(durationMs);
+    const offsets = previewOffsets(durationMs, tailMs);
 
     if (offsets.length === 0) {
         return false;
