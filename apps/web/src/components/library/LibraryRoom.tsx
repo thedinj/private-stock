@@ -13,8 +13,11 @@ import type {
     SavedFilter,
     Shelf,
 } from "@private-stock/core";
+import { domainProfiles } from "@private-stock/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
+import { getActiveDomain } from "@/lib/activeDomain";
+import { useAuth } from "@/lib/api/AuthProvider";
 import { MediaTile } from "@/components/MediaTile";
 import { PlaylistCard } from "@/components/playlist/PlaylistCard";
 import { GRID_GAP, GRID_TRACKS } from "@/lib/gridGeometry";
@@ -256,27 +259,60 @@ let roomSeed = 0;
 
 const newRoomSeed = (): number => Math.floor(Math.random() * 1_000_000);
 
-const RoomEmpty: React.FC = () => (
-    <Center mih={320}>
-        <Stack gap="xs" align="center" maw={440} ta="center">
-            <Text className={classes.eyebrow}>Nothing yet</Text>
-            <Title order={2}>The cellar is empty</Title>
-            <Text size="sm" c="dimmed">
-                Once something has been catalogued, what you were last watching will be waiting
-                here.
-            </Text>
-            <Button
-                component={Link}
-                href="/?view=grid"
-                variant="default"
-                mt="sm"
-                onClick={rememberReturn}
-            >
-                Open the library
-            </Button>
-        </Stack>
-    </Center>
-);
+/**
+ * Named for the room it is in (§21): this said "the cellar" in every room.
+ *
+ * A room with no library yet is a different emptiness from one whose library has nothing
+ * catalogued: the grid would be just as empty, so the way on is adding a library — for whoever
+ * can.
+ */
+const RoomEmpty: React.FC<{ hasLibrary: boolean }> = ({ hasLibrary }) => {
+    const { hasScope } = useAuth();
+    const room = domainProfiles[getActiveDomain()].label;
+
+    if (!hasLibrary) {
+        return (
+            <Center mih={320}>
+                <Stack gap="xs" align="center" maw={440} ta="center">
+                    <Text className={classes.eyebrow}>Nothing yet</Text>
+                    <Title order={2}>The {room} has no library</Title>
+                    <Text size="sm" c="dimmed">
+                        {hasScope("admin")
+                            ? `A library added while you are in the ${room} belongs to it.`
+                            : `Nothing has been added to the ${room} yet.`}
+                    </Text>
+                    {hasScope("admin") && (
+                        <Button component={Link} href="/admin/libraries" variant="default" mt="sm">
+                            Add a library
+                        </Button>
+                    )}
+                </Stack>
+            </Center>
+        );
+    }
+
+    return (
+        <Center mih={320}>
+            <Stack gap="xs" align="center" maw={440} ta="center">
+                <Text className={classes.eyebrow}>Nothing yet</Text>
+                <Title order={2}>The {room} is empty</Title>
+                <Text size="sm" c="dimmed">
+                    Once something has been catalogued, what you were last watching will be waiting
+                    here.
+                </Text>
+                <Button
+                    component={Link}
+                    href="/?view=grid"
+                    variant="default"
+                    mt="sm"
+                    onClick={rememberReturn}
+                >
+                    Open the library
+                </Button>
+            </Stack>
+        </Center>
+    );
+};
 
 export const LibraryRoom: React.FC = () => {
     /**
@@ -370,7 +406,7 @@ export const LibraryRoom: React.FC = () => {
     }
 
     if (!hero) {
-        return <RoomEmpty />;
+        return <RoomEmpty hasLibrary={(libraries?.libraries.length ?? 1) > 0} />;
     }
 
     return (
