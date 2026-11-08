@@ -3,20 +3,24 @@
 import { useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 
-import { REVIEW_PASS_NAME_MAX, type ReviewPass } from "@private-stock/core";
+import { REVIEW_PASS_NAME_MAX, domainProfiles, type ReviewPass } from "@private-stock/core";
 
+import { getActiveDomain } from "@/lib/activeDomain";
 import { ApiError } from "@/lib/api/client";
 import { useCreateReviewPass } from "@/lib/api/reviewPasses";
 
 /**
- * Naming a new review pass (§14d), in this room. Asked for from the viewer's Review menu, and
- * on its own when review mode is turned on with no pass to review for.
+ * Naming a new review pass (§14d), in this room. Asked for from the viewer's Review menu, on
+ * its own when review mode is turned on with no pass to review for, and from Account › Review
+ * passes -- where nothing starts, so the button says what it does there.
  */
 export const NameReviewPass: React.FC<{
     opened: boolean;
     onClose: () => void;
     onCreated: (pass: ReviewPass) => void;
-}> = ({ opened, onClose, onCreated }) => {
+    /** The button: "Start reviewing" from the viewer, where making it starts review mode. */
+    confirmLabel?: string;
+}> = ({ opened, onClose, onCreated, confirmLabel = "Start reviewing" }) => {
     const [name, setName] = useState("");
     const create = useCreateReviewPass();
 
@@ -40,7 +44,9 @@ export const NameReviewPass: React.FC<{
                 <TextInput
                     label="Name"
                     placeholder="Players"
-                    description="What you are going through the items for. Yours, in this room."
+                    description={`What you are going through the items for. Yours, in the ${
+                        domainProfiles[getActiveDomain()].label
+                    }.`}
                     value={name}
                     maxLength={REVIEW_PASS_NAME_MAX}
                     data-autofocus
@@ -72,7 +78,7 @@ export const NameReviewPass: React.FC<{
                         disabled={!name.trim()}
                         onClick={submit}
                     >
-                        Start reviewing
+                        {confirmLabel}
                     </Button>
                 </Group>
             </Stack>

@@ -10,6 +10,8 @@ import {
     type ReviewPass,
 } from "@private-stock/core";
 
+import { NameReviewPass } from "@/components/media/NameReviewPass";
+import { getActiveDomain } from "@/lib/activeDomain";
 import { ApiError } from "@/lib/api/client";
 import {
     useAllReviewPasses,
@@ -132,6 +134,7 @@ const PassRow: React.FC<{ pass: ReviewPass }> = ({ pass }) => {
  */
 export const ReviewPassesCard: React.FC = () => {
     const [open, setOpen] = useState(false);
+    const [naming, setNaming] = useState(false);
     const { data, error, isLoading } = useAllReviewPasses(open);
     const passes = data?.passes ?? [];
 
@@ -144,8 +147,8 @@ export const ReviewPassesCard: React.FC = () => {
                     <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                         <Title order={4}>Review passes</Title>
                         <Text size="sm" c="dimmed">
-                            What you go through items for, one room at a time. New ones start from
-                            an item&apos;s Review menu.
+                            What you go through items for, one room at a time. New ones are made
+                            here or from an item&apos;s Review menu.
                         </Text>
                     </Stack>
                     <Button
@@ -160,6 +163,13 @@ export const ReviewPassesCard: React.FC = () => {
 
                 <Collapse in={open}>
                     <Stack gap="lg">
+                        {/* The viewer's own naming dialog: a pass is made in the room you are
+                            in, so the button names it. */}
+                        <Group>
+                            <Button variant="light" color="brass" onClick={() => setNaming(true)}>
+                                New pass in the {domainProfiles[getActiveDomain()].label}
+                            </Button>
+                        </Group>
                         {error && (
                             <Alert color="oxblood" variant="light">
                                 Could not load your review passes
@@ -187,6 +197,13 @@ export const ReviewPassesCard: React.FC = () => {
                     </Stack>
                 </Collapse>
             </Stack>
+
+            <NameReviewPass
+                opened={naming}
+                onClose={() => setNaming(false)}
+                onCreated={() => setNaming(false)}
+                confirmLabel="Create"
+            />
         </Card>
     );
 };
