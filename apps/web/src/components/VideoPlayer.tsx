@@ -1742,6 +1742,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 return;
             }
 
+            // A browser's own shortcut, as the page and the still stage already let through:
+            // Ctrl+F is find, not full screen, and Alt+← is back, not five seconds back. Shift
+            // is not a modifier here -- it is the long seek.
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+
             const step = event.shiftKey ? 30 : 5;
 
             // Casting: the keys drive the TV, and only those that mean the same thing there.

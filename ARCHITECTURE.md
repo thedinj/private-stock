@@ -7821,7 +7821,7 @@ a count of spans discloses nothing and destroying work with no notice at all is 
 The Game Room's main work (2026-11-08): hundreds of short recordings, each saved after a moment,
 gone through in sittings at a keyboard, each yielding a clip or nothing. Reels are cut later by
 period or by a tag set by hand. Nothing here is a mode or a page; it is the item page walking a
-filtered set, with four additions.
+filtered set, with five additions.
 
 - **Reviewed is its own mark** (`UserMedia.reviewedAt`), set only by hand. Watched cannot be it:
   watched is thirty seconds of playback (§14b), and a recording opened ten seconds before its end
@@ -7831,7 +7831,7 @@ filtered set, with four additions.
   The backlog is the library at **Not reviewed**, oldest first, and the Game Room's sidebar
   links straight to it as "To review" (§21).
 - **`d` is done-and-next.** It marks the item and steps to the next in one keystroke, reading the
-  next id *before* the write, since the item leaves a Not reviewed set as the mark lands. The
+  next id _before_ the write, since the item leaves a Not reviewed set as the mark lands. The
   viewer already holds its set across that (§14b, as it does for rating inside "Unrated only"),
   and the page the walk stands on keeps being refetched with the remaining items at its head, so
   a shrinking backlog is walked without skipping. Nothing waits for the write; a failure is said
@@ -7844,8 +7844,12 @@ filtered set, with four additions.
 - **Into a reel as it is saved.** "Into reel" on the clip bar names a reel of your own, remembered
   per room in the browser. The clip and its `ReelItem` are one transaction, so a reel that refuses
   it — somebody else's, or full — leaves no clip behind.
+- **Tagging the recording from the keyboard.** `w` jumps into the Players box, `t` into Keywords,
+  `o` Games, `r` the note, and `Esc` hands the keys back, so a recording is `w`, a name, `Esc`,
+  `t`, a keyword, `Esc`, `d` without the mouse. The keys follow the facet rather than the room's
+  word for it, and are the same in every room (§14 "Hotkeys").
 
-A reel by period is assembled on /clips: **Added**, a date range over the clip's *video's* date
+A reel by period is assembled on /clips: **Added**, a date range over the clip's _video's_ date
 added (both ends inclusive, in the stored UTC days), with Clip has for the theme, then **Select
 all N matching** — the browser's own query as ids (`GET /api/clips/ids`), capped at one reel's
 200, since that is all a selection that size is for.
@@ -8298,9 +8302,10 @@ Gallery mode (all-previews, autoplaying) · Detail/player · Playlists · Duplic
 Tags · Settings (prefs, saved filters, sessions) · Admin — now Review, Libraries, Processing and
 Household (§12c); the error-log viewer is parked.
 
-**Mantine only**, per basket-bot's rule — no second component library. `@mantine/hooks`
-`useHotkeys` for the keymap, the header search for `/` (below), and TanStack Virtual under a plain
-CSS-grid tile list for the library (Mantine has no virtualized grid of its own).
+**Mantine only**, per basket-bot's rule — no second component library. The viewer's keys are
+plain document listeners checked against one table (`lib/viewerKeys.ts`, below), the header search
+answers `/` (below), and TanStack Virtual sits under a plain CSS-grid tile list for the library
+(Mantine has no virtualized grid of its own).
 
 **Filter/sort**: URL-encoded query state, shareable and back-button correct — kind, duration,
 resolution, codec, rating, tags, dates, folder, "has duplicates", "unrated". Sorts: added,
@@ -8309,12 +8314,52 @@ captured, name, duration, size, resolution, bit rate, frame rate, last viewed, r
 parser checks `?sort=` against it rather than keeping its own, because a copy that did fell
 behind and read `?sort=bitrate` back as the default, so the menu choice was silently ignored.
 
-**Hotkeys**: `space` play/pause · `←`/`→` ±5 s, shift ±30 s · `,` `.` frame step · `0`–`9`
-jump to 0–90% · `[` `]` clip in/out · `j` `k` `l` shuttle (`j`/`l` by the bar's chosen jump
-lengths, §14b) · `-` `+` speed (0.25×–4×) · `f` fullscreen · `m` mute · `1`–`5` rating in
-grid · numpad `1`–`5` rating in the viewer (the same number again clears it) · `h` favourite in
-the viewer · `Delete` (or `Backspace`) trash in the viewer, `Enter` to confirm · `/` search ·
-`g g` top · `?` help.
+**Hotkeys** -- the item viewer's, as one map (2026-11-08). `lib/viewerKeys.ts` is the table; the
+`?` help view is drawn from it, the fields' tooltips read their key from it, and a unit test fails
+if any press is claimed twice. Three handlers answer it -- the page, the player and the still
+stage -- and each had grown its keys alone, so until the table nothing could say whether a key was
+free.
+
+| Group            | Keys                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playing          | `space` / `k` play/pause · `←` `→` ±5 s, shift ±30 s · `j` `l` by the bar's jump lengths (§14b) · `,` `.` frame step (paused) · `0`–`9` jump to 0–90% · `-` `+` speed (0.25×–4×) · `m` mute · `f` full screen · `s` capture the frame |
+| Through the set  | `n` next · `p` previous                                                                                                                                                                                                               |
+| Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
+| Judging it       | `d` reviewed and next · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
+| Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
+| Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
+
+Outside the viewer: `1`–`5` rate in the grid.
+
+**The field keys follow the facet's role, not the room's word for it**: `w` for who, `o` for
+origin, `t` for tag, `r` for remark. A key per room label would give `p` to Players (taken by
+previous) and `g` to Games, and would move the moment a room is renamed; the role is the same in
+every room, so `w` is People in the Parlour and Players in the Game Room, and the tooltip and the
+help say the room's word beside it. Single letters rather than an `e`-then-letter prefix, because
+the pass this serves (§14d "Reviewing recordings for a reel") is hundreds of items of `w`, a name,
+`Esc`, `t`, a keyword, `Esc`, `d` -- a prefix would add a keystroke to every field of every item,
+and there were letters to spare. Shift `t` is the private box because it sits directly under the
+shared one. `c` stays free for captions (see `s` in the player).
+
+A field key focuses the box, scrolled to the middle of the window so its suggestions have room. It
+leaves full screen first, since the field is not in it, and closes the Details drawer, whose focus
+trap would otherwise take the focus straight back. `Esc` in a facet box clears a half-typed name
+first -- the box accepts what was typed when it loses focus, so leaving at once would add it -- and
+leaves on the next press; `Esc` in the note leaves, which saves it. Leaving is enough to give the
+keys back: every handler listens on the document, so nothing has to take the focus for `d` to work
+again. A held key does not repeat a jump, which would type the letter into the box it opened.
+
+Every viewer key stands aside for typing (`isTypingTarget`, below), for Ctrl, Alt and Meta, and
+while a dialog over the page has the keys: the trash confirmation, "Who is this?", the enlarged
+frame view and the help itself. The player was the one handler without the modifier guard, so
+Ctrl+F (find) also went full screen and Alt+← (back) also seeked; it has it now. Shift is not a
+modifier for this purpose -- it is the long seek, and the private keyword box.
+
+**Nothing was re-keyed**, on purpose. Each existing key was checked against the rest and none
+clashed: `n`/`p`, `[` `]`, `d`, `space` and the YouTube transport (`j` `k` `l`, arrows, `f`,
+`m`) are what fingers already know, and moving one to make a table look tidier would cost every
+habit it touched. `g g` (top) was listed here for years and never built; it is dropped rather than
+reserved, since nothing on the viewer needs it and `g` is the obvious letter for something else.
 
 **Every rating and favourite answers over the picture**, clicked or pressed. It started with the
 keys: somebody rating from the numpad is looking at the film, often in fullscreen, often with the
@@ -12014,11 +12059,11 @@ know. Saved views had no constraint, so their names are per room.
 
 Reviewed stage by stage (2026-11-08):
 
-| Room | Skips | Why |
-|---|---|---|
-| Cellar | nothing | |
-| Parlour | Look (`embed`), OCR | Watching by look is the Cellar's idea; a family video has little burned-in text, and OCR's settings are tuned for watermarks. |
-| Game Room | faces, Look, OCR | A detector has nothing to find in a game's frames. OCR would read the HUD — ammo counts, killfeeds — into the search index and the review queue. Players are filed by hand and from filenames. |
+| Room      | Skips               | Why                                                                                                                                                                                            |
+| --------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cellar    | nothing             |                                                                                                                                                                                                |
+| Parlour   | Look (`embed`), OCR | Watching by look is the Cellar's idea; a family video has little burned-in text, and OCR's settings are tuned for watermarks.                                                                  |
+| Game Room | faces, Look, OCR    | A detector has nothing to find in a game's frames. OCR would read the HUD — ammo counts, killfeeds — into the search index and the review queue. Players are filed by hand and from filenames. |
 
 **The duplicate fingerprints stay in the Game Room** (`phash`, `tileprint`). A highlight saved
 raw, trimmed and re-encoded is the duplicate most worth catching, and `tileprint` exists for
@@ -12049,7 +12094,7 @@ settled, the Processing page's waiting count includes them.
 
 ### Where a room looks first
 
-A Game Room recording is about thirty seconds, saved by hand *after* the moment it was saved for,
+A Game Room recording is about thirty seconds, saved by hand _after_ the moment it was saved for,
 so the moment is at its end and the first twenty seconds are run-up. The profile says so as
 `tailMs` (10 s in the Game Room, null elsewhere), and three things follow it:
 

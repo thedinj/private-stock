@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Group, Loader, Stack, Text, Textarea, Tooltip } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { KeyTip } from "@/components/KeyTip";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { fieldKey } from "@/lib/viewerKeys";
 
 import classes from "./MediaNote.module.scss";
 
@@ -180,19 +182,28 @@ export const MediaNote: React.FC<MediaNoteProps> = ({ mediaId, note }) => {
                 </span>
             </Group>
 
-            <Textarea
-                classNames={{ input: classes.input }}
-                value={draft}
-                autosize
-                minRows={3}
-                maxRows={12}
-                maxLength={NOTE_MAX}
-                placeholder="Anything you want to remember about this…"
-                aria-label="Your private note on this item"
-                onChange={(event) => setDraft(event.currentTarget.value)}
-                onBlur={commit}
-                error={mutation.isError ? "Could not save" : undefined}
-            />
+            {/* `r` jumps here from anywhere on the viewer (§14 "Hotkeys"). */}
+            <KeyTip label="Note, from anywhere on the page. Esc to leave" keys={fieldKey("note")}>
+                <Textarea
+                    classNames={{ input: classes.input }}
+                    value={draft}
+                    autosize
+                    minRows={3}
+                    maxRows={12}
+                    maxLength={NOTE_MAX}
+                    placeholder="Anything you want to remember about this…"
+                    aria-label="Your private note on this item"
+                    onChange={(event) => setDraft(event.currentTarget.value)}
+                    onBlur={commit}
+                    // Escape leaves, which saves, and gives the keys back to the player (§14
+                    // "Hotkeys"): they listen on the document, so nothing else has to take focus.
+                    onKeyDown={(event) => {
+                        if (event.key === "Escape") event.currentTarget.blur();
+                    }}
+                    data-viewer-field="note"
+                    error={mutation.isError ? "Could not save" : undefined}
+                />
+            </KeyTip>
 
             {/* Absent until the limit is real, rather than greyed out or always present. */}
             {draft.length >= COUNT_FROM && (

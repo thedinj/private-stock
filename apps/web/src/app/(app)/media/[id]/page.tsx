@@ -53,6 +53,7 @@ import { TagEditor } from "@/components/TagEditor";
 import { TranscodeNotice } from "@/components/TranscodeNotice";
 import { TrashConfirm } from "@/components/TrashConfirm";
 import { StillStage } from "@/components/media/StillStage";
+import { ViewerKeysHelp } from "@/components/media/ViewerKeysHelp";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { api } from "@/lib/api/client";
@@ -69,6 +70,7 @@ import { castBlocked } from "@/lib/cast/castBlocked";
 import { useCastItem } from "@/lib/cast/useCastItem";
 import { parseAtParam, resumeTarget, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
+import { fieldForPress, keyPress, type ViewerField } from "@/lib/viewerKeys";
 import { useSpillLight } from "@/lib/useSpillLight";
 import { useWarmIntent } from "@/lib/warmMonitor";
 import { useStudyRoom } from "@/lib/useStudyRoom";
@@ -196,6 +198,52 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      */
     const [trashOpen, trashDialog] = useDisclosure(false);
     const { hasScope } = useAuth();
+
+    /** The key map, opened with `?`: a dialog, so it has the keys while it is up. */
+    const [helpOpen, { open: openHelp, close: closeHelp }] = useDisclosure(false);
+
+    /**
+     * Into one of the fields under the stage, from the keyboard (§14 "Hotkeys").
+     *
+     * By `data-viewer-field` rather than a ref threaded through the facet sections, which are
+     * three components deep and drawn in two places. Out of full screen first, since the field
+     * is not in it, and with the Details drawer closed, whose focus trap would take the focus
+     * straight back -- after the drawer's own return of focus, which runs 10ms after it closes.
+     * Scrolled to the middle of the window: the box's suggestions open below it.
+     */
+    const { close: closeDetails } = details;
+    const detailsOpenRef = useRef(detailsOpen);
+    detailsOpenRef.current = detailsOpen;
+
+    const jumpToField = useCallback(
+        (field: ViewerField) => {
+            const focus = () => {
+                const target = document.querySelector<HTMLElement>(
+                    `[data-viewer-field="${field}"]`
+                );
+
+                if (!target) return;
+                target.scrollIntoView({ block: "center", behavior: "smooth" });
+                target.focus({ preventScroll: true });
+            };
+            const afterDrawer = () => {
+                if (!detailsOpenRef.current) {
+                    focus();
+                    return;
+                }
+
+                closeDetails();
+                window.setTimeout(focus, 50);
+            };
+
+            if (document.fullscreenElement) {
+                void document.exitFullscreen().then(afterDrawer, afterDrawer);
+            } else {
+                afterDrawer();
+            }
+        },
+        [closeDetails]
+    );
 
     /**
      * Whether the player gave up on this item after claiming it could play it.
@@ -702,7 +750,27 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             // The confirmation's keys are its own: Enter confirms, Escape cancels, and n must
             // not walk the set out from under a dialog about this item. "Who is this?" likewise:
             // a search being compared is not to be thrown away by a stray n.
-            if (trashOpen || whoIsThisOpen) return;
+            if (trashOpen || whoIsThisOpen || helpOpen) return;
+
+            // The whole map, from the one table the keys are checked against (§14 "Hotkeys").
+            if (event.key === "?" && !overlayOpen) {
+                event.preventDefault();
+                openHelp();
+                return;
+            }
+
+            /**
+             * Straight into a field: w who, o origin, t tag (Shift for the private box), r
+             * remark -- by what the field is, not the room's word for it, so Players and People
+             * are both w. Not on a repeat, which would type the letter into the box it opened.
+             */
+            const field = fieldForPress(keyPress(event));
+
+            if (field && !overlayOpen) {
+                event.preventDefault();
+                if (!event.repeat) jumpToField(field);
+                return;
+            }
 
             if (event.key === "n") {
                 event.preventDefault();
@@ -797,6 +865,9 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         whoIsThisOpen,
         trashOpen,
         trashDialog,
+        helpOpen,
+        openHelp,
+        jumpToField,
         setOpinion,
         reviewAndNext,
         sequence.nextId,
@@ -1032,6 +1103,21 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                                     value that could turn the show into a stroboscope. Present
                                     and disabled while the show is off, so the number is
                                     discoverable before it is needed. */}
+                                {/* Where the keys are written down, for anybody with a
+                                    keyboard to press them on. */}
+                                {!narrow && (
+                                    <Button
+                                        variant="subtle"
+                                        color="gray"
+                                        size="compact-sm"
+                                        onClick={openHelp}
+                                        rightSection={<Kbd size="xs">?</Kbd>}
+                                        aria-keyshortcuts="?"
+                                    >
+                                        Keyboard shortcuts
+                                    </Button>
+                                )}
+
                                 {dwellApplies && (
                                     <Stack gap={4}>
                                         <Text size="sm">Hold each picture</Text>
@@ -1138,7 +1224,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // Released while the enlarged view is open, or its arrows would
                             // move between frames and seek the video at the same time -- and
                             // while the trash confirmation is, whose buttons take space.
-                            hotkeys={!overlayOpen && !trashOpen}
+                            hotkeys={!overlayOpen && !trashOpen && !helpOpen}
                             seekRef={seekRef}
                             // Rolling onward is a separate consent from playing what you
                             // opened, so it is a separate switch and is off by default.
@@ -1167,7 +1253,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             onDwellSeconds={setDwellSeconds}
                             // Released while the enlarged frame view or the trash confirmation
                             // is open, so nothing fights this stage for the same keystroke.
-                            hotkeys={!overlayOpen && !trashOpen}
+                            hotkeys={!overlayOpen && !trashOpen && !helpOpen}
                             steps={steps}
                             menuItems={stageMenu}
                         />
@@ -1443,6 +1529,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 onSeek={seekAndShow}
                 onTrash={trashable === "allowed" ? trashDialog.open : null}
             />
+
+            <ViewerKeysHelp opened={helpOpen} onClose={closeHelp} />
 
             {/* Only for somebody who can use it: it fetches the item's copies ahead of being
                 opened (see there), which nobody else needs. Keyed by the item, because this
