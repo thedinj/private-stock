@@ -273,6 +273,8 @@ bitrate, fps, capturedAt, addedAt, lastSeenAt`
 - **RefreshToken** — hashed, revocable per device
 - **UserMedia** — PK `(userId, mediaId)`: `rating, favorite, hidden, viewCount, lastViewedAt,
 watchedAt, note`
+- **ReviewPass / ReviewMark** — a person's named pass in one room (`ownerId, domain, name`), and
+  PK `(passId, mediaId)` with `reviewedAt`: what has been through it (§14d)
 - **UserTag** — PK `(userId, tagId)`: `favorite` (§6 "Favourite tags")
 - **Playlist / PlaylistItem** — `ownerId, name, visibility, sortMode`
 - **SavedFilter** — `userId, name, queryJson, pinned, position`
@@ -7823,30 +7825,56 @@ gone through in sittings at a keyboard, each yielding a clip or nothing. Reels a
 period or by a tag set by hand. Nothing here is a mode or a page; it is the item page walking a
 filtered set, with five additions and one mode.
 
-- **Reviewed is its own mark** (`UserMedia.reviewedAt`), set only by hand. Watched cannot be it:
+- **Reviewed is a mark per review pass** (2026-11-08), set only by hand. Watched cannot be it:
   watched is thirty seconds of playback (§14b), and a recording opened ten seconds before its end
   never gets there. "I have been through this" is also a different fact from "I have seen it",
-  and a recording that yields nothing still has to leave the backlog. A filter of the viewer's
-  own, three-state, like watched; carried across a duplicate merge as the earlier of the two.
-  **The flag does nothing else.** A backlog is a view the person makes -- the library at Not
-  reviewed, oldest first, saved if they like -- and nothing hides reviewed items implicitly. The
-  sidebar's "To review" link (a fixed filter) was removed on 2026-11-08 for that reason: it tied
-  reviewing to one set, and what a view shows should be what its chips say.
-- **Review is a mode, not a set** (2026-11-08), in every room. Play ▸ **Review** opens the set
-  the way From the top does, with `?review=1` on the item's address; on the viewer the
-  Review/Reviewing button or `Shift+D` turns it on or off for the item in hand (on jumps to the
-  tail where the room has one). In it, each item opens where the room looks first -- the tail in
-  the Game Room, the start elsewhere -- and the next waits for `d` -- autoplay-next
-  is set aside, since rolling on would carry a recording away mid-decision. `go` carries the
-  parameter through the set and a reload keeps it; an item opened any other way opens as usual,
-  from the start. Which items are walked is entirely the set's business.
-- **`d` is done-and-next.** It marks the item and steps to the next in one keystroke, reading the
-  next id _before_ the write, since the item leaves a Not reviewed set as the mark lands. The
-  viewer already holds its set across that (§14b, as it does for rating inside "Unrated only"),
-  and the page the walk stands on keeps being refetched with the remaining items at its head, so
-  a shrinking backlog is walked without skipping. Nothing waits for the write; a failure is said
-  over whatever is on screen by then, naming "the last item". A held key does not repeat it, and
-  the Reviewed button on the row is the way back.
+  and a recording that yields nothing still has to leave the backlog. It began as one flag,
+  `UserMedia.reviewedAt`, and became passes the same day: a recording is gone through more than
+  once, for different things -- who is in it, then whether it was a win -- and one flag can only
+  say one of them. A **pass** (`ReviewPass`) is a name -- "Players", "Wins" -- unique per person
+  per room; a **mark** (`ReviewMark`) is an item having been through it, and when. People keep a
+  handful and come back to them now and then, so nothing about them pages.
+- **Per person, per room.** Per person because what somebody is looking for in a pass is theirs,
+  like their ratings; somebody else's pass id is not-found, and in a shared view it has marked
+  nothing for the viewer. Per room because a pass is about one room's kind of content: it is made
+  in the room it is used in, and a mark on an item of another room is refused, as a tag across
+  rooms is (§21). The migration made a "Reviewed" pass per person per room their marks were in,
+  and moved the marks; saved views asking `reviewed: yes|no` ask it of that pass (or lose the
+  condition where there is none), and an old address is converted by the library page, which has
+  the pass list. A duplicate merge carries each pass's mark with the earlier date, as watched
+  takes the earlier, and only passes of the survivor's room (§10c). Deleting a pass deletes its
+  marks; Account › Review passes renames and deletes them, saying first how many marks go.
+- **The mark does nothing else.** A backlog is a view the person makes -- the library at "Not
+  yet reviewed for Wins", oldest first, saved if they like -- and nothing hides reviewed items
+  implicitly. The sidebar's "To review" link (a fixed filter) was removed on 2026-11-08 for that
+  reason: it tied reviewing to one set, and what a view shows should be what its chips say.
+- **Review is a mode, not a set** (2026-11-08), in every room, **for a pass**. Play ▸ **Review**
+  opens the set the way From the top does, with `?review=1` on the item's address; on the viewer
+  the Review button or `Shift+D` turns it on or off for the item in hand (on jumps to the tail
+  where the room has one). `review=1` is "the pass last used in this room", remembered per
+  device (`roomKey("ps:reviewPass")`), else the first; the viewer resolves it and writes
+  `?review=<passId>` back, so a reload and the next item keep the pass. With no pass at all it
+  asks for a name in the page. The button then reads "Reviewing for Players", and its menu
+  switches pass, names a new one, marks the item for a pass without entering the mode, and
+  stops. Beside it, a chip per pass the item has been through; clicking one takes that mark off.
+  In the mode, each item opens where the room looks first -- the tail in the Game Room, the start
+  elsewhere -- and the next waits for `d` -- autoplay-next is set aside, since rolling on would
+  carry a recording away mid-decision. `go` carries the parameter through the set; an item opened
+  any other way opens as usual, from the start. Which items are walked is entirely the set's
+  business.
+- **`d` is done-and-next, and only in review mode.** It marks the item for the mode's pass and
+  steps to the next in one keystroke, reading the next id _before_ the write, since the item
+  leaves a "Not yet reviewed for" set as the mark lands. The viewer already holds its set across
+  that (§14b, as it does for rating inside "Unrated only"), and the page the walk stands on keeps
+  being refetched with the remaining items at its head, so a shrinking backlog is walked without
+  skipping. Nothing waits for the write; a failure is said over whatever is on screen by then,
+  naming "the last item". A held key does not repeat it. **Outside review mode `d` does
+  nothing** (the user's decision): with several passes it could only guess which one, and a
+  stray press would mark an item nobody meant to.
+- **In bulk, from the selection bar**: "Reviewed" ▸ Mark reviewed for a pass, or Clear for one,
+  on the ticked items -- the same selection, cap (500) and per-item report as every other verb
+  there (§14b), and one owner-and-room check for the whole selection, so it cannot end
+  half-marked. Select-all is still the page and only the page.
 - **A clip from the keyboard.** When `]` closes a span the clip bar's tag box takes the keys: a tag
   and Enter adds it, Enter on the empty box saves, Escape hands the keys back to the player with
   the span kept. Clip tags still start empty for every span: one clip per recording means
@@ -8326,7 +8354,7 @@ behind and read `?sort=bitrate` back as the default, so the menu choice was sile
 
 **Hotkeys** -- the item viewer's, as one map (2026-11-08). `lib/viewerKeys.ts` is the table; the
 `?` help view is drawn from it, every control's tooltip reads its key from it (the fields, and the
-player's play, previous, next, mark, capture, speed, mute and full screen, Reviewed, trash, Save
+player's play, previous, next, mark, capture, speed, mute and full screen, Review, trash, Save
 clip -- `ViewerKeyTip`, by an `action` in the table), and a unit test fails if any press is
 claimed twice or a tooltip's action has no keys. `?` is the one way to the help: the user knows it
 is there and asked for no button (2026-11-08), so the Playback popover's link was removed. The
@@ -8339,7 +8367,7 @@ free.
 | Playing          | `space` / `k` play/pause · `←` `→` ±5 s, shift ±30 s · `j` `l` by the bar's jump lengths (§14b) · `,` `.` frame step (paused) · `0`–`9` jump to 0–90% · `-` `+` speed (0.25×–4×) · `m` mute · `f` full screen · `s` capture the frame |
 | Through the set  | `n` next · `p` previous                                                                                                                                                                                                               |
 | Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
-| Judging it       | `d` reviewed and next · shift `d` review mode · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
+| Judging it       | `d` in review mode: reviewed for the pass, and next · shift `d` review mode on or off · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
 | Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
 
@@ -9384,6 +9412,15 @@ additions are the count badge on each heading and "show all" on the line.
 reads as two filters. The control keeps its name and its options are Yes and No, because the
 row has already asked the question.
 
+**Reviewed for, per pass** (2026-11-08). The panel's "Reviewed for" lists the viewer's passes in
+the room, each Any, Yes or Not yet, and they combine: Reviewed for Players and Not yet reviewed
+for Wins is two settings. The address carries `reviewedFor=` and `notReviewedFor=`, comma lists
+of pass ids, the spelling `tags` and `notTags` use, and saved views store the same two fields. The
+chips and the sidebar's summary read the same way ("Reviewed for Players", "Not yet reviewed for
+Wins"), one chip per pass. The SQL is an `EXISTS` / `NOT EXISTS` against the mark's primary key,
+scoped to the viewer through the pass, and reads no `UserMedia` row. The section is absent until
+there is a pass; one a view names that has since gone still shows, so it can be cleared.
+
 **The cellar is set in Young Serif over Atkinson Hyperlegible.** Inter and Bitter were the
 theme's first answer and neither was chosen so much as reached for; Inter in particular is the
 house face of everything, which is the opposite of what a private room should sound like. The
@@ -9888,9 +9925,9 @@ So: **an explicit `watchedAt` on `UserMedia`**, set automatically by the rule ab
 toggleable by hand. It survives a rewatch, and it is filterable, which is the point — the
 companion to "unrated only" is "unwatched only".
 
-**Reviewed is not watched.** `reviewedAt` is the explicit "done deciding about this one" a
-pass over a backlog leaves behind — the `d` key — and is filtered beside watched (§14d
-"Reviewing recordings for a reel").
+**Reviewed is not watched.** A review mark is the explicit "done deciding about this one, for
+this pass" a pass over a backlog leaves behind — the `d` key in review mode — and is filtered
+beside watched (§14d "Reviewing recordings for a reel").
 
 ### Nothing is resumed across visits
 
