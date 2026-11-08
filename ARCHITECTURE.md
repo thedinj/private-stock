@@ -7821,15 +7821,25 @@ a count of spans discloses nothing and destroying work with no notice at all is 
 The Game Room's main work (2026-11-08): hundreds of short recordings, each saved after a moment,
 gone through in sittings at a keyboard, each yielding a clip or nothing. Reels are cut later by
 period or by a tag set by hand. Nothing here is a mode or a page; it is the item page walking a
-filtered set, with five additions.
+filtered set, with five additions and one mode.
 
 - **Reviewed is its own mark** (`UserMedia.reviewedAt`), set only by hand. Watched cannot be it:
   watched is thirty seconds of playback (§14b), and a recording opened ten seconds before its end
   never gets there. "I have been through this" is also a different fact from "I have seen it",
   and a recording that yields nothing still has to leave the backlog. A filter of the viewer's
   own, three-state, like watched; carried across a duplicate merge as the earlier of the two.
-  The backlog is the library at **Not reviewed**, oldest first, and the Game Room's sidebar
-  links straight to it as "To review" (§21).
+  **The flag does nothing else.** A backlog is a view the person makes -- the library at Not
+  reviewed, oldest first, saved if they like -- and nothing hides reviewed items implicitly. The
+  sidebar's "To review" link (a fixed filter) was removed on 2026-11-08 for that reason: it tied
+  reviewing to one set, and what a view shows should be what its chips say.
+- **Review is a mode, not a set** (2026-11-08), in every room. Play ▸ **Review** opens the set
+  the way From the top does, with `?review=1` on the item's address; on the viewer the
+  Review/Reviewing button or `Shift+D` turns it on or off for the item in hand (on jumps to the
+  tail where the room has one). In it, each item opens where the room looks first -- the tail in
+  the Game Room, the start elsewhere -- and the next waits for `d` -- autoplay-next
+  is set aside, since rolling on would carry a recording away mid-decision. `go` carries the
+  parameter through the set and a reload keeps it; an item opened any other way opens as usual,
+  from the start. Which items are walked is entirely the set's business.
 - **`d` is done-and-next.** It marks the item and steps to the next in one keystroke, reading the
   next id _before_ the write, since the item leaves a Not reviewed set as the mark lands. The
   viewer already holds its set across that (§14b, as it does for rating inside "Unrated only"),
@@ -8329,21 +8339,21 @@ free.
 | Playing          | `space` / `k` play/pause · `←` `→` ±5 s, shift ±30 s · `j` `l` by the bar's jump lengths (§14b) · `,` `.` frame step (paused) · `0`–`9` jump to 0–90% · `-` `+` speed (0.25×–4×) · `m` mute · `f` full screen · `s` capture the frame |
 | Through the set  | `n` next · `p` previous                                                                                                                                                                                                               |
 | Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
-| Judging it       | `d` reviewed and next · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
+| Judging it       | `d` reviewed and next · shift `d` review mode · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
 | Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
 
 Outside the viewer: `1`–`5` rate in the grid, and `Enter` with nothing focused opens a library
-grid's first item (`useEnterOpensFirst`) -- the keyboard's way into "To review", whose first tile
+grid's first item (`useEnterOpensFirst`) -- the keyboard's way into a backlog view, whose first tile
 is sixty Tabs away behind the sidebar and the filters.
 
-**The review pass never needs the mouse** (2026-11-08): `Enter` on the list, then per item `[` `]`,
-a tag and `Enter` to add it, `Enter` on the empty box to save the clip, `w`/`t` for the item's own
-boxes, `d`. Every `Esc` has one meaning per press, so none ever has to be undone with the pointer.
-In the clip's tag box the first `Esc` clears a half-typed tag (as a facet box does), the next leaves
-the box with the span kept, and one more -- with no field focused -- drops the span, which is the
-clip bar's Clear. Which facet the clip's tags go to (the switch beside it) is `Shift+Tab` from the
-box, the arrows, and `Tab` back.
+**The review pass never needs the mouse** (2026-11-08): `Enter` on the list, `Shift+D`, then per
+item `[` `]`, a tag and `Enter` to add it, `Enter` on the empty box to save the clip, `w`/`t` for
+the item's own boxes, `d`. Every `Esc` has one meaning per press, so none ever has to be undone with
+the pointer. In the clip's tag box the first `Esc` clears a half-typed tag (as a facet box does),
+the next leaves the box with the span kept, and one more -- with no field focused -- drops the span,
+which is the clip bar's Clear. Which facet the clip's tags go to (the switch beside it) is
+`Shift+Tab` from the box, the arrows, and `Tab` back.
 
 **The field keys follow the facet's role, not the room's word for it**: `w` for who, `o` for
 origin, `t` for tag, `r` for remark. A key per room label would give `p` to Players (taken by
@@ -12189,8 +12199,10 @@ A Game Room recording is about thirty seconds, saved by hand _after_ the moment 
 so the moment is at its end and the first twenty seconds are run-up. The profile says so as
 `tailMs` (10 s in the Game Room, null elsewhere), and three things follow it:
 
-- **The viewer opens there** (`tailStartMs`, `openingTarget`'s `roomStartMs`), unless the address
-  names a moment or the item was left part way this visit. The warmed next item buffers the same
+- **The viewer opens there in review mode only** (`tailStartMs`, `openingTarget`'s
+  `roomStartMs`, §14d), unless the address names a moment or the item was left part way this
+  visit. Watching opens at the start like every room, so a run of whole recordings can still be
+  queued; until 2026-11-08 every Game Room item opened at the tail, which made that impossible. The warmed next item buffers the same
   point (§8b), or warming would warm the run-up nobody is shown.
 - **The tasting and showcase** draw their taste from the tail (`pickRoomSegment`), not from a
   random point inside the trimmed middle.
@@ -12200,10 +12212,10 @@ so the moment is at its end and the first twenty seconds are run-up. The profile
   version bump would have re-rendered every preview in every room for a change that is not about
   the Cellar.
 
-A fact about the content, like `skipsStages`, so it is in the profile and not a setting. The
-profile's `reviewPass` is the other half of the same observation: the Game Room is worked
-through as a backlog, so its sidebar offers "To review" (§14d "Reviewing recordings for a
-reel").
+A fact about the content, like `skipsStages`, so it is in the profile and not a setting. Review
+mode is every room's (§14d "Reviewing recordings for a reel"); the tail is only where it puts
+the playhead. Previews and the tasting keep the tail outside review mode; they are for finding
+the moment, which is where it is.
 
 ### A look per room
 

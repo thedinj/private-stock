@@ -247,8 +247,10 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                                 menu are one line, so See all drops its count there. */}
                             <PlayMenu
                                 setParams={setParams}
-                                onFromTop={() =>
-                                    void playFromTop(parseView(setParams)).catch(() => undefined)
+                                onFromTop={(review) =>
+                                    void playFromTop(parseView(setParams), review).catch(
+                                        () => undefined
+                                    )
                                 }
                                 empty={total === 0}
                                 height={touchHeight}

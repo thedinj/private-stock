@@ -59,6 +59,7 @@ import { BACKGROUND } from "@/lib/api/background";
 import { mediaDetailQuery } from "@/lib/api/media";
 import { DEFAULT_VIEW, viewToParams } from "@/lib/libraryQuery";
 import { itemHref } from "@/lib/lookMoment";
+import { isReviewing, withReview } from "@/lib/reviewMode";
 import { readReturn, rememberReturnTo, returnAtPage, returnLabel } from "@/lib/returnTo";
 import { leaveViewer } from "@/lib/viewerReturn";
 import { openingPicture } from "@/lib/openItem";
@@ -141,6 +142,16 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      */
     const searchParams = useSearchParams();
     const startAtMs = parseAtParam(searchParams.get("at"));
+
+    /**
+     * Review mode (§14d "Reviewing recordings for a reel"), in any room: the next item waits for
+     * `d` instead of rolling on, and each opens where the room looks first -- the tail in the
+     * Game Room, the start elsewhere. On the address, so `go` carries it through the set and a
+     * reload keeps it; nothing about which items are in the set changes.
+     */
+    const reviewing = isReviewing(searchParams);
+    const reviewingRef = useRef(reviewing);
+    reviewingRef.current = reviewing;
 
     /**
      * The room, and its light (§14).
@@ -345,6 +356,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
 
     const [autoplayOnOpen, setAutoplayOnOpen] = usePlaybackPref("autoplayOnOpen");
     const [autoplayNext, setAutoplayNext] = usePlaybackPref("autoplayNext");
+    /** Rolling on to the next item: the switch, except in review mode, where `d` moves on. */
+    const rollOn = autoplayNext && !reviewing;
     const [dwellSeconds, setDwellSeconds] = useDwellSeconds();
 
     /**
@@ -381,7 +394,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 rememberReturnTo(returnAtPage(returnTo, targetPage));
             }
 
-            router.replace(itemHref(target, matchedAt));
+            router.replace(withReview(itemHref(target, matchedAt), reviewingRef.current));
         },
         [router, returnTo]
     );
@@ -559,7 +572,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
 
     const hold = dwellMs({
         mode,
-        autoplayNext,
+        autoplayNext: rollOn,
         hasNext: sequence.nextId !== null,
         seconds: dwellSeconds,
     });
@@ -656,6 +669,20 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * Pressing it on an item already reviewed just moves on; taking the mark back is the
      * toggle on the row. At the end of the set it says so rather than doing nothing visible.
      */
+    /**
+     * Into review mode or out of it, on this item. Into it jumps to the tail, since the item is
+     * already open and its opening point has passed; out of it leaves the playhead alone.
+     */
+    const toggleReviewMode = useCallback(() => {
+        const next = !reviewingRef.current;
+
+        router.replace(withReview(window.location.pathname + window.location.search, next));
+
+        const tail = next && data ? tailStartMs(getActiveDomain(), data.durationMs) : null;
+
+        if (tail !== null) seekRef.current?.(tail);
+    }, [router, data]);
+
     const { mutate: saveReviewed } = useMarkReviewed();
     const reviewAndNext = useCallback(() => {
         const nextId = sequence.nextId;
@@ -794,9 +821,20 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 return;
             }
 
+            // Shift+D: review mode on or off (§14d).
+            // By the physical key with Shift, as well as by "D": what Shift+D produces depends on the
+            // layout and on Caps Lock, and some synthetic keyboards send "d" with Shift held.
+            const shiftD = event.key === "D" || (event.code === "KeyD" && event.shiftKey);
+
+            if (shiftD && !overlayOpen) {
+                event.preventDefault();
+                if (!event.repeat) toggleReviewMode();
+                return;
+            }
+
             // d for done: reviewed, then the next one (§14d). Not on a repeat -- a held key
             // would sweep a run of items into "reviewed" that nobody looked at.
-            if (event.key === "d" && !overlayOpen) {
+            if (event.key === "d" && !event.shiftKey && !overlayOpen) {
                 event.preventDefault();
                 if (!event.repeat) reviewAndNext();
                 return;
@@ -880,6 +918,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         jumpToField,
         setOpinion,
         reviewAndNext,
+        toggleReviewMode,
         selection,
         sequence.nextId,
         sequence.previousId,
@@ -896,7 +935,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         mediaId: id,
         blocked: castBlocked(data?.playbackSource),
         upcomingIds: sequence.upcomingIds,
-        autoplayNext,
+        autoplayNext: rollOn,
         follow: go,
     });
 
@@ -1159,7 +1198,11 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             mediaId={data.id}
                             durationMs={data.durationMs}
                             startAtMs={startAtMs}
-                            roomStartMs={tailStartMs(getActiveDomain(), data.durationMs)}
+                            // The room's tail, only in review mode: watching opens at the
+                            // start, so whole recordings can still be queued (§21).
+                            roomStartMs={
+                                reviewing ? tailStartMs(getActiveDomain(), data.durationMs) : null
+                            }
                             spriteVttUrl={data.spriteVttUrl}
                             poster={data.coverUrl}
                             autoPlay={autoplayOnOpen}
@@ -1182,9 +1225,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                                           visitPosition(nextDetail.data.id),
                                           nextDetail.data.durationMs
                                       ) ??
-                                      // Where the next one will open in this room, or the
+                                      // Where the next one will open in review mode, or the
                                       // warm buffers a beginning nobody is shown (§21).
-                                      tailStartMs(getActiveDomain(), nextDetail.data.durationMs))
+                                      (reviewing
+                                          ? tailStartMs(
+                                                getActiveDomain(),
+                                                nextDetail.data.durationMs
+                                            )
+                                          : null))
                                     : null
                             }
                             span={preview}
@@ -1226,9 +1274,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             // Rolling onward is a separate consent from playing what you
                             // opened, so it is a separate switch and is off by default.
                             onEnded={
-                                autoplayNext && sequence.nextId
-                                    ? () => go(sequence.nextId)
-                                    : undefined
+                                rollOn && sequence.nextId ? () => go(sequence.nextId) : undefined
                             }
                             // A file that claimed it could play and then could not. The stage
                             // shows its cover instead of nothing, and the show moves on (§8b).
@@ -1285,6 +1331,28 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {/* The way anything gets into a playlist (§14b). Here because this is
                         where you decide you want it -- the decision is made watching the
                         thing, not later in a list of lists. */}
+                    {/* Review mode (§14d): Shift+D, or here. Not on a phone, whose row is full
+                        and which has no d to wait for; Play ▸ Review is there. */}
+                    {!narrow && (
+                        <ViewerKeyTip
+                            action="reviewMode"
+                            label={
+                                reviewing
+                                    ? "Reviewing: each waits for d instead of rolling on. Click to stop"
+                                    : "Review: each waits for d instead of rolling on"
+                            }
+                        >
+                            <Button
+                                variant={reviewing ? "filled" : "default"}
+                                color={reviewing ? "brass" : undefined}
+                                aria-pressed={reviewing}
+                                onClick={toggleReviewMode}
+                            >
+                                {reviewing ? "Reviewing" : "Review"}
+                            </Button>
+                        </ViewerKeyTip>
+                    )}
+
                     {/* Reviewed (§14d): the d key's mark, and the only way to take it back. */}
                     <ViewerKeyTip
                         action="review"

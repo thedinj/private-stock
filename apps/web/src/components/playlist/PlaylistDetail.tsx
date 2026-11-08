@@ -49,6 +49,7 @@ import { MoreGlyph } from "@/components/media/Glyph";
 import { useRememberedHref } from "@/lib/rememberedPages";
 import { useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { withReview } from "@/lib/reviewMode";
 import { settling } from "@/lib/settling";
 import { fetchShowcasePage } from "@/lib/showcase/pages";
 import { playlistSetParams } from "@/lib/showcase/set";
@@ -155,7 +156,7 @@ export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId })
      * the item is. Back still lands on the page you left: the viewer corrects the address to
      * wherever playback got to (§14b).
      */
-    const playFromTop = async () => {
+    const playFromTop = async (review: boolean) => {
         const first = await fetchShowcasePage(
             queryClient,
             { kind: "playlist", playlistId, seed: view.seed },
@@ -169,7 +170,7 @@ export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId })
         // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
         openItem({
             id: target.id,
-            href: `/media/${encodeURIComponent(target.id)}`,
+            href: withReview(`/media/${encodeURIComponent(target.id)}`, review),
             marker: null,
             picture: target.coverUrl,
         });
@@ -268,7 +269,7 @@ export const PlaylistDetail: React.FC<{ playlistId: string }> = ({ playlistId })
                             played in that shuffle. */}
                         <PlayMenu
                             setParams={playlistSetParams(playlistId, view.seed)}
-                            onFromTop={() => void playFromTop().catch(() => undefined)}
+                            onFromTop={(review) => void playFromTop(review).catch(() => undefined)}
                             empty={total === 0}
                         />
 

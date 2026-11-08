@@ -71,15 +71,12 @@ export interface DomainProfile {
     /**
      * Where the part worth seeing sits in an item (§21 "Where a room looks first"). Null is the
      * whole of it. A number is "the last this-many milliseconds": a game recording is saved
-     * after the moment it was saved for, so the moment is at its end -- the viewer opens there,
-     * the tasting plays it and the hover preview is cut from it.
+     * after the moment it was saved for, so the moment is at its end -- the tasting plays it, the
+     * hover preview is cut from it, and in review mode the viewer opens there (review mode is in
+     * every room; elsewhere it opens at the start). Watching opens at
+     * the start, so a run of whole recordings can still be queued.
      */
     tailMs: number | null;
-    /**
-     * Whether the sidebar offers the backlog -- "To review", the library at "Not reviewed",
-     * oldest first (§14d "Reviewing recordings for a reel"). The filter itself is in every room.
-     */
-    reviewPass: boolean;
 }
 
 /**
@@ -105,7 +102,6 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         // into a family video to read.
         skipsStages: ["embed", "ocr"],
         tailMs: null,
-        reviewPass: false,
     },
     cellar: {
         kind: "cellar",
@@ -119,7 +115,6 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         },
         skipsStages: [],
         tailMs: null,
-        reviewPass: false,
     },
     games: {
         kind: "games",
@@ -138,7 +133,6 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         // Saved after the fact, so the moment is in the last seconds (§14d "Reviewing
         // recordings for a reel").
         tailMs: 10_000,
-        reviewPass: true,
     },
 };
 

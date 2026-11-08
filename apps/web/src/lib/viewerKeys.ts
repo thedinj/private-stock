@@ -33,6 +33,7 @@ export type ViewerAction =
     | "markOut"
     | "saveClip"
     | "review"
+    | "reviewMode"
     | "rate"
     | "favourite"
     | "trash";
@@ -170,6 +171,14 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         does: "Done: mark it reviewed, go to the next",
         action: "review",
         tip: ["d"],
+    },
+    {
+        group: "review",
+        presses: ["D"],
+        shown: "Shift d",
+        does: "Review mode on or off: each waits for d (in the Game Room, from its last seconds)",
+        action: "reviewMode",
+        tip: ["Shift+D"],
     },
     {
         group: "review",

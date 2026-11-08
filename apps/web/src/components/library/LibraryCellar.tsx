@@ -769,7 +769,9 @@ export const LibraryCellar: React.FC = () => {
                     <Group gap="xs" wrap="nowrap">
                         <PlayMenu
                             setParams={viewToParams(view)}
-                            onFromTop={() => void playFromTop(view).catch(() => undefined)}
+                            onFromTop={(review) =>
+                                void playFromTop(view, review).catch(() => undefined)
+                            }
                             empty={total === 0}
                             height={touchHeight}
                         />

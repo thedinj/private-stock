@@ -15,6 +15,7 @@ import {
 } from "@/lib/libraryQuery";
 import { useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { withReview } from "@/lib/reviewMode";
 
 /** The library's page of a set, as the grid asks for it -- so the two share one cache entry. */
 export const fetchLibraryPage = (filter: URLSearchParams, page: number) => {
@@ -40,11 +41,11 @@ export const fetchLibraryPage = (filter: URLSearchParams, page: number) => {
  * after its dwell (see `stageDwell`), so skipping ahead to the first video would start somewhere
  * other than the top -- which Showcase and Tasting never do.
  */
-export const usePlayFromTop = (): ((view: LibraryView) => Promise<void>) => {
+export const usePlayFromTop = (): ((view: LibraryView, review?: boolean) => Promise<void>) => {
     const queryClient = useQueryClient();
     const openItem = useOpenItem();
 
-    return async (view) => {
+    return async (view, review = false) => {
         const filter = viewToRequestParams({ ...view, sort: effectiveSort(view) });
         const first = await queryClient.fetchQuery({
             queryKey: queryKeys.media.page(filter.toString(), 0),
@@ -59,7 +60,7 @@ export const usePlayFromTop = (): ((view: LibraryView) => Promise<void>) => {
         // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
         openItem({
             id: target.id,
-            href: `/media/${encodeURIComponent(target.id)}`,
+            href: withReview(`/media/${encodeURIComponent(target.id)}`, review),
             marker: null,
             picture: target.coverUrl,
         });
