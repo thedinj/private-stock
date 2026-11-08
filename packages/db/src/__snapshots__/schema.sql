@@ -1117,6 +1117,7 @@ CREATE TABLE "UserMedia" (
             -- A timestamp rather than a flag, so "watched recently" stays askable and the
             -- column says when as well as whether. Null is unwatched; there is no 0.
             "watchedAt" DATETIME,
+            "reviewedAt" DATETIME,
             "note" TEXT CHECK("note" IS NULL OR length("note") <= 2000),
             "updatedAt" DATETIME NOT NULL,
             PRIMARY KEY ("userId", "mediaId"),

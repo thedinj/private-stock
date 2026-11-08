@@ -467,6 +467,7 @@ export const getMediaDetail = (mediaId: string, auth: AuthContext): MediaDetail 
         frames: listFrames(mediaId, auth),
         clips: listClipsFor(mediaId, auth),
         hidden: row.hidden === 1,
+        reviewedAt: row.reviewedAt,
         // This viewer's own, straight off the overlay join -- never the shared filter
         // owner's, even when the list that led here was resolved as somebody else (§6).
         note: row.note,

@@ -503,6 +503,7 @@ const needsUserJoin = (query: MediaQuery): boolean =>
     // The viewer's own row, like `watched`, so here rather than in `readsRatingRow`.
     query.sort === "lastViewed" ||
     query.watched !== undefined ||
+    query.reviewed !== undefined ||
     groupsReadUserMedia(query.groups);
 
 const OVERLAY_JOIN = `
@@ -950,6 +951,13 @@ const buildFilters = (
         where.push(`um."watchedAt" IS NOT NULL`);
     } else if (query.watched === "no") {
         where.push(`um."watchedAt" IS NULL`);
+    }
+
+    // Reviewed likewise (§14d): one viewer's decisions, never a shared filter owner's.
+    if (query.reviewed === "yes") {
+        where.push(`um."reviewedAt" IS NOT NULL`);
+    } else if (query.reviewed === "no") {
+        where.push(`um."reviewedAt" IS NULL`);
     }
 
     if (rootIds.length === 0) {
@@ -1840,6 +1848,8 @@ export interface MediaDetailRow extends MediaListRow {
     hidden: number | null;
     /** When this viewer finished with the item, or null (§14b). */
     watchedAt: string | null;
+    /** When this viewer finished deciding about the item, or null (§14d). */
+    reviewedAt: string | null;
     /**
      * This viewer's private note, or null (§6, §14b).
      *
@@ -1879,7 +1889,7 @@ export const findDetail = (
                     spriteVtt."relPath" AS "spriteVttPath",
                     spriteVtt."generatedAt" AS "spriteVttGeneratedAt",
                     um."rating", um."favorite", um."hidden", um."watchedAt",
-                    um."note"
+                    um."reviewedAt", um."note"
              ${BASE_FROM}
              ${ORIGINAL_FILE_JOIN}
              JOIN "MediaRoot" r ON r."id" = f."rootId"

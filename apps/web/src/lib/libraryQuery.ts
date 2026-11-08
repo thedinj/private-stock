@@ -111,6 +111,8 @@ export interface LibraryView {
      * — what you have watched is your history, not a property of the item.
      */
     watched: "yes" | "no" | null;
+    /** Reviewed, not yet, or don't care (§14d) -- the viewer's own, like `watched`. */
+    reviewed: "yes" | "no" | null;
     /**
      * Only videos whose original a browser is said not to play (§8). Offered by the filter
      * panel only while an administrator has the playback check switched on.
@@ -223,6 +225,7 @@ export const DEFAULT_VIEW: LibraryView = {
     favorite: false,
     unrated: false,
     watched: null,
+    reviewed: null,
     playback: null,
     minRating: null,
     maxRating: null,
@@ -302,6 +305,12 @@ export const parseView = (params: URLSearchParams): LibraryView => {
         unrated: params.get("unrated") === "1",
         watched:
             params.get("watched") === "yes" ? "yes" : params.get("watched") === "no" ? "no" : null,
+        reviewed:
+            params.get("reviewed") === "yes"
+                ? "yes"
+                : params.get("reviewed") === "no"
+                  ? "no"
+                  : null,
         playback: params.get("playback") === "blocked" ? "blocked" : null,
         minRating:
             Number.isInteger(minRating) && minRating >= 1 && minRating <= 5 ? minRating : null,
@@ -369,6 +378,7 @@ export const viewToParams = (view: LibraryView): URLSearchParams => {
     if (view.favorite) params.set("favorite", "1");
     if (view.unrated) params.set("unrated", "1");
     if (view.watched) params.set("watched", view.watched);
+    if (view.reviewed) params.set("reviewed", view.reviewed);
     if (view.playback) params.set("playback", view.playback);
     if (view.minRating !== null) params.set("minRating", String(view.minRating));
     if (view.maxRating !== null) params.set("maxRating", String(view.maxRating));
@@ -488,6 +498,7 @@ export const isFiltered = (view: LibraryView): boolean =>
     view.favorite ||
     view.unrated ||
     view.watched !== null ||
+    view.reviewed !== null ||
     view.playback !== null ||
     view.minRating !== null ||
     view.maxRating !== null ||
@@ -623,6 +634,7 @@ export const clearFilters = (view: LibraryView): LibraryView => ({
     favorite: false,
     unrated: false,
     watched: null,
+    reviewed: null,
     playback: null,
     minRating: null,
     maxRating: null,
@@ -789,6 +801,7 @@ export const savedQueryToParams = (query: SavedQuery): URLSearchParams => {
     if (query.favorite) params.set("favorite", "1");
     if (query.unrated) params.set("unrated", "1");
     if (query.watched) params.set("watched", query.watched);
+    if (query.reviewed) params.set("reviewed", query.reviewed);
     if (query.playback) params.set("playback", query.playback);
     if (query.minRating !== undefined) params.set("minRating", String(query.minRating));
     if (query.maxRating !== undefined) params.set("maxRating", String(query.maxRating));
@@ -852,6 +865,7 @@ const paramsToViewFields = (params: URLSearchParams): Partial<LibraryView> => {
         favorite: parsed.favorite,
         unrated: parsed.unrated,
         watched: parsed.watched ?? undefined,
+        reviewed: parsed.reviewed ?? undefined,
         playback: parsed.playback ?? undefined,
         minRating: parsed.minRating,
         maxRating: parsed.maxRating,

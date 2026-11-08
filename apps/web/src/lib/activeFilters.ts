@@ -148,6 +148,14 @@ export const activeFilters = (
         });
     }
 
+    if (view.reviewed) {
+        filters.push({
+            id: "reviewed",
+            label: view.reviewed === "yes" ? "Reviewed" : "Not reviewed",
+            clear: (current) => ({ ...current, reviewed: null, page: 0 }),
+        });
+    }
+
     if (view.playback) {
         filters.push({
             id: "playback",

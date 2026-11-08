@@ -31,6 +31,8 @@ export interface UserOverlay {
     /** ISO-ish SQLite datetime, or null if never opened. */
     lastViewedAt: string | null;
     watchedAt: string | null;
+    /** When this viewer finished deciding about the item (§14d), or null. */
+    reviewedAt: string | null;
     note: string | null;
 }
 
@@ -41,6 +43,7 @@ export const EMPTY_OVERLAY: UserOverlay = {
     viewCount: 0,
     lastViewedAt: null,
     watchedAt: null,
+    reviewedAt: null,
     note: null,
 };
 
@@ -116,6 +119,8 @@ export const mergeNotes = (heir: string | null, departing: string | null): strin
  * - **Last viewed — the later.**
  * - **Watched — the earlier.** The column records when you *first* finished with the item,
  *   which is what `markWatched` already promises by refusing to move it on a rewatch.
+ * - **Reviewed — the earlier**, for the same reason as watched: a decision made about either
+ *   copy is a decision made about the content.
  * - **Note — kept, both of them.** See `mergeNotes`.
  */
 export const mergeOverlay = (heir: UserOverlay, departing: UserOverlay): UserOverlay => {
@@ -126,6 +131,7 @@ export const mergeOverlay = (heir: UserOverlay, departing: UserOverlay): UserOve
         viewCount: Math.max(heir.viewCount, departing.viewCount),
         lastViewedAt: latest(heir.lastViewedAt, departing.lastViewedAt),
         watchedAt: earliest(heir.watchedAt, departing.watchedAt),
+        reviewedAt: earliest(heir.reviewedAt, departing.reviewedAt),
         note: mergeNotes(heir.note, departing.note),
     };
 };
@@ -138,4 +144,5 @@ export const overlayEquals = (a: UserOverlay, b: UserOverlay): boolean =>
     a.viewCount === b.viewCount &&
     a.lastViewedAt === b.lastViewedAt &&
     a.watchedAt === b.watchedAt &&
+    a.reviewedAt === b.reviewedAt &&
     a.note === b.note;

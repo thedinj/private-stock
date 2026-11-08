@@ -200,6 +200,11 @@ export const mediaQuerySchema = z.object({
      */
     watched: z.enum(["yes", "no"]).optional(),
     /**
+     * Reviewed, not yet, or don't care (§14d "Reviewing recordings for a reel"). Three states
+     * and always the viewer's own, for the reasons `watched` gives.
+     */
+    reviewed: z.enum(["yes", "no"]).optional(),
+    /**
      * Only videos whose original `assessPlayback` says a browser cannot play (§8).
      *
      * Not in the filter panel: an admin reaches it from Processing › Transcoding, to try those
@@ -775,6 +780,11 @@ export const mediaDetailSchema = mediaListItemSchema.extend({
     tags: z.array(mediaTagSchema),
     /** Whether this viewer has hidden the item. */
     hidden: z.boolean(),
+    /**
+     * When this viewer finished deciding about the item, or null (§14d). On the detail only:
+     * a tile does not show it, and the backlog is reached through the `reviewed` filter.
+     */
+    reviewedAt: z.string().nullable(),
     /**
      * This viewer's private note, or null (§6, §14b).
      *

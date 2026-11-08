@@ -31,7 +31,8 @@ import { ItemPerformers } from "@/components/faces/ItemPerformers";
 import { WhoIsThis } from "@/components/faces/WhoIsThis";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
-import { LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
+import { KeyTip } from "@/components/KeyTip";
+import { CheckGlyph, LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
 import { SectionLabel } from "@/components/media/SectionLabel";
 import {
     isGrand,
@@ -77,6 +78,7 @@ import {
     ratingWhilePending,
     useUserMedia,
     type UserMediaPatch,
+    useMarkReviewed,
 } from "@/lib/api/userMedia";
 
 import classes from "@/components/media/PlayerStage.module.scss";
@@ -595,6 +597,51 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     const flashCount = useRef(0);
     const { mutate: saveOpinion } = rate;
 
+    /**
+     * Done with this one, and on to the next (§14d "Reviewing recordings for a reel").
+     *
+     * The next id is read before the write: inside "Not reviewed" the item leaves the set as
+     * soon as the mark lands. Nothing waits for the answer, because a pass over a backlog is
+     * hundreds of these in a row -- but a failure is said over whatever is on screen by then,
+     * in words that name the item before, so a mark that never landed is not silently lost.
+     *
+     * Pressing it on an item already reviewed just moves on; taking the mark back is the
+     * toggle on the row. At the end of the set it says so rather than doing nothing visible.
+     */
+    const { mutate: saveReviewed } = useMarkReviewed();
+    const reviewAndNext = useCallback(() => {
+        const nextId = sequence.nextId;
+
+        saveReviewed(
+            { mediaId: id, reviewed: true },
+            {
+                onError: () => {
+                    flashCount.current += 1;
+                    setFlash({
+                        key: flashCount.current,
+                        state: "failed",
+                        subject: "refused",
+                        text: nextId
+                            ? "Could not mark the last item reviewed."
+                            : "Could not mark this reviewed.",
+                    });
+                },
+            }
+        );
+
+        if (nextId) {
+            go(nextId);
+        } else {
+            flashCount.current += 1;
+            setFlash({
+                key: flashCount.current,
+                state: "saved",
+                subject: "note",
+                text: "Reviewed. That was the last one.",
+            });
+        }
+    }, [go, id, saveReviewed, sequence.nextId]);
+
     const setOpinion = useCallback(
         (patch: UserMediaPatch) => {
             flashCount.current += 1;
@@ -664,6 +711,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             if (event.key === "p") {
                 event.preventDefault();
                 go(sequence.previousId);
+                return;
+            }
+
+            // d for done: reviewed, then the next one (§14d). Not on a repeat -- a held key
+            // would sweep a run of items into "reviewed" that nobody looked at.
+            if (event.key === "d" && !overlayOpen) {
+                event.preventDefault();
+                if (!event.repeat) reviewAndNext();
                 return;
             }
 
@@ -741,6 +796,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         trashOpen,
         trashDialog,
         setOpinion,
+        reviewAndNext,
         sequence.nextId,
         sequence.previousId,
     ]);
@@ -1140,6 +1196,32 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {/* The way anything gets into a playlist (§14b). Here because this is
                         where you decide you want it -- the decision is made watching the
                         thing, not later in a list of lists. */}
+                    {/* Reviewed (§14d): the d key's mark, and the only way to take it back. */}
+                    <KeyTip
+                        label={
+                            data.reviewedAt
+                                ? "Reviewed. Click to take it back"
+                                : "Done with this one: mark it reviewed and go to the next"
+                        }
+                        keys={["d"]}
+                    >
+                        <Button
+                            variant={data.reviewedAt ? "light" : "default"}
+                            color={data.reviewedAt ? "brass" : undefined}
+                            leftSection={narrow ? undefined : <CheckGlyph size={16} />}
+                            aria-pressed={data.reviewedAt !== null}
+                            aria-label="Reviewed"
+                            onClick={() =>
+                                saveReviewed({
+                                    mediaId: data.id,
+                                    reviewed: data.reviewedAt === null,
+                                })
+                            }
+                        >
+                            {narrow ? <CheckGlyph size={16} /> : "Reviewed"}
+                        </Button>
+                    </KeyTip>
+
                     <AddToPlaylist mediaId={data.id} iconOnly={narrow} />
 
                     {/* "More like this", from the moment on screen (§5e): the library ordered

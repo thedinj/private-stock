@@ -96,3 +96,32 @@ export const ratingWhilePending = (
  */
 export const ratingAfterPressing = (pressed: number, current: number | null): number | null =>
     pressed === current ? null : pressed;
+
+/**
+ * Done deciding about an item, or not after all (§14d "Reviewing recordings for a reel").
+ *
+ * Its own mutation rather than a field of `useUserMedia`, because the `d` key marks an item and
+ * leaves it in the same keystroke: the id travels with the call, so a save that lands after the
+ * page has moved on still writes to -- and patches the cache of -- the item it was about.
+ *
+ * The same cascade as a rating: a "Not reviewed" list stops holding the item, and its count is
+ * cached. The viewer holds its set across that (§14b), so walking a shrinking backlog is safe.
+ */
+export const useMarkReviewed = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ mediaId, reviewed }: { mediaId: string; reviewed: boolean }) =>
+            api<{ reviewedAt: string | null }>(`/api/media/${mediaId}/user`, {
+                method: "PATCH",
+                body: JSON.stringify({ reviewed }),
+            }),
+        onSuccess: (result, { mediaId }) => {
+            queryClient.setQueryData<MediaDetail>(queryKeys.media.detail(mediaId), (current) =>
+                current ? { ...current, reviewedAt: result.reviewedAt } : current
+            );
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.all() });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.home() });
+        },
+    });
+};

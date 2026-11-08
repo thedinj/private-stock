@@ -1740,6 +1740,12 @@ export function initializeDatabase(db: Database): void {
         -- The comments inside this table are part of its stored definition, so they stay as the
         -- baseline wrote them: "resumePositionMs" was dropped in place (§14b) and a rewrite here
         -- would differ from every database that replayed the drop.
+        --
+        -- "reviewedAt" (added 2026-11-08, so explained here rather than inside): when this
+        -- viewer finished deciding about the item, or null (§14d "Reviewing recordings for a
+        -- reel"). Explicit, never set by playback -- a recording opened ten seconds before its
+        -- end never reaches the watched threshold, and "I have been through this" is a
+        -- different fact from "I have seen it".
         CREATE TABLE IF NOT EXISTS "UserMedia" (
             "userId" TEXT NOT NULL,
             "mediaId" TEXT NOT NULL,
@@ -1765,6 +1771,7 @@ export function initializeDatabase(db: Database): void {
             -- A timestamp rather than a flag, so "watched recently" stays askable and the
             -- column says when as well as whether. Null is unwatched; there is no 0.
             "watchedAt" DATETIME,
+            "reviewedAt" DATETIME,
             "note" TEXT CHECK("note" IS NULL OR length("note") <= 2000),
             "updatedAt" DATETIME NOT NULL,
             PRIMARY KEY ("userId", "mediaId"),

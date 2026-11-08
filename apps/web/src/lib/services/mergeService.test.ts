@@ -41,6 +41,7 @@ const overlay = (userId: string, fields: Partial<UserOverlay>): OverlayRow => ({
     viewCount: 0,
     lastViewedAt: null,
     watchedAt: null,
+    reviewedAt: null,
     note: null,
     ...fields,
 });

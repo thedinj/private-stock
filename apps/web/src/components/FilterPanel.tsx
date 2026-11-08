@@ -253,6 +253,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         (view.favorite ? 1 : 0) +
         (view.unrated ? 1 : 0) +
         (view.watched ? 1 : 0) +
+        (view.reviewed ? 1 : 0) +
         (view.minRating !== null || view.maxRating !== null ? 1 : 0);
 
     const fileFilterCount =
@@ -553,6 +554,30 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                             // Spelling the answers out again -- "Seen", "Unseen" -- renamed
                             // the control in the middle of itself, and the chip it produced
                             // then made one filter look like two.
+                            { value: "yes", label: "Yes" },
+                            { value: "no", label: "No" },
+                        ]}
+                    />
+                </Group>
+
+                {/* Reviewed is the explicit "done deciding" a pass over recordings leaves
+                    behind (§14d), the d key on the item page; "No" is the backlog. */}
+                <Group gap="xs" align="center">
+                    <Text size="sm" c="dimmed">
+                        Reviewed
+                    </Text>
+                    <SegmentedControl
+                        size="xs"
+                        color="brass"
+                        value={view.reviewed ?? "any"}
+                        onChange={(value) =>
+                            onChange({
+                                ...view,
+                                reviewed: value === "any" ? null : (value as "yes" | "no"),
+                            })
+                        }
+                        data={[
+                            { value: "any", label: "Any" },
                             { value: "yes", label: "Yes" },
                             { value: "no", label: "No" },
                         ]}

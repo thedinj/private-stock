@@ -586,6 +586,53 @@ describe("watched", () => {
     });
 });
 
+describe("reviewed", () => {
+    // Explicit and the viewer's own (§14d): the backlog is "Not reviewed", walked while it shrinks.
+    it("filters both ways, counts an untouched item as not reviewed, and is the viewer's own", () => {
+        const done = addItem(1, { title: "Done", durationMs: 1, size: 1 });
+        const todo = addItem(2, { title: "Todo", durationMs: 1, size: 1 });
+
+        userMediaRepo.setReviewed(USER, done, true);
+        userMediaRepo.setReviewed(OWNER, todo, true);
+
+        const ids = (reviewed?: "yes" | "no", overlay?: string) =>
+            mediaRepo
+                .listMedia({ ...baseQuery, reviewed }, USER, [ROOT], overlay)
+                .rows.map((row) => row.id);
+
+        expect(ids("yes")).toEqual([done]);
+        expect(ids("no")).toEqual([todo]);
+        expect(ids("no", OWNER)).toEqual([todo]);
+        expect(new Set(ids())).toEqual(new Set([done, todo]));
+    });
+
+    it("keeps the first date when marked again, and can be taken back", () => {
+        const item = addItem(1, { title: "Again", durationMs: 1, size: 1 });
+        const read = () =>
+            sharedDb
+                .prepare(
+                    `SELECT "reviewedAt" FROM "UserMedia" WHERE "userId" = ? AND "mediaId" = ?`
+                )
+                .get(USER, item) as { reviewedAt: string | null };
+
+        userMediaRepo.setReviewed(USER, item, true);
+        const first = read();
+        expect(first.reviewedAt).not.toBeNull();
+
+        sharedDb
+            .prepare(
+                `UPDATE "UserMedia" SET "reviewedAt" = '2020-01-01 00:00:00' WHERE "mediaId" = ?`
+            )
+            .run(item);
+        userMediaRepo.setReviewed(USER, item, true);
+        expect(read().reviewedAt).toBe("2020-01-01 00:00:00");
+
+        userMediaRepo.setReviewed(USER, item, false);
+        expect(read().reviewedAt).toBeNull();
+        expect(mediaRepo.findDetail(item, USER, [ROOT])?.reviewedAt).toBeNull();
+    });
+});
+
 describe("note", () => {
     /**
      * `UserMedia.note` is per-user, and that is the whole of its access control (§6).

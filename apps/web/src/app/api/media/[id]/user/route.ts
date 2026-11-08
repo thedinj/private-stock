@@ -41,6 +41,11 @@ const userMediaSchema = z
          */
         watched: z.boolean().optional(),
         /**
+         * Done deciding about this item, or not after all (§14d "Reviewing recordings for a
+         * reel"). Only ever by hand: nothing about playback sets it.
+         */
+        reviewed: z.boolean().optional(),
+        /**
          * A private note on the item (§6, §14b).
          *
          * Nullable like `rating` and for the same reason: null clears it, which is a real
@@ -54,7 +59,7 @@ const userMediaSchema = z
         note: z.string().max(NOTE_MAX_LENGTH).nullable().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
-        message: "Supply at least one of rating, favorite, hidden, watched or note",
+        message: "Supply at least one of rating, favorite, hidden, watched, reviewed or note",
     });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -88,6 +93,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             userMediaRepo.setWatched(auth.userId, id, body.watched);
         }
 
+        if (body.reviewed !== undefined) {
+            userMediaRepo.setReviewed(auth.userId, id, body.reviewed);
+            // A "Not reviewed" view is walked while it shrinks, and its count is cached (§20).
+            clearLibraryCaches();
+        }
+
         if (body.note !== undefined) {
             userMediaRepo.setNote(auth.userId, id, body.note);
         }
@@ -101,6 +112,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             rating: row?.rating ?? null,
             favorite: row?.favorite === 1,
             hidden: row?.hidden === 1,
+            reviewedAt: row?.reviewedAt ?? null,
             // Read back rather than echoed: the repo trims, and empty becomes null. A client
             // that showed what it sent would disagree with the next page load.
             note: row?.note ?? null,

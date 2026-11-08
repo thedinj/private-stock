@@ -48,6 +48,8 @@ export type StageFlashMessage = {
      * key that silently does nothing reads as a broken key.
      */
     | { subject: "refused"; text: string }
+    /** Plain words that something was done -- "Reviewed. That was the last one." */
+    | { subject: "note"; text: string }
 );
 
 const ACCOLADES = ["Chef's kiss", "Masterpiece", "Top shelf", "Bravo"];
@@ -80,7 +82,7 @@ const STARS = [1, 2, 3, 4, 5];
 
 /** What it says aloud: the same message for anybody not looking at the picture. */
 const spoken = (message: StageFlashMessage): string => {
-    if (message.subject === "refused") return message.text;
+    if (message.subject === "refused" || message.subject === "note") return message.text;
 
     if (message.subject === "rating") {
         if (message.state === "failed") return "Could not save your rating.";
@@ -95,6 +97,10 @@ const spoken = (message: StageFlashMessage): string => {
 const Body: React.FC<{ message: StageFlashMessage }> = ({ message }) => {
     if (message.state === "failed" || message.subject === "refused") {
         return <span className={classes.failed}>{spoken(message)}</span>;
+    }
+
+    if (message.subject === "note") {
+        return <span>{message.text}</span>;
     }
 
     if (message.subject === "favorite") {
