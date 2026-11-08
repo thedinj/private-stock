@@ -5,6 +5,7 @@ import {
     describeDateFilter,
     describeGroup,
     describeRating,
+    describeReviewFilter,
     type FilterNames,
 } from "./filterWords";
 import {
@@ -67,7 +68,8 @@ const searchTerms = (view: LibraryView, names: SummaryNames): string[] => {
     if (view.favorite) terms.push("Favourites");
     if (view.unrated) terms.push("Unrated");
     if (view.watched) terms.push(view.watched === "yes" ? "Watched" : "Not watched");
-    if (view.reviewed) terms.push(view.reviewed === "yes" ? "Reviewed" : "Not reviewed");
+    terms.push(...view.reviewedFor.map((id) => describeReviewFilter(id, true, names)));
+    terms.push(...view.notReviewedFor.map((id) => describeReviewFilter(id, false, names)));
     if (view.minRating !== null || view.maxRating !== null) {
         terms.push(describeRating(view.minRating, view.maxRating));
     }

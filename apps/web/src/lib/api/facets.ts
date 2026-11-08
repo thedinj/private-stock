@@ -8,6 +8,7 @@ import { tagIdsInGroups, type FacetsResponse, type TagNamesResponse } from "@pri
 import { api } from "@/lib/api/client";
 import { useLibraries } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { useReviewPasses } from "@/lib/api/reviewPasses";
 import type { FilterNames } from "@/lib/filterWords";
 import type { LibraryView } from "@/lib/libraryQuery";
 
@@ -82,12 +83,14 @@ export const useTagNames = (view: LibraryView) => {
 export const useFilterNames = (view: LibraryView): FilterNames => {
     const { data: names } = useTagNames(view);
     const { data: libraries } = useLibraries();
+    const { data: passes } = useReviewPasses();
 
     return useMemo(
         () => ({
             tag: (tagId) => names?.referencedTags[tagId]?.name,
             root: (rootId) => libraries?.libraries.find((library) => library.id === rootId)?.label,
+            reviewPass: (passId) => passes?.passes.find((pass) => pass.id === passId)?.name,
         }),
-        [names, libraries]
+        [names, libraries, passes]
     );
 };

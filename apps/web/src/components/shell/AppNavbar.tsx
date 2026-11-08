@@ -9,6 +9,7 @@ import type { CollectionKind } from "@private-stock/core";
 import { facetLabelPlural } from "@/lib/facetLabels";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { usePlaylists } from "@/lib/api/playlists";
+import { useReviewPasses } from "@/lib/api/reviewPasses";
 import { useSavedFilters } from "@/lib/api/savedFilters";
 import { parseView, savedFilterHref } from "@/lib/libraryQuery";
 import { useLibraries } from "@/lib/api/libraries";
@@ -108,6 +109,7 @@ export const AppNavbar: React.FC<{
 
     const { data: savedFilters } = useSavedFilters();
     const { data: playlists } = usePlaylists();
+    const { data: reviewPasses } = useReviewPasses();
     const tagNames = useRememberedTagNames();
 
     /**
@@ -122,6 +124,7 @@ export const AppNavbar: React.FC<{
                   root: (id) => libraries?.libraries.find((library) => library.id === id)?.label,
                   savedFilter: (id) =>
                       savedFilters?.filters.find((filter) => filter.id === id)?.name,
+                  reviewPass: (id) => reviewPasses?.passes.find((pass) => pass.id === id)?.name,
               });
     const onLastSearch =
         lastSearch !== null && pathname === "/" && params.toString() === lastSearch;

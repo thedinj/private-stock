@@ -382,6 +382,16 @@ export const queryKeys = {
     },
     savedFilters: () => ["filters"],
     /**
+     * Your review passes (§14d): the request's room's for the viewer, the selection bar and the
+     * filter panel, every room's for the Account page. Both under `all()`, which every pass
+     * edit and every mark reaches -- a mark moves a pass's count.
+     */
+    reviewPasses: {
+        all: () => ["reviewPasses"],
+        here: () => ["reviewPasses", "here"],
+        everywhere: () => ["reviewPasses", "everywhere"],
+    },
+    /**
      * One saved view's face (§14c). Under `filters` so every edit to a view -- which
      * invalidates the list -- redraws the faces too, a changed query included.
      */

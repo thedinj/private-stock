@@ -26,6 +26,7 @@ import {
 
 import { facetParams, useFilterNames, useLibraryFacets, useTagNames } from "@/lib/api/facets";
 import { useLibraryStats } from "@/lib/api/libraries";
+import { useReviewPasses } from "@/lib/api/reviewPasses";
 import { describeGroup } from "@/lib/filterWords";
 import {
     DATE_AXES,
@@ -35,8 +36,10 @@ import {
     hasClearableFilters,
     hasLook,
     isDateSet,
+    reviewFilterState,
     withDateRange,
     withMeasure,
+    withReviewFilter,
     type FileFilterRow,
     type LibraryView,
     type Measure,
@@ -257,7 +260,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         (view.favorite ? 1 : 0) +
         (view.unrated ? 1 : 0) +
         (view.watched ? 1 : 0) +
-        (view.reviewed ? 1 : 0) +
+        view.reviewedFor.length +
+        view.notReviewedFor.length +
         (view.minRating !== null || view.maxRating !== null ? 1 : 0);
 
     const dateFilterCount = DATE_AXES.filter((axis) => isDateSet(view.dates[axis])).length;
@@ -292,6 +296,16 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     // while it is set, so a view that arrived with it can always be cleared from here.
     const offerPlayback = stats?.playbackCheck === true || view.playback !== null;
     const names = useFilterNames(view);
+    const { data: passList } = useReviewPasses();
+    // This room's passes, and any the view names that the list no longer has.
+    const reviewRows = [
+        ...(passList?.passes ?? []),
+        ...[...view.reviewedFor, ...view.notReviewedFor]
+            .filter(
+                (id) => passList !== undefined && !passList.passes.some((pass) => pass.id === id)
+            )
+            .map((id) => ({ id, name: "A review pass that has gone" })),
+    ];
     const advancedCount = advancedGroups(view).length;
 
     /**
@@ -566,29 +580,45 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                     />
                 </Group>
 
-                {/* Reviewed is the explicit "done deciding" a pass over recordings leaves
-                    behind (§14d), the d key on the item page; "No" is the backlog. */}
-                <Group gap="xs" align="center">
-                    <Text size="sm" c="dimmed">
-                        Reviewed
-                    </Text>
-                    <SegmentedControl
-                        size="xs"
-                        color="brass"
-                        value={view.reviewed ?? "any"}
-                        onChange={(value) =>
-                            onChange({
-                                ...view,
-                                reviewed: value === "any" ? null : (value as "yes" | "no"),
-                            })
-                        }
-                        data={[
-                            { value: "any", label: "Any" },
-                            { value: "yes", label: "Yes" },
-                            { value: "no", label: "No" },
-                        ]}
-                    />
-                </Group>
+                {/* Reviewed for each of your passes in this room (§14d): what the d key
+                    leaves behind on the item page. "Not yet" is a backlog, and passes
+                    combine -- reviewed for Players, not yet for Wins. Absent until there is
+                    a pass; one the view names that has gone still shows, so it can be
+                    cleared from here. */}
+                {reviewRows.length > 0 && (
+                    <Stack gap={6}>
+                        <Text size="sm" c="dimmed">
+                            Reviewed for
+                        </Text>
+                        {reviewRows.map((pass) => (
+                            <Group key={pass.id} gap="xs" align="center" wrap="nowrap">
+                                <Text size="sm" truncate="end" style={{ flex: 1, minWidth: 0 }}>
+                                    {pass.name}
+                                </Text>
+                                <SegmentedControl
+                                    size="xs"
+                                    color="brass"
+                                    aria-label={`Reviewed for ${pass.name}`}
+                                    value={reviewFilterState(view, pass.id) ?? "any"}
+                                    onChange={(value) =>
+                                        onChange(
+                                            withReviewFilter(
+                                                view,
+                                                pass.id,
+                                                value === "any" ? null : (value as "yes" | "no")
+                                            )
+                                        )
+                                    }
+                                    data={[
+                                        { value: "any", label: "Any" },
+                                        { value: "yes", label: "Yes" },
+                                        { value: "no", label: "Not yet" },
+                                    ]}
+                                />
+                            </Group>
+                        ))}
+                    </Stack>
+                )}
 
                 {/* Two rows rather than one two-ended control, because "at least" is the
                     question nearly everybody asks and it should cost one click. "At most" is

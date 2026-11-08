@@ -71,3 +71,31 @@ describe("date chips", () => {
         expect(activeFilters(DEFAULT_VIEW)).toEqual([]);
     });
 });
+
+/** The review pass chips (§14d): one per pass, in the words the panel uses. */
+describe("review pass chips", () => {
+    const names = {
+        tag: () => undefined,
+        root: () => undefined,
+        reviewPass: (id: string) => ({ p1: "Players", p2: "Wins" })[id],
+    };
+    const view = { ...DEFAULT_VIEW, reviewedFor: ["p1"], notReviewedFor: ["p2", "gone"] };
+
+    it("says which pass, and which way", () => {
+        expect(activeFilters(view, names).map((chip) => chip.label)).toEqual([
+            "Reviewed for Players",
+            "Not yet reviewed for Wins",
+            "Not yet reviewed for a review pass",
+        ]);
+    });
+
+    it("clears only its own pass", () => {
+        const wins = activeFilters(view, names).find((chip) => chip.id === "notReviewedFor:p2")!;
+
+        expect(wins.clear(view)).toMatchObject({
+            reviewedFor: ["p1"],
+            notReviewedFor: ["gone"],
+            page: 0,
+        });
+    });
+});

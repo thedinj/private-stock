@@ -50,6 +50,7 @@ import { SelectionBar } from "@/components/library/SelectionBar";
 import selectionClasses from "@/components/library/SelectionBar.module.scss";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { useEnterOpensFirst } from "@/lib/useEnterOpensFirst";
+import { useLegacyReviewedAddress } from "@/lib/useLegacyReviewedAddress";
 import { GALLERY_TRACKS, GRID_GAP, GRID_TRACKS, PRIORITY_TILES } from "@/lib/gridGeometry";
 import { api } from "@/lib/api/client";
 import { useSavedFilters } from "@/lib/api/savedFilters";
@@ -176,6 +177,8 @@ export const LibraryCellar: React.FC = () => {
 
     // Enter with nothing focused opens the first item: the keyboard's way into the set.
     useEnterOpensFirst();
+    // An address from before review passes, in today's words (§14d).
+    useLegacyReviewedAddress();
 
     const urlView = parseView(new URLSearchParams(searchParams.toString()));
 

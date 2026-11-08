@@ -23,6 +23,9 @@ import {
     withLook,
     withSort,
     withDateRange,
+    withReviewFilter,
+    legacyReviewedParams,
+    reviewFilterState,
     type LibraryView,
     NO_DATES,
     NO_MEASURES,
@@ -57,7 +60,7 @@ describe("parseView", () => {
         const parsed = parseView(
             new URLSearchParams(
                 "search=rain&kind=video&sort=title&tags=a,b&favorite=1&unrated=1" +
-                    "&watched=no&reviewed=no&playback=blocked&minRating=3&view=gallery&notTags=c&mentions=e&lookText=neon" +
+                    "&watched=no&reviewedFor=p1&notReviewedFor=p2&playback=blocked&minRating=3&view=gallery&notTags=c&mentions=e&lookText=neon" +
                     "&addedFrom=2026-10-03&capturedFrom=2025-10-01&capturedTo=2025-10-15" +
                     `&groups=${encodeURIComponent(
                         JSON.stringify([
@@ -89,7 +92,8 @@ describe("parseView", () => {
             favorite: true,
             unrated: true,
             watched: "no",
-            reviewed: "no",
+            reviewedFor: ["p1"],
+            notReviewedFor: ["p2"],
             playback: "blocked",
             minRating: 3,
             // The measurement filters and the two flags beside them are absent from this URL,
@@ -161,6 +165,8 @@ describe("viewToParams", () => {
             tags: ["a", "b"],
             favorite: true,
             unrated: true,
+            reviewedFor: ["p1", "p3"],
+            notReviewedFor: ["p2"],
             minRating: 4,
             dates: {
                 added: { from: null, to: "2026-10-03" },
@@ -479,6 +485,8 @@ describe("saved filters", () => {
             direction: "desc",
             tags: ["a", "b"],
             unrated: true,
+            reviewedFor: ["p1"],
+            notReviewedFor: ["p2", "p3"],
             minRating: 3,
             dates: {
                 added: { from: "2026-10-01", to: "2026-10-31" },
@@ -698,5 +706,76 @@ describe("a look in the address (§5e)", () => {
         expect(
             matchesSavedQuery(withLook(opened, { lookText: "neon" }), viewToSavedQuery(opened))
         ).toBe(true);
+    });
+});
+
+describe("reviewed for a pass (§14d)", () => {
+    it("sets each pass on its own, to reviewed, not yet, or neither", () => {
+        let current = withReviewFilter(DEFAULT_VIEW, "players", "yes");
+        current = withReviewFilter(current, "wins", "no");
+
+        expect(current.reviewedFor).toEqual(["players"]);
+        expect(current.notReviewedFor).toEqual(["wins"]);
+        expect(reviewFilterState(current, "players")).toBe("yes");
+        expect(reviewFilterState(current, "wins")).toBe("no");
+        expect(isFiltered(current)).toBe(true);
+
+        current = withReviewFilter(current, "players", "no");
+        expect(current.reviewedFor).toEqual([]);
+        expect(current.notReviewedFor).toEqual(["wins", "players"]);
+
+        current = withReviewFilter(withReviewFilter(current, "players", null), "wins", null);
+        expect(reviewFilterState(current, "players")).toBeNull();
+        expect(isFiltered(current)).toBe(false);
+    });
+
+    it("is cleared with the rest", () => {
+        const cleared = clearFilters(view({ reviewedFor: ["players"], notReviewedFor: ["wins"] }));
+
+        expect(cleared.reviewedFor).toEqual([]);
+        expect(cleared.notReviewedFor).toEqual([]);
+    });
+
+    it("reads a pass on both lists as not yet", () => {
+        const parsed = parseView(new URLSearchParams("reviewedFor=p1,p2&notReviewedFor=p1"));
+
+        expect(parsed.reviewedFor).toEqual(["p2"]);
+        expect(parsed.notReviewedFor).toEqual(["p1"]);
+    });
+
+    it("survives being saved and reopened", () => {
+        const original = view({ mode: "grid", reviewedFor: ["p1"], notReviewedFor: ["p2"] });
+        const query = viewToSavedQuery(original);
+
+        expect(query.reviewedFor).toEqual(["p1"]);
+        expect(query.notReviewedFor).toEqual(["p2"]);
+        expect(matchesSavedQuery(original, query)).toBe(true);
+        expect(openSavedFilter(original, "f1", query)).toMatchObject({
+            reviewedFor: ["p1"],
+            notReviewedFor: ["p2"],
+        });
+    });
+
+    describe("an address from before passes", () => {
+        const passes = [
+            { id: "p-rev", name: "Reviewed" },
+            { id: "p-win", name: "Wins" },
+        ];
+        const convert = (query: string, given = passes) =>
+            legacyReviewedParams(new URLSearchParams(query), given)?.toString() ?? null;
+
+        it("asks the same of the Reviewed pass", () => {
+            expect(convert("view=grid&reviewed=no")).toBe("view=grid&notReviewedFor=p-rev");
+            expect(convert("reviewed=yes&reviewedFor=p-win")).toBe("reviewedFor=p-win%2Cp-rev");
+        });
+
+        it("drops the condition where there is no such pass, or no such answer", () => {
+            expect(convert("view=grid&reviewed=no", [passes[1]])).toBe("view=grid");
+            expect(convert("view=grid&reviewed=maybe")).toBe("view=grid");
+        });
+
+        it("leaves an address without it alone", () => {
+            expect(convert("view=grid&notReviewedFor=p-win")).toBeNull();
+        });
     });
 });

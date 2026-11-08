@@ -1,4 +1,5 @@
 import {
+    LEGACY_REVIEW_PASS_NAME,
     calendarDaySchema,
     filterGroupsSchema,
     mediaQuerySchema,
@@ -112,8 +113,13 @@ export interface LibraryView {
      * — what you have watched is your history, not a property of the item.
      */
     watched: "yes" | "no" | null;
-    /** Reviewed, not yet, or don't care (§14d) -- the viewer's own, like `watched`. */
-    reviewed: "yes" | "no" | null;
+    /**
+     * The viewer's review passes an item must have been through, and must not have been through
+     * yet (§14d "Reviewing recordings for a reel"): "Reviewed for Players", "Not yet reviewed for
+     * Wins". Pass ids, in the order they were set; the viewer's own, like `watched`.
+     */
+    reviewedFor: string[];
+    notReviewedFor: string[];
     /**
      * Only videos whose original a browser is said not to play (§8). Offered by the filter
      * panel only while an administrator has the playback check switched on.
@@ -286,7 +292,8 @@ export const DEFAULT_VIEW: LibraryView = {
     favorite: false,
     unrated: false,
     watched: null,
-    reviewed: null,
+    reviewedFor: [],
+    notReviewedFor: [],
     playback: null,
     minRating: null,
     maxRating: null,
@@ -367,12 +374,12 @@ export const parseView = (params: URLSearchParams): LibraryView => {
         unrated: params.get("unrated") === "1",
         watched:
             params.get("watched") === "yes" ? "yes" : params.get("watched") === "no" ? "no" : null,
-        reviewed:
-            params.get("reviewed") === "yes"
-                ? "yes"
-                : params.get("reviewed") === "no"
-                  ? "no"
-                  : null,
+        // A pass on both lists is a contradiction a hand edit can make; "not yet" wins, since
+        // it is the backlog's side and the one that shows more.
+        reviewedFor: idList(params.get("reviewedFor")).filter(
+            (id) => !idList(params.get("notReviewedFor")).includes(id)
+        ),
+        notReviewedFor: idList(params.get("notReviewedFor")),
         playback: params.get("playback") === "blocked" ? "blocked" : null,
         minRating:
             Number.isInteger(minRating) && minRating >= 1 && minRating <= 5 ? minRating : null,
@@ -444,7 +451,10 @@ export const viewToParams = (view: LibraryView): URLSearchParams => {
     if (view.favorite) params.set("favorite", "1");
     if (view.unrated) params.set("unrated", "1");
     if (view.watched) params.set("watched", view.watched);
-    if (view.reviewed) params.set("reviewed", view.reviewed);
+    if (view.reviewedFor.length > 0) params.set("reviewedFor", view.reviewedFor.join(","));
+    if (view.notReviewedFor.length > 0) {
+        params.set("notReviewedFor", view.notReviewedFor.join(","));
+    }
     if (view.playback) params.set("playback", view.playback);
     if (view.minRating !== null) params.set("minRating", String(view.minRating));
     if (view.maxRating !== null) params.set("maxRating", String(view.maxRating));
@@ -572,7 +582,8 @@ export const isFiltered = (view: LibraryView): boolean =>
     view.favorite ||
     view.unrated ||
     view.watched !== null ||
-    view.reviewed !== null ||
+    view.reviewedFor.length > 0 ||
+    view.notReviewedFor.length > 0 ||
     view.playback !== null ||
     view.minRating !== null ||
     view.maxRating !== null ||
@@ -709,7 +720,8 @@ export const clearFilters = (view: LibraryView): LibraryView => ({
     favorite: false,
     unrated: false,
     watched: null,
-    reviewed: null,
+    reviewedFor: [],
+    notReviewedFor: [],
     playback: null,
     minRating: null,
     maxRating: null,
@@ -877,7 +889,12 @@ export const savedQueryToParams = (query: SavedQuery): URLSearchParams => {
     if (query.favorite) params.set("favorite", "1");
     if (query.unrated) params.set("unrated", "1");
     if (query.watched) params.set("watched", query.watched);
-    if (query.reviewed) params.set("reviewed", query.reviewed);
+    if (query.reviewedFor && query.reviewedFor.length > 0) {
+        params.set("reviewedFor", query.reviewedFor.join(","));
+    }
+    if (query.notReviewedFor && query.notReviewedFor.length > 0) {
+        params.set("notReviewedFor", query.notReviewedFor.join(","));
+    }
     if (query.playback) params.set("playback", query.playback);
     if (query.minRating !== undefined) params.set("minRating", String(query.minRating));
     if (query.maxRating !== undefined) params.set("maxRating", String(query.maxRating));
@@ -950,7 +967,8 @@ const paramsToViewFields = (params: URLSearchParams): Partial<LibraryView> => {
         favorite: parsed.favorite,
         unrated: parsed.unrated,
         watched: parsed.watched ?? undefined,
-        reviewed: parsed.reviewed ?? undefined,
+        reviewedFor: parsed.reviewedFor,
+        notReviewedFor: parsed.notReviewedFor,
         playback: parsed.playback ?? undefined,
         minRating: parsed.minRating,
         maxRating: parsed.maxRating,
@@ -1019,3 +1037,68 @@ export const savedFilterHref = (filter: { id: string; query: SavedQuery | null }
  */
 export const untaggedMentionsHref = (tagId: string): string =>
     `/?${viewToParams({ ...DEFAULT_VIEW, mode: "grid", mentions: tagId, notTags: [tagId] })}`;
+
+/** Where one review pass stands in the view's filter: reviewed for it, not yet, or neither. */
+export type ReviewFilterState = "yes" | "no" | null;
+
+export const reviewFilterState = (
+    view: Pick<LibraryView, "reviewedFor" | "notReviewedFor">,
+    passId: string
+): ReviewFilterState =>
+    view.reviewedFor.includes(passId) ? "yes" : view.notReviewedFor.includes(passId) ? "no" : null;
+
+/**
+ * The view with one pass set to reviewed, not yet, or neither (§14d), the others left as they
+ * are -- "Reviewed for Players" and "Not yet reviewed for Wins" are two settings, not one. Back
+ * to the first page, as any change of filter is.
+ */
+export const withReviewFilter = (
+    view: LibraryView,
+    passId: string,
+    state: ReviewFilterState
+): LibraryView => {
+    const reviewedFor = view.reviewedFor.filter((id) => id !== passId);
+    const notReviewedFor = view.notReviewedFor.filter((id) => id !== passId);
+
+    return {
+        ...view,
+        reviewedFor: state === "yes" ? [...reviewedFor, passId] : reviewedFor,
+        notReviewedFor: state === "no" ? [...notReviewedFor, passId] : notReviewedFor,
+        page: 0,
+    };
+};
+
+/**
+ * An address from before review passes (`reviewed=yes|no`), in today's words, or null when it
+ * has no such parameter (§14d).
+ *
+ * The flag became a pass called "Reviewed" in each room somebody had marked anything in, so the
+ * old question is asked of that pass. Without one in this room the condition is dropped: there
+ * was nothing marked here, so "Not reviewed" was everything. Here rather than in `parseView`
+ * because it needs the viewer's passes, which only the library page has; saved views were
+ * converted by the migration that made the passes.
+ */
+export const legacyReviewedParams = (
+    params: URLSearchParams,
+    passes: readonly { id: string; name: string }[]
+): URLSearchParams | null => {
+    const asked = params.get("reviewed");
+
+    if (asked === null) return null;
+
+    const next = new URLSearchParams(params);
+    const pass = passes.find(
+        (candidate) => candidate.name.toLowerCase() === LEGACY_REVIEW_PASS_NAME.toLowerCase()
+    );
+
+    next.delete("reviewed");
+
+    if (pass && (asked === "yes" || asked === "no")) {
+        const key = asked === "yes" ? "reviewedFor" : "notReviewedFor";
+        const ids = idList(next.get(key));
+
+        next.set(key, [...ids.filter((id) => id !== pass.id), pass.id].join(","));
+    }
+
+    return next;
+};

@@ -12,6 +12,7 @@ const names: SummaryNames = {
     tag: (id) => ({ t1: "Alice", t2: "Beach" })[id],
     root: (id) => (id === "r1" ? "Home videos" : undefined),
     savedFilter: (id) => (id === "f1" ? "Unrated 4K" : undefined),
+    reviewPass: (id) => ({ p1: "Players", p2: "Wins" })[id],
 };
 
 const summary = (query: string, given: SummaryNames = names): string | null =>
@@ -42,6 +43,16 @@ describe("the last search, in a few words", () => {
 
     it("says a saved view by its name alone", () => {
         expect(summary("view=grid&filter=f1&unrated=1&minResolution=2160")).toBe("Unrated 4K");
+    });
+
+    it("says a review pass filter as the chip does", () => {
+        expect(summary("view=grid&notReviewedFor=p2")).toBe("Not yet reviewed for Wins");
+        expect(summary("view=grid&reviewedFor=p1&notReviewedFor=p2")).toBe(
+            "Reviewed for Players +1"
+        );
+        expect(summary("view=grid&reviewedFor=p1", NO_SUMMARY_NAMES)).toBe(
+            "Reviewed for a review pass"
+        );
     });
 
     it("says a tag it has no name for as one", () => {

@@ -5,6 +5,7 @@ import {
     describeDateFilter,
     describeGroup,
     describeRating,
+    describeReviewFilter,
     describeRule,
     type FilterNames,
 } from "./filterWords";
@@ -149,12 +150,23 @@ export const activeFilters = (
         });
     }
 
-    if (view.reviewed) {
-        filters.push({
-            id: "reviewed",
-            label: view.reviewed === "yes" ? "Reviewed" : "Not reviewed",
-            clear: (current) => ({ ...current, reviewed: null, page: 0 }),
-        });
+    // One chip per pass, each undone on its own: "Reviewed for Players" and "Not yet reviewed
+    // for Wins" are two decisions (§14d).
+    for (const [list, reviewed] of [
+        ["reviewedFor", true],
+        ["notReviewedFor", false],
+    ] as const) {
+        for (const passId of view[list]) {
+            filters.push({
+                id: `${list}:${passId}`,
+                label: describeReviewFilter(passId, reviewed, names),
+                clear: (current) => ({
+                    ...current,
+                    [list]: current[list].filter((id) => id !== passId),
+                    page: 0,
+                }),
+            });
+        }
     }
 
     if (view.playback) {

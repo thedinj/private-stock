@@ -111,7 +111,21 @@ export const describeDateFilter = (axis: DateAxis, range: DayRange): string | nu
 export interface FilterNames {
     tag: (tagId: string) => string | undefined;
     root: (rootId: string) => string | undefined;
+    /** The viewer's review passes (§14d). Optional: only the chips and the summary name them. */
+    reviewPass?: (passId: string) => string | undefined;
 }
+
+/**
+ * A review pass filter in words (§14d): "Reviewed for Players", "Not yet reviewed for Wins".
+ * The chips and the sidebar's summary say it the same way. A pass the viewer has no name for --
+ * deleted, or somebody else's in a shared view -- is still said as one.
+ */
+export const describeReviewFilter = (
+    passId: string,
+    reviewed: boolean,
+    names: FilterNames
+): string =>
+    `${reviewed ? "Reviewed" : "Not yet reviewed"} for ${names.reviewPass?.(passId) ?? "a review pass"}`;
 
 export const describeRule = (rule: FilterRule, names: FilterNames): string => {
     switch (rule.t) {
