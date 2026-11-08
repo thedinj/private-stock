@@ -11861,6 +11861,14 @@ the new one's cache. A reload empties all of it, so query keys need no domain in
 stream is one per room rather than one per browser — a leader tab in one room relaying to a tab
 in another would relay the wrong library.
 
+**What the browser remembers about a room is the room's.** The last search, each list page's
+address, the Review and Studio entries' last page, the tag names behind "Last search" and the
+header search's kind are kept per room (`roomKey`): the Cellar under the keys they always had,
+so nothing remembered before rooms is lost, and every other room under its own. Device habits —
+playback, layout, the warming HUD — stay one per browser. The tab's own storage is emptied on a
+switch: everything in it (where an item returns to, a selection, a showcase to resume) is about
+the room being left.
+
 ### Getting into the cellar
 
 Entering a guarded room — switching to it, or reopening a browser that was last there — asks

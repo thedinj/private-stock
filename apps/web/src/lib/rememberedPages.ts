@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
+import { roomKey } from "./activeDomain";
 import { parseView } from "./libraryQuery";
 import { NO_SUMMARY_NAMES, summarizeSearch } from "./searchSummary";
 
@@ -19,6 +20,9 @@ import { NO_SUMMARY_NAMES, summarizeSearch } from "./searchSummary";
  * **On the device, not the account.** What you were last looking at is a property of where you
  * are sitting; the desktop and the phone are allowed to disagree, and restoring a sidebar link
  * is not worth a round trip.
+ *
+ * **Per room** (§21). The keys below are the Cellar's; every read and write goes through
+ * `roomKey`, so the Parlour's last search is not the Cellar's and neither leaks into the other.
  *
  * **Recorded in one place.** `useRememberPages` runs in the sidebar, which already reads the
  * address, so a page opts in by being listed below rather than by remembering itself.
@@ -150,10 +154,10 @@ export const rememberPage = (pathname: string, search: string): void => {
 
     try {
         if (entry && (!entry.remember || entry.remember(new URLSearchParams(search)))) {
-            localStorage.setItem(entry.key, search);
+            localStorage.setItem(roomKey(entry.key), search);
         }
         if (section) {
-            localStorage.setItem(section.section.key, section.page);
+            localStorage.setItem(roomKey(section.section.key), section.page);
         }
     } catch {
         // A private window, or site data turned off. The link falls back to the page's plain
@@ -195,7 +199,7 @@ const useRememberedQuery = (path: string): string | null => {
             if (!entry) return null;
 
             try {
-                return localStorage.getItem(entry.key);
+                return localStorage.getItem(roomKey(entry.key));
             } catch {
                 return null;
             }
@@ -240,7 +244,7 @@ export const forgetLastLibrarySearch = (): void => {
     if (!entry) return;
 
     try {
-        localStorage.removeItem(entry.key);
+        localStorage.removeItem(roomKey(entry.key));
     } catch {
         // Nothing was stored to forget, or it cannot be reached; either way there is no row.
         return;
@@ -267,7 +271,7 @@ const TAG_NAMES_KEPT = 200;
 
 export const rememberTagNames = (names: Record<string, string>): void => {
     try {
-        const merged = { ...readTagNames(localStorage.getItem(TAG_NAMES_KEY)) };
+        const merged = { ...readTagNames(localStorage.getItem(roomKey(TAG_NAMES_KEY))) };
 
         for (const [id, name] of Object.entries(names)) {
             // Re-inserted, so a name used again moves to the newest end.
@@ -277,7 +281,7 @@ export const rememberTagNames = (names: Record<string, string>): void => {
 
         const kept = Object.entries(merged).slice(-TAG_NAMES_KEPT);
 
-        localStorage.setItem(TAG_NAMES_KEY, JSON.stringify(Object.fromEntries(kept)));
+        localStorage.setItem(roomKey(TAG_NAMES_KEY), JSON.stringify(Object.fromEntries(kept)));
     } catch {
         // As for the addresses: the line falls back to "a tag", which is vaguer and not wrong.
         return;
@@ -306,7 +310,7 @@ export const useRememberedTagNames = (): Record<string, string> => {
         subscribe,
         () => {
             try {
-                return localStorage.getItem(TAG_NAMES_KEY);
+                return localStorage.getItem(roomKey(TAG_NAMES_KEY));
             } catch {
                 return null;
             }
@@ -331,7 +335,7 @@ export const useRememberedSectionHref = (name: RememberedSectionName): string =>
             if (!section) return fallback;
 
             try {
-                return localStorage.getItem(section.key) ?? fallback;
+                return localStorage.getItem(roomKey(section.key)) ?? fallback;
             } catch {
                 return fallback;
             }

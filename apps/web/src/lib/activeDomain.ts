@@ -1,4 +1,4 @@
-import { DEFAULT_DOMAIN, parseDomain, type DomainKind } from "@private-stock/core";
+import { DEFAULT_DOMAIN, LEGACY_DOMAIN, parseDomain, type DomainKind } from "@private-stock/core";
 
 /**
  * Which domain this tab is in (§21 "Which room a browser opens in").
@@ -64,12 +64,35 @@ export const getActiveDomain = (): DomainKind => {
 };
 
 /**
+ * A browser-storage key for something that belongs to the room this tab is in (§21).
+ *
+ * The Cellar keeps the bare key, so what was remembered before there were rooms -- all of it the
+ * Cellar's -- is still found there; every other room gets its own.
+ */
+export const roomKey = (key: string): string => {
+    const domain = getActiveDomain();
+
+    return domain === LEGACY_DOMAIN ? key : `${key}@${domain}`;
+};
+
+/**
  * Move this tab to another room, and make it the room this browser reopens in.
  *
  * A reload to the home page, on purpose: the page being shown belongs to the old room, and so
  * does everything cached for it.
+ *
+ * **The tab's own storage is emptied first.** It survives a reload, and everything in it is
+ * about where this tab has been: the list an item returns to, a selection, a showcase or tasting
+ * to resume, dupe choices. All of it belongs to the room being left, and none of it is worth
+ * carrying through the door. Clearing all of it, rather than naming each key, means a key added
+ * later cannot forget to be cleared.
  */
 export const switchDomain = (next: DomainKind): void => {
+    try {
+        window.sessionStorage.clear();
+    } catch {
+        // Nothing reachable to carry over either.
+    }
     writeTo(session, KEY, next);
     writeTo(local, KEY, next);
     writeTo(session, PASSED_KEY, null);

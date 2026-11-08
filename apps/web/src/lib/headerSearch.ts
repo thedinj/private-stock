@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TagScope } from "@private-stock/core";
 
 import { DEFAULT_VIEW, viewToParams, withLook } from "@/lib/libraryQuery";
+import { roomKey } from "./activeDomain";
 import { facetLabel } from "./facetLabels";
 
 /**
@@ -96,7 +97,8 @@ const KEY = "ps:headerSearchType";
 
 /**
  * The kind last asked, remembered on the device rather than the account -- like the playback
- * preferences, it is a habit of where you are sitting. Read after mount so the server and the
+ * preferences, it is a habit of where you are sitting. Per room (§21): the Game Room's habit is
+ * games, the Parlour's people. Read after mount so the server and the
  * client agree about the first markup.
  */
 export const useSearchType = (): [SearchType, (type: SearchType) => void] => {
@@ -104,7 +106,7 @@ export const useSearchType = (): [SearchType, (type: SearchType) => void] => {
 
     useEffect(() => {
         try {
-            setType(parseSearchType(localStorage.getItem(KEY)));
+            setType(parseSearchType(localStorage.getItem(roomKey(KEY))));
         } catch {
             // Private window or storage off: the library, which it already holds.
         }
@@ -114,7 +116,7 @@ export const useSearchType = (): [SearchType, (type: SearchType) => void] => {
         setType(next);
 
         try {
-            localStorage.setItem(KEY, next);
+            localStorage.setItem(roomKey(KEY), next);
         } catch {
             // Not remembered; the choice still holds for this page.
         }

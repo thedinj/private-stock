@@ -9,10 +9,18 @@ import { FIRST_LIBRARY_QUERY, rememberPage } from "./rememberedPages";
  * whole.
  */
 
+const room = vi.hoisted(() => ({ current: "cellar" }));
+
+// The real `roomKey`'s rule, over a room the test can move: the Cellar keeps the bare key.
+vi.mock("./activeDomain", () => ({
+    roomKey: (key: string) => (room.current === "cellar" ? key : `${key}@${room.current}`),
+}));
+
 const store = new Map<string, string>();
 
 beforeEach(() => {
     store.clear();
+    room.current = "cellar";
     vi.stubGlobal("localStorage", {
         getItem: (key: string) => store.get(key) ?? null,
         setItem: (key: string, value: string) => store.set(key, value),
@@ -20,6 +28,18 @@ beforeEach(() => {
 });
 
 describe("remembering a page", () => {
+    it("keeps each room's last search apart, the Cellar's under the old key (§21)", () => {
+        rememberPage("/", "view=grid&tags=t1");
+        room.current = "family";
+        rememberPage("/", "view=grid&tags=t2");
+        rememberPage("/review/duplicates", "tab=near");
+
+        expect(store.get("ps:libraryView")).toBe("view=grid&tags=t1");
+        expect(store.get("ps:libraryView@family")).toBe("view=grid&tags=t2");
+        expect(store.get("ps:section:/review@family")).toBe("/review/duplicates");
+        expect(store.has("ps:section:/review")).toBe(false);
+    });
+
     it("records a listed page's whole address", () => {
         rememberPage("/clips", "q=intro&page=2");
 
