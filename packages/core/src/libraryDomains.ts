@@ -62,6 +62,18 @@ export interface DomainProfile {
      * switches, never added to them.
      */
     skipsStages: readonly string[];
+    /**
+     * Where the part worth seeing sits in an item (§21 "Where a room looks first"). Null is the
+     * whole of it. A number is "the last this-many milliseconds": a game recording is saved
+     * after the moment it was saved for, so the moment is at its end -- the viewer opens there,
+     * the tasting plays it and the hover preview is cut from it.
+     */
+    tailMs: number | null;
+    /**
+     * Whether the sidebar offers the backlog -- "To review", the library at "Not reviewed",
+     * oldest first (§14d "Reviewing recordings for a reel"). The filter itself is in every room.
+     */
+    reviewPass: boolean;
 }
 
 /**
@@ -85,6 +97,8 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         // Look is for watching by look, which is the Cellar's idea; there is little text burned
         // into a family video to read.
         skipsStages: ["embed", "ocr"],
+        tailMs: null,
+        reviewPass: false,
     },
     cellar: {
         kind: "cellar",
@@ -96,6 +110,8 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             tag: { one: "Keyword", many: "Keywords" },
         },
         skipsStages: [],
+        tailMs: null,
+        reviewPass: false,
     },
     games: {
         kind: "games",
@@ -110,6 +126,10 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         // killfeeds -- into the search index and the review queue. The duplicate fingerprints
         // stay: a highlight saved raw, trimmed and re-encoded is the duplicate most worth finding.
         skipsStages: ["faces", "embed", "ocr"],
+        // Saved after the fact, so the moment is in the last seconds (§14d "Reviewing
+        // recordings for a reel").
+        tailMs: 10_000,
+        reviewPass: true,
     },
 };
 
@@ -127,4 +147,29 @@ export const domainSkipsStage = (domain: string | null | undefined, stage: strin
     const known = parseDomain(domain);
 
     return known !== null && domainProfiles[known].skipsStages.includes(stage);
+};
+
+/** The room's tail, or null when it looks at the whole item. Unknown rooms look at the whole. */
+export const domainTailMs = (domain: string | null | undefined): number | null => {
+    const known = parseDomain(domain);
+
+    return known === null ? null : domainProfiles[known].tailMs;
+};
+
+/**
+ * Where an item opens in this room: the start of its tail, or null for "the beginning, as
+ * usual". Null too when the length is not known yet, and never below zero for an item shorter
+ * than the tail -- that one is all tail.
+ */
+export const tailStartMs = (
+    domain: string | null | undefined,
+    durationMs: number | null | undefined
+): number | null => {
+    const tail = domainTailMs(domain);
+
+    if (tail === null || durationMs == null || !Number.isFinite(durationMs) || durationMs <= 0) {
+        return null;
+    }
+
+    return Math.max(0, Math.round(durationMs - tail));
 };

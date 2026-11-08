@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickSegment, segmentAt, segmentProgress } from "./segment";
+import { pickSegment, segmentAt, segmentProgress, pickRoomSegment } from "./segment";
 
 const at = (value: number) => () => value;
 
@@ -73,5 +73,33 @@ describe("a look's segment", () => {
 
     it("trusts the match when the length is not known", () => {
         expect(segmentAt(null, 20_000, 30_000)).toEqual({ startMs: 29_000, endMs: 49_000 });
+    });
+});
+
+describe("pickRoomSegment (§21)", () => {
+    it("draws a Game Room taste from the last ten seconds, ending inside the file", () => {
+        expect(pickRoomSegment(30_000, 6_000, 10_000, () => 0)).toEqual({
+            startMs: 20_000,
+            endMs: 26_000,
+        });
+        expect(pickRoomSegment(30_000, 6_000, 10_000, () => 1)).toEqual({
+            startMs: 24_000,
+            endMs: 30_000,
+        });
+    });
+
+    it("ends at the end when a taste is longer than the tail, and plays a short item whole", () => {
+        expect(pickRoomSegment(30_000, 12_000, 10_000, () => 0.5)).toEqual({
+            startMs: 18_000,
+            endMs: 30_000,
+        });
+        expect(pickRoomSegment(5_000, 6_000, 10_000)).toEqual({ startMs: 0, endMs: 5_000 });
+    });
+
+    it("is the ordinary pick in a room with no tail, or before the length is known", () => {
+        expect(pickRoomSegment(100_000, 6_000, null, () => 0)).toEqual(
+            pickSegment(100_000, 6_000, () => 0)
+        );
+        expect(pickRoomSegment(null, 6_000, 10_000)).toEqual({ startMs: 0, endMs: 6_000 });
     });
 });

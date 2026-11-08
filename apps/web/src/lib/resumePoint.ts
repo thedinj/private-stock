@@ -78,7 +78,8 @@ export const parseAtParam = (raw: string | null): number | null => {
 };
 
 /**
- * Where an item opens: an explicit moment when the address names one, else where it was left.
+ * Where an item opens: an explicit moment when the address names one, else where it was left,
+ * else where the room looks first (`roomStartMs`: a Game Room recording's tail, §21).
  *
  * The explicit moment is **not** subject to `RESUME_EDGE_MS`. The edges exist to discard noise
  * in a position recorded while somebody watched; a moment somebody chose — the one a capture
@@ -89,11 +90,14 @@ export const parseAtParam = (raw: string | null): number | null => {
 export const openingTarget = (
     startAtMs: number | null | undefined,
     positionMs: number | null | undefined,
-    durationMs: number | null | undefined
+    durationMs: number | null | undefined,
+    roomStartMs: number | null = null
 ): number | null => {
     if (startAtMs !== null && startAtMs !== undefined) {
         return durationMs ? Math.min(startAtMs, durationMs) : startAtMs;
     }
 
-    return resumeTarget(positionMs, durationMs);
+    // A position left this visit beats the room's default, so stepping away and back does not
+    // restart the tail -- and one dropped as edge noise falls back to it rather than to 0:00.
+    return resumeTarget(positionMs, durationMs) ?? (roomStartMs || null);
 };

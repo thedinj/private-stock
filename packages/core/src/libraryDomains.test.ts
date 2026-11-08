@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_DOMAIN, domainProfiles, domainSkipsStage, parseDomain } from "./libraryDomains.js";
+import {
+    DEFAULT_DOMAIN,
+    domainProfiles,
+    domainSkipsStage,
+    parseDomain,
+    tailStartMs,
+} from "./libraryDomains.js";
 
 describe("domains (§21)", () => {
     it("opens a forgetful browser in a room that is not guarded", () => {
@@ -37,5 +43,20 @@ describe("domains (§21)", () => {
         expect(parseDomain("family")).toBe("family");
         expect(parseDomain("Family")).toBeNull();
         expect(parseDomain(null)).toBeNull();
+    });
+});
+
+describe("where a room looks first (§21)", () => {
+    it("opens a Game Room recording ten seconds before its end, and the others at the start", () => {
+        expect(tailStartMs("games", 30_000)).toBe(20_000);
+        expect(tailStartMs("family", 30_000)).toBeNull();
+        expect(tailStartMs("cellar", 30_000)).toBeNull();
+    });
+
+    it("starts at zero for anything shorter than the tail, and waits for a known length", () => {
+        expect(tailStartMs("games", 6_000)).toBe(0);
+        expect(tailStartMs("games", null)).toBeNull();
+        expect(tailStartMs("games", 0)).toBeNull();
+        expect(tailStartMs("arcade", 30_000)).toBeNull();
     });
 });

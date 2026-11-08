@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Box, CloseButton, NavLink, Text, type NavLinkProps } from "@mantine/core";
 
-import type { CollectionKind } from "@private-stock/core";
+import { domainProfiles, type CollectionKind } from "@private-stock/core";
 
+import { getActiveDomain } from "@/lib/activeDomain";
 import { facetLabelPlural } from "@/lib/facetLabels";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { usePlaylists } from "@/lib/api/playlists";
@@ -44,6 +45,9 @@ import classes from "./AppNavbar.module.scss";
  * NavLink's default, which put the labels 8px right of the wordmark in the same corner.
  */
 const navPadding = { paddingInline: "calc(var(--app-shell-padding) - 6px)" };
+
+/** The library as a backlog: not yet reviewed, oldest first (§14d). */
+const REVIEW_PASS_QUERY = `${FIRST_LIBRARY_QUERY}&reviewed=no&sort=addedAt&direction=asc`;
 
 /** Smallest to largest: a still, a span, a sequence of spans. */
 const STUDIO_PAGES = [
@@ -315,6 +319,22 @@ export const AppNavbar: React.FC<{
                         }
                     />
                 ))}
+
+            {/* The backlog, in a room that is worked through as one (§14d "Reviewing recordings
+                for a reel"): the library at "Not reviewed", oldest first, so a pass picks up
+                where the last one stopped and d walks it. Only an address -- no page of its own. */}
+            {domainProfiles[getActiveDomain()].reviewPass && (
+                <NavLink
+                    component={Link}
+                    prefetch={false}
+                    href={`/?${REVIEW_PASS_QUERY}`}
+                    label="To review"
+                    active={inLibrary && params.get("reviewed") === "no"}
+                    color="brass"
+                    style={navPadding}
+                    onClick={onNavigate}
+                />
+            )}
 
             {/* Collections, below the libraries and above the admin pages (§14c).
 

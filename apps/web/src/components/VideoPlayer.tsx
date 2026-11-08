@@ -63,6 +63,12 @@ interface VideoPlayerProps {
      * visit and is not subject to its edges. See `openingTarget`.
      */
     startAtMs?: number | null;
+    /**
+     * Where this room opens an item when nothing else says where (§21 "Where a room looks
+     * first") -- a Game Room recording's last ten seconds. Loses to `startAtMs` and to a
+     * position left this visit. See `openingTarget`.
+     */
+    roomStartMs?: number | null;
     onUnplayable?: () => void;
     /** WebVTT thumbnail track for the scrubber, or null until the sprite job has run. */
     spriteVttUrl: string | null;
@@ -390,6 +396,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     mediaId,
     durationMs,
     startAtMs = null,
+    roomStartMs = null,
     onUnplayable,
     spriteVttUrl,
     poster,
@@ -585,7 +592,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             : (openingTarget(
                   startAtMs,
                   reportProgress ? visitPosition(mediaId) : null,
-                  durationMs
+                  durationMs,
+                  roomStartMs
               ) ?? 0),
         offered: preloadMediaId === null ? null : { id: preloadMediaId, startMs: preloadStartMs },
         gate: warmGate,
@@ -1529,7 +1537,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         const target = openingTarget(
             startAtMs,
             reportProgress ? visitPosition(mediaId) : null,
-            durationMs
+            durationMs,
+            roomStartMs
         );
 
         if (target === null) {
@@ -1555,7 +1564,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         video.addEventListener("loadedmetadata", onLoaded, { once: true });
 
         return () => video.removeEventListener("loadedmetadata", onLoaded);
-    }, [mediaId, videoEl, startAtMs, durationMs, reportProgress]);
+    }, [mediaId, videoEl, startAtMs, roomStartMs, durationMs, reportProgress]);
 
     /**
      * Play on arrival, once, if this device asks for it.

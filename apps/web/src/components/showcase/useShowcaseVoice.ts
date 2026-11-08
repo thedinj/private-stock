@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { MediaListItem } from "@private-stock/core";
+import { domainTailMs, type MediaListItem } from "@private-stock/core";
 
+import { getActiveDomain } from "@/lib/activeDomain";
 import { pickVoice, voiceLeaving, type VoiceCandidate } from "@/lib/showcase/voice";
-import { pickSegment, segmentAt, type Segment } from "@/lib/tasting/segment";
+import { pickRoomSegment, type Segment, segmentAt } from "@/lib/tasting/segment";
 import { mayWarmNextItem } from "@/lib/videoWarming";
 
 /**
@@ -180,7 +181,11 @@ export const useShowcaseVoice = ({
                 item: tile.item,
                 segment:
                     matchedAt === undefined
-                        ? pickSegment(tile.item.durationMs, clip)
+                        ? pickRoomSegment(
+                              tile.item.durationMs,
+                              clip,
+                              domainTailMs(getActiveDomain())
+                          )
                         : segmentAt(tile.item.durationMs, clip, matchedAt),
                 token: tokens.current,
             };

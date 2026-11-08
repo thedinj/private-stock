@@ -54,6 +54,35 @@ export const pickSegment = (
 };
 
 /**
+ * A taste in a room that looks at an item's tail (§21 "Where a room looks first").
+ *
+ * A Game Room recording is saved after its moment, so a random point in the middle is the run-up
+ * and nothing else: the taste is drawn from the last `tailMs` instead -- or the last `clipMs`
+ * when a taste is longer than the tail -- and always ends inside the file. Rooms with no tail
+ * take `pickSegment` as before.
+ */
+export const pickRoomSegment = (
+    durationMs: number | null,
+    clipMs: number,
+    tailMs: number | null,
+    random: () => number = Math.random
+): Segment => {
+    if (tailMs === null || durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+        return pickSegment(durationMs, clipMs, random);
+    }
+
+    if (durationMs <= clipMs) {
+        return { startMs: 0, endMs: Math.round(durationMs) };
+    }
+
+    const lo = Math.max(0, durationMs - Math.max(tailMs, clipMs));
+    const hi = durationMs - clipMs;
+    const startMs = Math.round(lo + random() * (hi - lo));
+
+    return { startMs, endMs: startMs + Math.round(clipMs) };
+};
+
+/**
  * The segment that starts at a look's matching moment (§5e "Three ways in, one way out").
  *
  * "Glasses" should open on the glasses, so a taste of a look's set starts just before where each

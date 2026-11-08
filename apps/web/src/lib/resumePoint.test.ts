@@ -87,6 +87,19 @@ describe("openingTarget", () => {
         expect(openingTarget(null, 272_000, 3_600_000)).toBe(272_000);
         expect(openingTarget(undefined, RESUME_EDGE_MS - 1, 3_600_000)).toBeNull();
     });
+
+    it("opens where the room looks first only when nothing else says where (§21)", () => {
+        // A Game Room recording: thirty seconds, opened at its last ten.
+        expect(openingTarget(null, null, 30_000, 20_000)).toBe(20_000);
+        // Left part way this visit: back there, not to the tail.
+        expect(openingTarget(null, 12_000, 30_000, 20_000)).toBe(12_000);
+        // A named moment still wins.
+        expect(openingTarget(3_000, null, 30_000, 20_000)).toBe(3_000);
+        // Played to the end and come back to: the tail again, not 0:00.
+        expect(openingTarget(null, 29_500, 30_000, 20_000)).toBe(20_000);
+        // A tail starting at zero is just the beginning.
+        expect(openingTarget(null, null, 6_000, 0)).toBeNull();
+    });
 });
 
 describe("a position kept for the visit", () => {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Loader, Stack, Text } from "@mantine/core";
 
-import type { MediaListItem } from "@private-stock/core";
+import { domainTailMs, type MediaListItem } from "@private-stock/core";
 
 import { PlayGlyph } from "@/components/media/Glyph";
 import { StillSlots } from "@/components/media/StillSlots";
@@ -13,11 +13,12 @@ import {
     usePlaybackPref,
     useTastingPhotoSeconds,
 } from "@/lib/playbackPrefs";
+import { getActiveDomain } from "@/lib/activeDomain";
 import { useItemWarming, useOpenItem } from "@/lib/openItem";
 import { rememberReturnTo } from "@/lib/returnTo";
 import { type ShowcaseSet, showcaseSetKey } from "@/lib/showcase/set";
 import { readTastingPosition, saveTastingPosition } from "@/lib/tasting/restore";
-import { pickSegment, segmentAt, segmentProgress, type Segment } from "@/lib/tasting/segment";
+import { pickRoomSegment, type Segment, segmentAt, segmentProgress } from "@/lib/tasting/segment";
 import { seek, type Cursor, type Seek } from "@/lib/tasting/sequence";
 import { stageTargets } from "@/lib/tasting/targets";
 import { isTypingTarget } from "@/lib/typingTarget";
@@ -226,7 +227,7 @@ export const TastingStage: React.FC<TastingStageProps> = ({ set, onExit }) => {
         const fresh = {
             segment:
                 matchedAt === undefined
-                    ? pickSegment(item.durationMs, clipMs)
+                    ? pickRoomSegment(item.durationMs, clipMs, domainTailMs(getActiveDomain()))
                     : segmentAt(item.durationMs, clipMs, matchedAt),
             clipMs,
             token: tokens.current,

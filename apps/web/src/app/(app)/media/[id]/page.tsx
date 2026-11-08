@@ -25,6 +25,8 @@ import {
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 
+import { tailStartMs } from "@private-stock/core";
+
 import { LoadFailed } from "@/components/LoadFailed";
 import { MediaDetailsDrawer } from "@/components/media/MediaDetailsDrawer";
 import { ItemPerformers } from "@/components/faces/ItemPerformers";
@@ -70,7 +72,7 @@ import { isTypingTarget } from "@/lib/typingTarget";
 import { useSpillLight } from "@/lib/useSpillLight";
 import { useWarmIntent } from "@/lib/warmMonitor";
 import { useStudyRoom } from "@/lib/useStudyRoom";
-import { roomRuns } from "@/lib/activeDomain";
+import { getActiveDomain, roomRuns } from "@/lib/activeDomain";
 import { usePlaybackPref, useDwellSeconds } from "@/lib/playbackPrefs";
 import { DWELL_CHOICES, dwellMs, snapDwellSeconds, stageMode, stillSource } from "@/lib/stageDwell";
 import {
@@ -1074,6 +1076,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             mediaId={data.id}
                             durationMs={data.durationMs}
                             startAtMs={startAtMs}
+                            roomStartMs={tailStartMs(getActiveDomain(), data.durationMs)}
                             spriteVttUrl={data.spriteVttUrl}
                             poster={data.coverUrl}
                             autoPlay={autoplayOnOpen}
@@ -1092,10 +1095,13 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                              */
                             preloadStartMs={
                                 nextDetail.data
-                                    ? resumeTarget(
+                                    ? (resumeTarget(
                                           visitPosition(nextDetail.data.id),
                                           nextDetail.data.durationMs
-                                      )
+                                      ) ??
+                                      // Where the next one will open in this room, or the
+                                      // warm buffers a beginning nobody is shown (§21).
+                                      tailStartMs(getActiveDomain(), nextDetail.data.durationMs))
                                     : null
                             }
                             span={preview}
