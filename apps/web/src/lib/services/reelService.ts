@@ -5,6 +5,8 @@ import {
     ValidationError,
     reelNaturalDirection,
     type AddReelItemsInput,
+    type Clip,
+    type CreateClipInput,
     type CreateReelInput,
     type MoveReelItemInput,
     type Reel,
@@ -19,7 +21,7 @@ import { db, mediaRepo, reelRepo } from "@private-stock/db";
 import type { AuthContext } from "../auth/withAuth";
 import { inRoom, roomOf } from "./room";
 import { coverUrl } from "./artService";
-import { clipsByIds, assertReelNameFree } from "./clipService";
+import { clipsByIds, assertReelNameFree, createClip } from "./clipService";
 import { coverCandidates, coverMosaics } from "./coverMosaic";
 import { assertMayShare } from "./collectionAccess";
 import { resolvePlaybackPlan } from "./mediaService";
@@ -264,6 +266,27 @@ export const addReelItems = (
 
     return listReelEntries(reelId, auth);
 };
+
+/**
+ * A clip saved straight into a reel (§14d "Reviewing recordings for a reel").
+ *
+ * One transaction around both, so a reel that refuses it -- somebody else's, or full -- leaves
+ * no clip behind that the person thinks went into it. The checks are `addReelItems`' own: the
+ * reel is writable by this person, and holds only its owner's clips.
+ */
+export const createClipInReel = (
+    mediaId: string,
+    input: CreateClipInput,
+    reelId: string,
+    auth: AuthContext
+): Clip =>
+    db.transaction((): Clip => {
+        const clip = createClip(mediaId, input, auth);
+
+        addReelItems(reelId, { clipIds: [clip.id] }, auth);
+
+        return clip;
+    })();
 
 export const removeReelItem = (
     reelId: string,

@@ -223,7 +223,8 @@ vi.mock("@private-stock/db", () => ({
 
 vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
-const { createReel, updateReel, deleteReel, getReel, addReelItems } = await import("./reelService");
+const { createReel, updateReel, deleteReel, getReel, addReelItems, createClipInReel } =
+    await import("./reelService");
 const {
     listClipsFor,
     listClips,
@@ -498,6 +499,33 @@ describe("marking a clip", () => {
 
         expect(clip.speed).toBe(0.5);
         expect(clip.runMs).toBe(20_000);
+    });
+});
+
+describe("marking a clip straight into a reel (§14d)", () => {
+    it("puts it in a reel of your own", () => {
+        reels.push({ id: "r1", ownerId: OWNER, visibility: "private", name: "Highlights" });
+
+        const clip = createClipInReel(
+            "media-1",
+            { startMs: 0, endMs: 5_000 } as never,
+            "r1",
+            auth(OWNER)
+        );
+
+        expect(clips.map((row) => row.id)).toEqual([clip.id]);
+    });
+
+    it("refuses somebody else's reel, shared or not, inside the one transaction", () => {
+        reels.push({ id: "r1", ownerId: OTHER, visibility: "shared", name: "Theirs" });
+        reels.push({ id: "r2", ownerId: OTHER, visibility: "private", name: "Hidden" });
+
+        expect(() =>
+            createClipInReel("media-1", { startMs: 0, endMs: 5_000 } as never, "r1", auth(OWNER))
+        ).toThrow(AuthorizationError);
+        expect(() =>
+            createClipInReel("media-1", { startMs: 0, endMs: 5_000 } as never, "r2", auth(OWNER))
+        ).toThrow(NotFoundError);
     });
 });
 

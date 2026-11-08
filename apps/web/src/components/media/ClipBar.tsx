@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Autocomplete, Box, Button, Group, Paper, Select, Stack, Text } from "@mantine/core";
 
 import {
@@ -11,7 +11,8 @@ import {
     type CreateClipInput,
 } from "@private-stock/core";
 
-import { useClipLabels } from "@/lib/api/reels";
+import { roomKey } from "@/lib/activeDomain";
+import { useClipLabels, useOwnReels } from "@/lib/api/reels";
 import { destinationsFor, type TagDestination } from "@/lib/tagDestinations";
 import { DestinationControl } from "@/components/tags/DestinationControl";
 import { ItemTagChip } from "@/components/tags/ItemTagChip";
@@ -47,6 +48,35 @@ const SPEEDS = [
     { value: "4", label: "4× — very fast" },
 ];
 
+const REEL_TARGET_KEY = "ps:clipReelTarget";
+
+/**
+ * The reel new clips go into, remembered in this browser per room. A convenience rather than a
+ * record -- losing it costs one pick -- so it is storage and not a setting, and it reads as
+ * nothing when storage is unavailable.
+ */
+const useReelTarget = (): [string | null, (next: string | null) => void] => {
+    const [value, setValue] = useState<string | null>(() => {
+        try {
+            return window.localStorage.getItem(roomKey(REEL_TARGET_KEY));
+        } catch {
+            return null;
+        }
+    });
+
+    const set = (next: string | null) => {
+        setValue(next);
+        try {
+            if (next) window.localStorage.setItem(roomKey(REEL_TARGET_KEY), next);
+            else window.localStorage.removeItem(roomKey(REEL_TARGET_KEY));
+        } catch {
+            // Storage refused: the pick lasts as long as the bar does.
+        }
+    };
+
+    return [value, set];
+};
+
 const formatTime = (ms: number): string => {
     const total = Math.max(0, Math.round(ms / 1000));
     const minutes = Math.floor(total / 60);
@@ -62,6 +92,7 @@ interface ClipBarProps {
         label: string | null;
         speed: number | null;
         tags: PendingTag[];
+        reelId: string | null;
     }) => void;
     onClear: () => void;
     onPlay: (span: { startMs: number; endMs: number; speed: number | null }) => void;
@@ -80,6 +111,10 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     const [destination, setDestination] = useState<TagDestination>(DESTINATIONS[0]);
     const [tags, setTags] = useState<PendingTag[]>([]);
     const labels = useClipLabels();
+    const reels = useOwnReels();
+    const [reelTarget, setReelTarget] = useReelTarget();
+    // A remembered reel that has since been deleted, or belongs to another room, is no target.
+    const target = reels.data?.items.some((reel) => reel.id === reelTarget) ? reelTarget : null;
 
     const addTag = (name: string) => {
         const tag = { ...destination, kind: destination.kind as PendingTag["kind"], name };
@@ -92,6 +127,52 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     const { startMs, endMs } = selection;
     const complete = endMs !== null && endMs - startMs >= MIN_CLIP_MS;
     const chosenSpeed = speed ? Number(speed) : null;
+
+    const save = () => {
+        if (!complete || saving) return;
+
+        onSave({
+            startMs: Math.round(startMs),
+            endMs: Math.round(endMs),
+            label: label.trim() === "" ? null : label.trim(),
+            speed: chosenSpeed,
+            tags,
+            reelId: target,
+        });
+    };
+
+    /**
+     * Marking without the mouse (§14d "Reviewing recordings for a reel").
+     *
+     * When `]` closes a span the tag box takes the keys: type a tag, Enter to add it, and Enter
+     * again on the empty box saves the clip. Escape in the empty box hands the keys back to the
+     * player without losing the span, so the out point can still be nudged with `]`.
+     *
+     * An effect on the out point, because that is the moment: a new `]` after the first moves
+     * focus back here too. Nothing else in the bar takes focus on its own.
+     */
+    const tagsBox = useRef<HTMLDivElement>(null);
+    const ready = complete ? endMs : null;
+
+    useEffect(() => {
+        if (ready === null) return;
+        tagsBox.current?.querySelector<HTMLInputElement>("input")?.focus();
+    }, [ready]);
+
+    const onTagKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        const input = event.target;
+
+        if (!(input instanceof HTMLInputElement) || input.value.trim() !== "") return;
+
+        if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            save();
+        } else if (event.key === "Escape") {
+            event.preventDefault();
+            input.blur();
+        }
+    };
 
     return (
         <Paper withBorder p="xs" radius="sm">
@@ -148,6 +229,22 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                         w={200}
                     />
 
+                    {/* Where a pass is filling (§14d "Reviewing recordings for a reel"): kept
+                        between clips and visits, per room, so it is chosen once per pass. */}
+                    <Select
+                        label="Into reel"
+                        placeholder="None"
+                        data={(reels.data?.items ?? []).map((reel) => ({
+                            value: reel.id,
+                            label: reel.name,
+                        }))}
+                        value={target}
+                        onChange={setReelTarget}
+                        clearable
+                        searchable
+                        w={200}
+                    />
+
                     {/* Defaults to "Normal speed", which stores NULL rather than a 1.0 nobody chose. */}
                     <Select
                         label="Speed"
@@ -167,20 +264,7 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                     >
                         Preview
                     </Button>
-                    <Button
-                        disabled={!complete || saving}
-                        loading={saving}
-                        onClick={() =>
-                            complete &&
-                            onSave({
-                                startMs: Math.round(startMs),
-                                endMs: Math.round(endMs),
-                                label: label.trim() === "" ? null : label.trim(),
-                                speed: chosenSpeed,
-                                tags,
-                            })
-                        }
-                    >
+                    <Button disabled={!complete || saving} loading={saving} onClick={save}>
                         Save clip
                     </Button>
                     <Button variant="subtle" color="gray" onClick={onClear}>
@@ -199,21 +283,28 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                             onChange={setDestination}
                         />
                     </Box>
-                    <TagNameInput
-                        kind={destination.kind}
-                        scope={destination.scope}
-                        value={[]}
-                        exclude={tags
-                            .filter(
-                                (tag) =>
-                                    tag.kind === destination.kind && tag.scope === destination.scope
-                            )
-                            .map((tag) => tag.name)}
-                        placeholder="Tags — type and press Enter"
-                        onChange={(next) => next.forEach(addTag)}
-                        w={240}
-                        maw="100%"
-                    />
+                    <Box ref={tagsBox} onKeyDownCapture={onTagKeys}>
+                        <TagNameInput
+                            kind={destination.kind}
+                            scope={destination.scope}
+                            value={[]}
+                            exclude={tags
+                                .filter(
+                                    (tag) =>
+                                        tag.kind === destination.kind &&
+                                        tag.scope === destination.scope
+                                )
+                                .map((tag) => tag.name)}
+                            placeholder={
+                                complete
+                                    ? "Tags, Enter — then Enter again to save"
+                                    : "Tags — type and press Enter"
+                            }
+                            onChange={(next) => next.forEach(addTag)}
+                            w={260}
+                            maw="100%"
+                        />
+                    </Box>
                     {tags.length > 0 && (
                         <Group gap={6} wrap="wrap">
                             {tags.map((tag) => (

@@ -5,6 +5,7 @@ import { createClipSchema } from "@private-stock/core";
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { createClip } from "@/lib/services/clipService";
+import { createClipInReel } from "@/lib/services/reelService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
 export const dynamic = "force-dynamic";
@@ -25,7 +26,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const { id } = await context.params;
         const body = createClipSchema.parse(await request.json());
 
-        return NextResponse.json(createClip(id, body, auth), { status: 201 });
+        const clip = body.reelId
+            ? createClipInReel(id, body, body.reelId, auth)
+            : createClip(id, body, auth);
+
+        return NextResponse.json(clip, { status: 201 });
     } catch (error) {
         return toErrorResponse(error, request);
     }

@@ -55,6 +55,12 @@ export const createClipSchema = z
         speed: nullableSpeedSchema,
         /** Tags to put on it as it is saved, so marking and tagging are one gesture. */
         tags: z.array(clipTagNameSchema).max(50).optional(),
+        /**
+         * A reel of your own to put it in as it is saved (§14d "Reviewing recordings for a
+         * reel"), so a pass over a backlog fills the reel it is for. Both or neither: a reel
+         * that refuses the clip leaves no clip behind.
+         */
+        reelId: z.string().min(1).nullish(),
     })
     .refine((value) => value.endMs - value.startMs >= MIN_CLIP_MS, {
         message: "That span is too short to be a clip",
