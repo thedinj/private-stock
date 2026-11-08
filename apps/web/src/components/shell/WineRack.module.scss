@@ -170,7 +170,7 @@
         box-shadow: 0 2px 3px #000;
         transform-origin: 0 50%;
         transform: rotate(-12deg);
-        transition: transform var(--ps-dur-brisk) cubic-bezier(0.5, 1.6, 0.5, 1);
+        transition: transform var(--ps-dur-brisk) var(--ps-ease-out);
     }
 
     &[data-down]::after {
