@@ -168,7 +168,8 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         group: "review",
         presses: ["d"],
         shown: "d",
-        does: "Done: mark it reviewed, go to the next",
+        // Nothing outside review mode (§14d): a stray d must not mark anything.
+        does: "In review mode: mark it reviewed for the pass, go to the next",
         action: "review",
         tip: ["d"],
     },
@@ -176,7 +177,7 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         group: "review",
         presses: ["D"],
         shown: "Shift d",
-        does: "Review mode on or off: each waits for d (in the Game Room, from its last seconds)",
+        does: "Review mode on or off, for the pass used last here: each waits for d (in the Game Room, from its last seconds)",
         action: "reviewMode",
         tip: ["Shift+D"],
     },

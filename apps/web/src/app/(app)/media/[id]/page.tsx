@@ -32,7 +32,7 @@ import { WhoIsThis } from "@/components/faces/WhoIsThis";
 import { MediaNote } from "@/components/media/MediaNote";
 import { FrameStrip } from "@/components/media/FrameStrip";
 import { ViewerKeyTip } from "@/components/KeyTip";
-import { CheckGlyph, LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
+import { LookAlikeGlyph, SlidersGlyph, TrashGlyph } from "@/components/media/Glyph";
 import { SectionLabel } from "@/components/media/SectionLabel";
 import {
     isGrand,
@@ -59,7 +59,13 @@ import { BACKGROUND } from "@/lib/api/background";
 import { mediaDetailQuery } from "@/lib/api/media";
 import { DEFAULT_VIEW, viewToParams } from "@/lib/libraryQuery";
 import { itemHref } from "@/lib/lookMoment";
-import { isReviewing, withReview } from "@/lib/reviewMode";
+import {
+    readLastReviewPass,
+    rememberReviewPass,
+    resolveReviewPass,
+    reviewParam,
+    withReview,
+} from "@/lib/reviewMode";
 import { readReturn, rememberReturnTo, returnAtPage, returnLabel } from "@/lib/returnTo";
 import { leaveViewer } from "@/lib/viewerReturn";
 import { openingPicture } from "@/lib/openItem";
@@ -81,8 +87,10 @@ import {
     ratingWhilePending,
     useUserMedia,
     type UserMediaPatch,
-    useMarkReviewed,
 } from "@/lib/api/userMedia";
+import { useReviewPasses, useSetReviewMark } from "@/lib/api/reviewPasses";
+import { NameReviewPass } from "@/components/media/NameReviewPass";
+import { ReviewControl } from "@/components/media/ReviewControl";
 
 import classes from "@/components/media/PlayerStage.module.scss";
 
@@ -148,10 +156,43 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * `d` instead of rolling on, and each opens where the room looks first -- the tail in the
      * Game Room, the start elsewhere. On the address, so `go` carries it through the set and a
      * reload keeps it; nothing about which items are in the set changes.
+     *
+     * It is for a pass: `?review=<passId>` is what `d` marks for. `review=1` -- Play ▸ Review,
+     * Shift+D, old addresses -- is the pass last used in this room, resolved once the passes are
+     * known and written back into the address. With no pass at all, the page asks for a name.
      */
-    const reviewing = isReviewing(searchParams);
+    const reviewAsked = reviewParam(searchParams);
+    const reviewing = reviewAsked !== null;
     const reviewingRef = useRef(reviewing);
     reviewingRef.current = reviewing;
+    const passes = useReviewPasses().data?.passes;
+    const reviewPass =
+        reviewAsked !== null && passes
+            ? resolveReviewPass(reviewAsked, passes, readLastReviewPass())
+            : null;
+    /** What `go` carries to the next item: the resolved pass, or what was asked until then. */
+    const reviewCarry = reviewPass?.id ?? reviewAsked ?? false;
+    const reviewCarryRef = useRef<string | false>(reviewCarry);
+    reviewCarryRef.current = reviewCarry;
+    const reviewPassRef = useRef(reviewPass);
+    reviewPassRef.current = reviewPass;
+    /** Naming a new pass: asked for from the menu, or because the mode has none to use. */
+    const [namingPass, setNamingPass] = useState(false);
+    const needsPass = reviewing && passes !== undefined && passes.length === 0;
+
+    // The address says which pass, so a reload and the next item keep it, and this device
+    // remembers it for the next Shift+D here.
+    useEffect(() => {
+        if (!reviewPass) return;
+
+        rememberReviewPass(reviewPass.id);
+
+        if (reviewAsked !== reviewPass.id) {
+            router.replace(
+                withReview(window.location.pathname + window.location.search, reviewPass.id)
+            );
+        }
+    }, [reviewAsked, reviewPass, router]);
 
     /**
      * The room, and its light (§14).
@@ -394,7 +435,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 rememberReturnTo(returnAtPage(returnTo, targetPage));
             }
 
-            router.replace(withReview(itemHref(target, matchedAt), reviewingRef.current));
+            router.replace(withReview(itemHref(target, matchedAt), reviewCarryRef.current));
         },
         [router, returnTo]
     );
@@ -659,36 +700,55 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     const { mutate: saveOpinion } = rate;
 
     /**
-     * Done with this one, and on to the next (§14d "Reviewing recordings for a reel").
+     * Into review mode or out of it, on this item: `true` is the pass last used here, a pass
+     * id that one, `false` off. Into it jumps to the tail, since the item is already open and
+     * its opening point has passed; out of it, or switching pass, leaves the playhead alone.
+     */
+    const setReviewMode = useCallback(
+        (review: boolean | string) => {
+            const entering = review !== false && !reviewingRef.current;
+
+            if (typeof review === "string") rememberReviewPass(review);
+
+            router.replace(withReview(window.location.pathname + window.location.search, review));
+
+            const tail = entering && data ? tailStartMs(getActiveDomain(), data.durationMs) : null;
+
+            if (tail !== null) seekRef.current?.(tail);
+        },
+        [router, data]
+    );
+    const toggleReviewMode = useCallback(
+        () => setReviewMode(!reviewingRef.current),
+        [setReviewMode]
+    );
+
+    /**
+     * Done with this one for the pass, and on to the next (§14d "Reviewing recordings for a
+     * reel"). Only in review mode: outside it `d` does nothing, so a stray press marks nothing.
      *
-     * The next id is read before the write: inside "Not reviewed" the item leaves the set as
-     * soon as the mark lands. Nothing waits for the answer, because a pass over a backlog is
-     * hundreds of these in a row -- but a failure is said over whatever is on screen by then,
+     * The next id is read before the write: inside "Not yet reviewed for" the item leaves the
+     * set as soon as the mark lands. Nothing waits for the answer, because a pass over a backlog
+     * is hundreds of these in a row -- but a failure is said over whatever is on screen by then,
      * in words that name the item before, so a mark that never landed is not silently lost.
      *
-     * Pressing it on an item already reviewed just moves on; taking the mark back is the
-     * toggle on the row. At the end of the set it says so rather than doing nothing visible.
+     * Pressing it on an item already marked just moves on; taking the mark back is its chip. At
+     * the end of the set it says so rather than doing nothing visible.
      */
-    /**
-     * Into review mode or out of it, on this item. Into it jumps to the tail, since the item is
-     * already open and its opening point has passed; out of it leaves the playhead alone.
-     */
-    const toggleReviewMode = useCallback(() => {
-        const next = !reviewingRef.current;
-
-        router.replace(withReview(window.location.pathname + window.location.search, next));
-
-        const tail = next && data ? tailStartMs(getActiveDomain(), data.durationMs) : null;
-
-        if (tail !== null) seekRef.current?.(tail);
-    }, [router, data]);
-
-    const { mutate: saveReviewed } = useMarkReviewed();
+    const { mutate: saveMark } = useSetReviewMark();
     const reviewAndNext = useCallback(() => {
+        const pass = reviewPassRef.current;
+
+        if (!pass) {
+            // In the mode with nothing to mark for yet: the passes are loading, or there are
+            // none -- in which case the naming prompt is already up.
+            return;
+        }
+
         const nextId = sequence.nextId;
 
-        saveReviewed(
-            { mediaId: id, reviewed: true },
+        saveMark(
+            { mediaId: id, passId: pass.id, reviewed: true },
             {
                 onError: () => {
                     flashCount.current += 1;
@@ -697,8 +757,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         state: "failed",
                         subject: "refused",
                         text: nextId
-                            ? "Could not mark the last item reviewed."
-                            : "Could not mark this reviewed.",
+                            ? `Could not mark the last item reviewed for ${pass.name}.`
+                            : `Could not mark this reviewed for ${pass.name}.`,
                     });
                 },
             }
@@ -712,10 +772,10 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 key: flashCount.current,
                 state: "saved",
                 subject: "note",
-                text: "Reviewed. That was the last one.",
+                text: `Reviewed for ${pass.name}. That was the last one.`,
             });
         }
-    }, [go, id, saveReviewed, sequence.nextId]);
+    }, [go, id, saveMark, sequence.nextId]);
 
     const setOpinion = useCallback(
         (patch: UserMediaPatch) => {
@@ -775,7 +835,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             // The confirmation's keys are its own: Enter confirms, Escape cancels, and n must
             // not walk the set out from under a dialog about this item. "Who is this?" likewise:
             // a search being compared is not to be thrown away by a stray n.
-            if (trashOpen || whoIsThisOpen || helpOpen) return;
+            if (trashOpen || whoIsThisOpen || helpOpen || namingPass || needsPass) return;
 
             // The whole map, from the one table the keys are checked against (§14 "Hotkeys").
             if (event.key === "?" && !overlayOpen) {
@@ -832,9 +892,10 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 return;
             }
 
-            // d for done: reviewed, then the next one (§14d). Not on a repeat -- a held key
-            // would sweep a run of items into "reviewed" that nobody looked at.
-            if (event.key === "d" && !event.shiftKey && !overlayOpen) {
+            // d for done: reviewed for the pass, then the next one (§14d) -- in review mode
+            // only, and nothing at all outside it. Not on a repeat -- a held key would sweep a
+            // run of items into "reviewed" that nobody looked at.
+            if (event.key === "d" && !event.shiftKey && !overlayOpen && reviewingRef.current) {
                 event.preventDefault();
                 if (!event.repeat) reviewAndNext();
                 return;
@@ -914,6 +975,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         trashOpen,
         trashDialog,
         helpOpen,
+        namingPass,
+        needsPass,
         openHelp,
         jumpToField,
         setOpinion,
@@ -1331,53 +1394,19 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {/* The way anything gets into a playlist (§14b). Here because this is
                         where you decide you want it -- the decision is made watching the
                         thing, not later in a list of lists. */}
-                    {/* Review mode (§14d): Shift+D, or here. Not on a phone, whose row is full
-                        and which has no d to wait for; Play ▸ Review is there. */}
-                    {!narrow && (
-                        <ViewerKeyTip
-                            action="reviewMode"
-                            label={
-                                reviewing
-                                    ? "Reviewing: each waits for d instead of rolling on. Click to stop"
-                                    : "Review: each waits for d instead of rolling on"
-                            }
-                        >
-                            <Button
-                                variant={reviewing ? "filled" : "default"}
-                                color={reviewing ? "brass" : undefined}
-                                aria-pressed={reviewing}
-                                onClick={toggleReviewMode}
-                            >
-                                {reviewing ? "Reviewing" : "Review"}
-                            </Button>
-                        </ViewerKeyTip>
-                    )}
-
-                    {/* Reviewed (§14d): the d key's mark, and the only way to take it back. */}
-                    <ViewerKeyTip
-                        action="review"
-                        label={
-                            data.reviewedAt
-                                ? "Reviewed. Click to take it back"
-                                : "Done with this one: mark it reviewed and go to the next"
-                        }
-                    >
-                        <Button
-                            variant={data.reviewedAt ? "light" : "default"}
-                            color={data.reviewedAt ? "brass" : undefined}
-                            leftSection={narrow ? undefined : <CheckGlyph size={16} />}
-                            aria-pressed={data.reviewedAt !== null}
-                            aria-label="Reviewed"
-                            onClick={() =>
-                                saveReviewed({
-                                    mediaId: data.id,
-                                    reviewed: data.reviewedAt === null,
-                                })
-                            }
-                        >
-                            {narrow ? <CheckGlyph size={16} /> : "Reviewed"}
-                        </Button>
-                    </ViewerKeyTip>
+                    {/* Review (§14d): the mode, for a pass -- Shift+D, or here -- and the
+                        passes this item has been through, each chip taking its mark back. */}
+                    <ReviewControl
+                        mediaId={data.id}
+                        reviews={data.reviews}
+                        passes={passes}
+                        reviewing={reviewing}
+                        current={reviewPass}
+                        narrow={narrow}
+                        onToggle={toggleReviewMode}
+                        onReviewFor={setReviewMode}
+                        onNewPass={() => setNamingPass(true)}
+                    />
 
                     <AddToPlaylist mediaId={data.id} iconOnly={narrow} />
 
@@ -1589,6 +1618,20 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
             />
 
             <ViewerKeysHelp opened={helpOpen} onClose={closeHelp} />
+
+            {/* A new pass from the menu, or the one review mode needs to start. Closed
+                with no pass to review for, it leaves the mode rather than stranding it. */}
+            <NameReviewPass
+                opened={namingPass || needsPass}
+                onClose={() => {
+                    setNamingPass(false);
+                    if (needsPass) setReviewMode(false);
+                }}
+                onCreated={(pass) => {
+                    setNamingPass(false);
+                    setReviewMode(pass.id);
+                }}
+            />
 
             {/* Only for somebody who can use it: it fetches the item's copies ahead of being
                 opened (see there), which nobody else needs. Keyed by the item, because this
