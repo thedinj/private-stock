@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { dupeSettingsSchema } from "../dupes.js";
+import { domainKindSchema } from "../libraryDomains.js";
 import { homeLayoutSchema } from "./home.js";
 import { scanSettingsSchema } from "./media.js";
 import { STAGES, type StageDefinition, type StageMode } from "../stages.js";
@@ -42,7 +43,20 @@ export const SETTING_KEYS = {
     playbackCheck: "playback.check",
     /** Identical copies cleared every night (§10e "Every night"). Saved from Review › Duplicates. */
     identicalNightly: "dupes.identicalNightly",
+    /**
+     * The rooms an administrator has turned off (§21 "Turning a room off"). The ones that are
+     * off rather than the ones that are on, so a room added in code arrives on.
+     */
+    roomsOff: "rooms.off",
 } as const;
+
+/** The rooms that are on, in `domainKinds` order (§21 "Turning a room off"). Anyone may read it. */
+export const roomsSchema = z.object({ enabled: z.array(domainKindSchema) });
+export type Rooms = z.infer<typeof roomsSchema>;
+
+/** Turning one room on or off. One room per request, so two admins never overwrite each other. */
+export const roomSwitchSchema = z.object({ room: domainKindSchema, enabled: z.boolean() });
+export type RoomSwitch = z.infer<typeof roomSwitchSchema>;
 
 /**
  * Faces tagging by themselves (§5f "Tagging by itself"): off until an administrator turns it on,

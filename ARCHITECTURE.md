@@ -11995,6 +11995,35 @@ by someone looking on, on a desktop and on a phone. Other accounts were not the 
   over the Parlour would be the thing that draws a look. A keyboard-only way to show the hidden
   line is not built; the pointer's dwell covers the desktop.
 
+### Turning a room off
+
+Decided 2026-11-08: an administrator can turn a room off for the household, from a collapsed
+"Rooms" section on Libraries (every library is in a room). **It is navigation only.** The scanner,
+the worker and every service go on as before; a room's libraries keep being scanned and
+processed, and its tags, playlists and home layout are as they were when it comes back on. The
+admin section says so once.
+
+- **Stored as what is off** (`Setting` `rooms.off`, `roomService`), so a room added in code
+  arrives on. Anyone signed in reads the list (`GET /api/rooms`, in no room, since it is asked
+  before a tab is settled in one); only `admin` changes it, one room per request so two
+  administrators never overwrite each other. **At least one room stays on:** turning off the last
+  is a `ValidationError`, and a row that names every room reads as none.
+- **The switcher leaves an off room out entirely**, the stair included. With no other room on,
+  the room name is only a name; with only the stair left, the open menu reads "No other rooms"
+  until it is held.
+- **A tab in a room that is off moves on load** (`RoomCheck`, `roomToOpen`): to the Parlour if it
+  is on, else the first room on that is not guarded, and a guarded room only when it is the only
+  one on. The check sits outside the gate and moves with `switchDomain`, which forgets that the
+  tab passed any gate, so a fallback into the Cellar still meets its rack. It is decided once per
+  load: a room turned off while somebody is in it -- the admin's own -- is left on their next
+  load, not pulled out from under them. A failed read opens the room the tab was in, since an
+  off room is hidden, not locked; the gate is what locks.
+- **"Back upstairs"** on the rack goes where the fallback would, and is not offered when every
+  room that is not guarded is off.
+- **Left as they were:** the admin library table is the room's own, so an off room's libraries
+  are managed by turning it back on; adding a library still puts it in the room it is added from.
+  Nothing else enters a room.
+
 ### Vocabulary is relabelled, never renamed
 
 A person in an item is a `performer` in every row and three hundred files. A domain changes what

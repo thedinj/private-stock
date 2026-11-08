@@ -5,6 +5,7 @@ import {
     domainProfiles,
     domainSkipsStage,
     parseDomain,
+    roomToOpen,
     tailStartMs,
 } from "./libraryDomains.js";
 
@@ -64,5 +65,31 @@ describe("where a room looks first (§21)", () => {
         expect(tailStartMs("games", null)).toBeNull();
         expect(tailStartMs("games", 0)).toBeNull();
         expect(tailStartMs("arcade", 30_000)).toBeNull();
+    });
+});
+
+describe("the room a tab opens in, with rooms turned off (§21)", () => {
+    it("stays where it asked to be when that room is on, guarded or not", () => {
+        expect(roomToOpen("games", ["family", "games"])).toBe("games");
+        expect(roomToOpen("cellar", ["cellar", "games"])).toBe("cellar");
+    });
+
+    it("falls back to the default room when it is on", () => {
+        expect(roomToOpen("games", ["family", "cellar"])).toBe(DEFAULT_DOMAIN);
+        expect(roomToOpen("cellar", ["games", "family"])).toBe(DEFAULT_DOMAIN);
+    });
+
+    it("prefers a room that is not guarded when the default is off", () => {
+        expect(roomToOpen("family", ["cellar", "games"])).toBe("games");
+        expect(roomToOpen("cellar", ["games"])).toBe("games");
+    });
+
+    it("lands in a guarded room only when it is the only one on", () => {
+        expect(roomToOpen("family", ["cellar"])).toBe("cellar");
+        expect(roomToOpen("games", ["cellar"])).toBe("cellar");
+    });
+
+    it("opens the default room when nothing is on", () => {
+        expect(roomToOpen("cellar", [])).toBe(DEFAULT_DOMAIN);
     });
 });
