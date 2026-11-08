@@ -419,28 +419,6 @@ body {
     --font-label: var(--font-arcade-ui);
 }
 
-/**
- * The arcade's screen: scanlines over everything, media included. The one room where texture is
- * allowed over the picture (§14 keeps it out of the cellar's), because a CRT is what the room is.
- * Faint enough to read through, fixed so it does not scroll, and gone for anybody who asked the
- * system for less motion and contrast noise.
- */
-:root[data-domain="games"] body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
-    mix-blend-mode: multiply;
-}
-
-@media (prefers-reduced-motion: reduce), (prefers-contrast: more) {
-    :root[data-domain="games"] body::after {
-        display: none;
-    }
-}
-
 /** The room's name in the header: a pixel sign, lit. */
 :root[data-domain="games"] .ps-room-name {
     font-family: var(--font-arcade-pixel), monospace;

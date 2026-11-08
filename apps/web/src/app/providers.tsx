@@ -36,7 +36,6 @@ const cssVariablesResolver: CSSVariablesResolver = (mantineTheme) => ({
         "--ps-rack-edge": mantineTheme.other.rackEdge,
         "--ps-accent-rgb": mantineTheme.other.accentRgb,
         "--ps-edge-rgb": mantineTheme.other.edgeRgb,
-        "--ps-well-glow": mantineTheme.other.wellGlow,
         /**
          * The display titles' warm cream, and the drawer's body text: one token each rather
          * than a hex repeated across six stylesheets.

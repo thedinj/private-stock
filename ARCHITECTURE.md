@@ -11942,9 +11942,25 @@ know. Saved views had no constraint, so their names are per room.
 
 ### Stages a room does not use
 
-The Game Room does not detect faces. A detector has nothing to find in a game's frames, and on an
-i3 every minute it spends is a minute the rooms that do need it wait. Players are still filed, by
-hand, from filenames and from what OCR reads on screen.
+Reviewed stage by stage (2026-11-08):
+
+| Room | Skips | Why |
+|---|---|---|
+| Cellar | nothing | |
+| Parlour | Look (`embed`), OCR | Watching by look is the Cellar's idea; a family video has little burned-in text, and OCR's settings are tuned for watermarks. |
+| Game Room | faces, Look, OCR | A detector has nothing to find in a game's frames. OCR would read the HUD — ammo counts, killfeeds — into the search index and the review queue. Players are filed by hand and from filenames. |
+
+**The duplicate fingerprints stay in the Game Room** (`phash`, `tileprint`). A highlight saved
+raw, trimmed and re-encoded is the duplicate most worth catching, and `tileprint` exists for
+exactly "the same clip, starting at a different moment". The risk is false matches between clips
+of one map under one HUD; if the Game Room's queue fills with those, this is the line to change.
+Everything playback and finding need — identity hash, probe, cover, index, metadata, previews,
+filmstrip, segments — runs everywhere.
+
+**What a skipped stage would have fed is not offered in that room** (`roomRuns`): the Look section
+of Filters, "Look" in the header search and "More like this" without `embed`; "Who is this?", the
+Faces review queue and a tag's Faces tab without `faces`; the OCR review queue without `ocr`. Each
+could only ever be empty there.
 
 **A fact in the profile, not a setting** (`skipsStages`). A per-room column on the Processing page
 was the obvious design, and it is three switches for every stage that would only ever be set one
@@ -11956,12 +11972,16 @@ each is skipped without being read.
 
 The faces auto-tag stays one switch for the whole library: on in the Parlour as in the Cellar.
 
+The sweep does not know rooms: it still offers each item a stage its room skips, once, and the
+worker settles it `skipped` without reading anything. Filtering by room in the sweep's query would
+add a join to the one query §20 tuned hardest, to save one cheap job per item. Until each is
+settled, the Processing page's waiting count includes them.
+
 ### A look per room
 
 Chosen in one round of mockups (2026-11-07): the **Parlour is Hearth** — charcoal wool, ember
-orange, Libre Caslon Display over Source Sans 3, and a low glow rising from the bottom of every
-picture. The **Game Room is Arcade Cabinet** — violet-black, magenta and phosphor cyan, Chakra
-Petch, the room's name in a lit pixel face, and scanlines over the whole screen.
+orange, Libre Caslon Display over Source Sans 3. The **Game Room is Arcade Cabinet** —
+violet-black, magenta and phosphor cyan, Chakra Petch, and the room's name in a lit pixel face.
 
 - **Each room is a Mantine theme over the cellar's** (`roomThemes`, `mergeThemeOverrides`), so
   every component default stays shared. The accent keeps the name `brass` in every room: a
@@ -11973,7 +11993,8 @@ Petch, the room's name in a lit pixel face, and scanlines over the whole screen.
   `--ps-edge-rgb` rather than the literal gilt they used to carry.
 - The server cannot know a tab's room, so the first render is the default room's and the tab's
   own replaces it before anything behind sign-in is drawn.
-- **The arcade's scanlines cover media**, the one deliberate exception to §14's rule that texture
-  stays out of the picture: the screen is the room's furniture. They go for anybody whose system
-  asks for reduced motion or more contrast.
+- **Nothing of a room's is painted over the picture.** The mockups had scanlines over the arcade's
+  whole screen and an ember glow rising from the foot of every Parlour tile; both shipped, and both
+  were taken out (2026-11-08) because they filtered the video itself. §14's rule holds in every
+  room: a room is its frame, ground, type and glow around a picture, never a tint on it.
 - The study (§14) drops towards black from each room's own ground.

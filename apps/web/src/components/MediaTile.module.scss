@@ -40,16 +40,8 @@
         inset 0 1px 0 rgba(var(--ps-edge-rgb), 0.06),
         inset 0 -1px 0 rgba(0, 0, 0, 0.5);
 
-    // The room's own light, over the picture (§21): an ember glow rising by the hearth, a faint
-    // phosphor edge in the arcade, nothing in the cellar. `::before` and positioned, so it
-    // paints over the image and under the badges that come after it.
-    &::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        box-shadow: var(--ps-well-glow, 0 0 transparent);
-    }
+    // Nothing of the room's is painted over the picture (§21 "A look per room"): the tile's
+    // frame and glow carry the room, the picture stays the file's.
 }
 
 .image {

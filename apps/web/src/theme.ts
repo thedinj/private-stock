@@ -184,8 +184,6 @@ export const theme = createTheme({
          */
         accentRgb: "228, 185, 85",
         edgeRgb: "236, 218, 186",
-        // What rises from the bottom of a thumbnail's well. Nothing, in the cellar.
-        wellGlow: "0 0 transparent",
         hoverGlow: "0 0 0 1px rgba(228, 185, 85, 0.45), 0 4px 24px -6px rgba(228, 185, 85, 0.35)",
         // The showcase tile playing with sound (§14f): a solid brass ring and a wide halo, so
         // the one tile speaking can be found at a glance across the wall.
@@ -368,7 +366,6 @@ const hearth: MantineThemeOverride = {
         textWarm: "#ecdfd3",
         accentRgb: "224, 112, 58",
         edgeRgb: "239, 226, 214",
-        wellGlow: "inset 0 -42px 46px -30px rgba(224, 112, 58, 0.42)",
         hoverGlow: "0 0 0 1px rgba(224, 112, 58, 0.5), 0 4px 24px -6px rgba(224, 112, 58, 0.4)",
         voiceGlow:
             "0 0 0 3px rgba(224, 112, 58, 0.95), 0 0 48px 8px rgba(224, 112, 58, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.85)",
@@ -456,7 +453,6 @@ const arcade: MantineThemeOverride = {
         textWarm: "#e4e0ff",
         accentRgb: "255, 63, 180",
         edgeRgb: "41, 227, 255",
-        wellGlow: "inset 0 0 0 1px rgba(41, 227, 255, 0.22)",
         hoverGlow: "0 0 0 1px rgba(41, 227, 255, 0.7), 0 0 22px -2px rgba(41, 227, 255, 0.55)",
         voiceGlow:
             "0 0 0 3px rgba(255, 63, 180, 0.95), 0 0 48px 8px rgba(255, 63, 180, 0.5), 0 24px 48px -10px rgba(0, 0, 0, 0.9)",
