@@ -9,6 +9,7 @@ import { DEFAULT_DOMAIN, type DomainKind } from "@private-stock/core";
 import { WarmingHud } from "@/components/debug/WarmingHud";
 import { CandleLight } from "@/components/shell/CandleLight";
 import { DomainGate } from "@/components/shell/DomainGate";
+import { RoomCheck } from "@/components/shell/RoomCheck";
 import { ScreenLockProvider } from "@/components/shell/ScreenLock";
 import { AuthProvider } from "@/lib/api/AuthProvider";
 import { getActiveDomain } from "@/lib/activeDomain";
@@ -131,8 +132,12 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
                     <ScreenLockProvider>
                         {/* Inside the lock, so a locked device never shows the cellar's
                             keypad over a page; around everything, so the tasting and the
-                            showcase are guarded as well (§21). */}
-                        <DomainGate>{children}</DomainGate>
+                            showcase are guarded as well (§21). A room that is off is left
+                            before the gate is reached, so a fallback into a guarded room
+                            still meets it. */}
+                        <RoomCheck>
+                            <DomainGate>{children}</DomainGate>
+                        </RoomCheck>
                     </ScreenLockProvider>
                     {/* Here rather than in the app shell, so it is over the tasting too. */}
                     <WarmingHud />

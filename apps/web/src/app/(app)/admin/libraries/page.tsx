@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ScanStatus } from "@private-stock/core";
 
 import { LibrariesCard } from "@/components/admin/LibrariesCard";
+import { RoomsCard } from "@/components/admin/RoomsCard";
 import { ScanScheduleCard } from "@/components/admin/ScanScheduleCard";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { api } from "@/lib/api/client";
@@ -79,6 +80,7 @@ const LibrariesPage: React.FC = () => {
             <Stack gap="lg" maw={860}>
                 <LibrariesCard status={data} onScan={(rootId) => scan.mutate({ rootId })} />
                 <ScanScheduleCard />
+                <RoomsCard />
             </Stack>
 
             <Modal

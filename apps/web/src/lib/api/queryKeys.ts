@@ -76,6 +76,9 @@ export const queryKeys = {
         pin: () => ["account", "pin"],
     },
 
+    /** The rooms an administrator has left on (§21 "Turning a room off"). The household's. */
+    rooms: () => ["rooms"],
+
     // --- The library, as a reader sees it ---
     library: {
         /** Enabled roots, ordered by name: the sidebar, the room and the cellar's switcher. */

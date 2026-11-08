@@ -142,6 +142,32 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
     },
 };
 
+/**
+ * The room a tab opens in, given the rooms an administrator has left on (§21 "Turning a room
+ * off").
+ *
+ * The room it asked for when that one is on. Otherwise the default room, then the first room on
+ * that is not guarded, and a guarded room only when nothing else is on -- a fallback is a door
+ * the browser did not choose, so it opens onto the room that is safe to show whenever there is
+ * one. Landing in a guarded room still goes through its gate: the move is a `switchDomain`,
+ * which forgets that this tab ever passed one. With nothing on at all (which the server refuses
+ * to store) the default room is the answer, as it is for a browser with no memory.
+ */
+export const roomToOpen = (wanted: DomainKind, enabled: readonly DomainKind[]): DomainKind => {
+    if (enabled.includes(wanted)) {
+        return wanted;
+    }
+
+    const on = domainKinds.filter((kind) => enabled.includes(kind));
+    const open = on.filter((kind) => !domainProfiles[kind].guarded);
+
+    if (open.includes(DEFAULT_DOMAIN)) {
+        return DEFAULT_DOMAIN;
+    }
+
+    return open[0] ?? on[0] ?? DEFAULT_DOMAIN;
+};
+
 /** A stored or sent value, read leniently: anything unknown is not a domain. */
 export const parseDomain = (raw: string | null | undefined): DomainKind | null => {
     const parsed = domainKindSchema.safeParse(raw);

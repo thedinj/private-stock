@@ -6,6 +6,7 @@ import { Group, Menu, Title, UnstyledButton } from "@mantine/core";
 import { domainKinds, domainProfiles } from "@private-stock/core";
 
 import { Glyph } from "@/components/media/Glyph";
+import { useEnabledRooms } from "@/lib/api/rooms";
 import { getActiveDomain, switchDomain } from "@/lib/activeDomain";
 
 /** Pointer resting on the open menu this long shows the hidden line. */
@@ -29,11 +30,16 @@ const ChevronGlyph: React.FC = () => (
  * kept down). Closing the menu hides it again; nothing remembers it was shown. The line says only
  * the room's `entrance` ("The stair"), never its name, and the rack at the bottom of it asks for
  * the PIN (`DomainGate`).
+ *
+ * A room an administrator has turned off is not in it at all, the stair included (§21 "Turning a
+ * room off"). With no other room on, the name is only a name.
  */
 export const DomainSwitcher: React.FC = () => {
     const active = getActiveDomain();
-    const listed = domainKinds.filter((kind) => kind !== active && !domainProfiles[kind].guarded);
-    const hidden = domainKinds.filter((kind) => kind !== active && domainProfiles[kind].guarded);
+    const rooms = useEnabledRooms();
+    const others = domainKinds.filter((kind) => kind !== active && rooms.includes(kind));
+    const listed = others.filter((kind) => !domainProfiles[kind].guarded);
+    const hidden = others.filter((kind) => domainProfiles[kind].guarded);
 
     const [opened, setOpened] = useState(false);
     const [revealed, setRevealed] = useState(false);
@@ -68,6 +74,21 @@ export const DomainSwitcher: React.FC = () => {
             setRevealed(false);
         }
     };
+
+    // `ps-room-name`: each room may sign its own name (globals.scss).
+    const name = (
+        <Title order={4} className="ps-room-name" style={{ whiteSpace: "nowrap" }}>
+            {domainProfiles[active].label}
+        </Title>
+    );
+
+    if (others.length === 0) {
+        return (
+            <Group mih={44} wrap="nowrap">
+                {name}
+            </Group>
+        );
+    }
 
     return (
         <Menu position="bottom-start" withinPortal opened={opened} onChange={onChange}>
@@ -106,10 +127,7 @@ export const DomainSwitcher: React.FC = () => {
                     }}
                 >
                     <Group gap={4} wrap="nowrap">
-                        {/* `ps-room-name`: each room may sign its own name (globals.scss). */}
-                        <Title order={4} className="ps-room-name" style={{ whiteSpace: "nowrap" }}>
-                            {domainProfiles[active].label}
-                        </Title>
+                        {name}
                         <ChevronGlyph />
                     </Group>
                 </UnstyledButton>
@@ -125,6 +143,9 @@ export const DomainSwitcher: React.FC = () => {
                     setRevealed(false);
                 }}
             >
+                {/* Only the stair is left: the menu says what any menu with nothing in it
+                    would, until it is held. */}
+                {listed.length === 0 && !revealed && <Menu.Label>No other rooms</Menu.Label>}
                 {listed.map((kind) => (
                     <Menu.Item key={kind} mih={44} onClick={() => switchDomain(kind)}>
                         {domainProfiles[kind].label}

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Box, Button, Stack } from "@mantine/core";
 
-import { DEFAULT_DOMAIN, domainProfiles } from "@private-stock/core";
+import { DEFAULT_DOMAIN, domainProfiles, roomToOpen } from "@private-stock/core";
 
 import { CANDLE_HELD_MS, CandleDark } from "@/components/shell/CandleArrival";
 import { WineRack } from "@/components/shell/WineRack";
 import { usePinStatus } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
+import { useEnabledRooms } from "@/lib/api/rooms";
 import { getActiveDomain, hasPassedGate, markGatePassed, switchDomain } from "@/lib/activeDomain";
 import { SNUFF_BLACK } from "@/lib/candleSnuff";
 import { DURATION, prefersReducedMotion } from "@/lib/motion";
@@ -37,6 +38,9 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
     const [phase, setPhase] = useState<Phase>(() =>
         !guarded || hasPassedGate(domain) ? "in" : "rack"
     );
+    // Upstairs is the room a tab falls back to (§21 "Turning a room off"). With every room that
+    // is not guarded turned off there is no upstairs, and the way back is not offered.
+    const upstairs = roomToOpen(DEFAULT_DOMAIN, useEnabledRooms());
 
     const { data: pinStatus, isPending } = usePinStatus(user !== null && phase === "rack");
 
@@ -131,14 +135,16 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
                 />
 
                 <Stack gap={4} align="center">
-                    <Button
-                        variant="subtle"
-                        color="gray"
-                        size="md"
-                        onClick={() => switchDomain(DEFAULT_DOMAIN)}
-                    >
-                        Back upstairs
-                    </Button>
+                    {!domainProfiles[upstairs].guarded && (
+                        <Button
+                            variant="subtle"
+                            color="gray"
+                            size="md"
+                            onClick={() => switchDomain(upstairs)}
+                        >
+                            Back upstairs
+                        </Button>
+                    )}
                     <Button variant="subtle" color="gray" size="xs" onClick={() => void signOut()}>
                         Forgot it? Sign out
                     </Button>
