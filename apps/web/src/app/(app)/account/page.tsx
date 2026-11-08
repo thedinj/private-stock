@@ -19,6 +19,7 @@ import {
 
 import { domainKinds, domainProfiles, passwordSchema, type SessionUser } from "@private-stock/core";
 
+import { ReviewPassesCard } from "@/components/account/ReviewPassesCard";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useScreenLock } from "@/components/shell/ScreenLock";
 import { WineRack } from "@/components/shell/WineRack";
@@ -587,6 +588,8 @@ const AccountPage: React.FC = () => {
             <PasswordCard />
 
             <ScreenLockCard />
+
+            <ReviewPassesCard />
         </Stack>
     );
 };
