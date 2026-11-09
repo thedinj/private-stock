@@ -1,22 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Autocomplete, Box, Button, Group, Paper, Select, Stack, Text } from "@mantine/core";
-
 import {
-    MIN_CLIP_MS,
-    allowsPrivate,
-    clipTagKinds,
-    spanRunMs,
-    type CreateClipInput,
-} from "@private-stock/core";
+    Autocomplete,
+    Box,
+    Button,
+    Group,
+    Paper,
+    Select,
+    SimpleGrid,
+    Stack,
+    Text,
+} from "@mantine/core";
+
+import { MIN_CLIP_MS, clipTagKinds, spanRunMs, type CreateClipInput } from "@private-stock/core";
 
 import { KeyTip, ViewerKeyTip } from "@/components/KeyTip";
 import { roomKey } from "@/lib/activeDomain";
 import { useClipLabels, useOwnReels } from "@/lib/api/reels";
-import { destinationsFor, type TagDestination } from "@/lib/tagDestinations";
-import { DestinationControl } from "@/components/tags/DestinationControl";
-import { ItemTagChip } from "@/components/tags/ItemTagChip";
+import { facetLabelPlural } from "@/lib/facetLabels";
+import { destinationKey, destinationsFor, type TagDestination } from "@/lib/tagDestinations";
+import { facetField, fieldTitle } from "@/lib/viewerKeys";
 import { TagNameInput } from "@/components/tags/TagNameInput";
 
 /**
@@ -85,6 +89,65 @@ const formatTime = (ms: number): string => {
     return `${minutes}:${String(total % 60).padStart(2, "0")}`;
 };
 
+/**
+ * One facet's tags for the clip being marked: a small box whose chips sit inside it.
+ *
+ * Three of these side by side replaced one box and a facet switch (2026-11-09). The switch was a
+ * thing to set before every name, and its chips needed a row of their own; three boxes the height
+ * of one input say where a name goes before it is typed, and hold what was added.
+ *
+ * Escape clears a half-typed name, then leaves the box -- the player gets the keys back without
+ * losing the span, and one more Escape drops it. Enter on an empty box saves the clip.
+ */
+const PendingTagBox: React.FC<{
+    destination: TagDestination;
+    names: string[];
+    onNames: (names: string[]) => void;
+    onSave: () => void;
+    hint: string | undefined;
+}> = ({ destination, names, onNames, onSave, hint }) => {
+    const [typed, setTyped] = useState("");
+    const field = facetField(destination.kind, destination.scope);
+    const title = field ? fieldTitle(field, facetLabelPlural) : facetLabelPlural(destination.kind);
+
+    const onKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        const input = event.target;
+
+        if (!(input instanceof HTMLInputElement)) return;
+
+        if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typed !== "") setTyped("");
+            else input.blur();
+            return;
+        }
+
+        if (event.key === "Enter" && input.value.trim() === "") {
+            event.preventDefault();
+            event.stopPropagation();
+            onSave();
+        }
+    };
+
+    return (
+        <Box onKeyDownCapture={onKeys} miw={0}>
+            <TagNameInput
+                kind={destination.kind}
+                scope={destination.scope}
+                size="xs"
+                label={title}
+                value={names}
+                onChange={onNames}
+                exclude={names}
+                placeholder={names.length === 0 ? hint : undefined}
+                searchValue={typed}
+                onSearchChange={setTyped}
+            />
+        </Box>
+    );
+};
+
 interface ClipBarProps {
     selection: { startMs: number; endMs: number | null };
     onSave: (input: {
@@ -109,7 +172,6 @@ export const ClipBar: React.FC<ClipBarProps> = ({
 }) => {
     const [label, setLabel] = useState("");
     const [speed, setSpeed] = useState<string | null>("");
-    const [destination, setDestination] = useState<TagDestination>(DESTINATIONS[0]);
     const [tags, setTags] = useState<PendingTag[]>([]);
     const labels = useClipLabels();
     const reels = useOwnReels();
@@ -117,13 +179,24 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     // A remembered reel that has since been deleted, or belongs to another room, is no target.
     const target = reels.data?.items.some((reel) => reel.id === reelTarget) ? reelTarget : null;
 
-    const addTag = (name: string) => {
-        const tag = { ...destination, kind: destination.kind as PendingTag["kind"], name };
+    const inBox = (tag: PendingTag, destination: TagDestination): boolean =>
+        tag.kind === destination.kind && tag.scope === destination.scope;
 
-        setTags((current) =>
-            current.some((other) => sameTag(other, tag)) ? current : [...current, tag]
-        );
-    };
+    /** One box's names, replacing what it held: its own pills add and remove. */
+    const setNames = (destination: TagDestination, names: string[]) =>
+        setTags((current) => {
+            const added = names
+                .map((name) => ({
+                    ...destination,
+                    kind: destination.kind as PendingTag["kind"],
+                    name,
+                }))
+                .filter(
+                    (tag, index, all) => all.findIndex((other) => sameTag(other, tag)) === index
+                );
+
+            return [...current.filter((tag) => !inBox(tag, destination)), ...added];
+        });
 
     const { startMs, endMs } = selection;
     const complete = endMs !== null && endMs - startMs >= MIN_CLIP_MS;
@@ -145,45 +218,25 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     /**
      * Marking without the mouse (§14d "Reviewing recordings for a reel").
      *
-     * When `]` closes a span the tag box takes the keys: type a tag, Enter to add it, and Enter
-     * again on the empty box saves the clip. Escape on a half-typed tag clears it (leaving
-     * would add it -- the box accepts what was typed when it loses focus); Escape on the empty
-     * box hands the keys back to the player without losing the span, so the out point can still
-     * be nudged with `]`, and one more Escape drops the span (the page's, = Clear). Shift+Tab
-     * reaches the facet switch beside the box, whose arrows choose Players or Keywords, and Tab
-     * comes back.
-     *
-     * An effect on the out point, because that is the moment: a new `]` after the first moves
-     * focus back here too. Nothing else in the bar takes focus on its own.
+     * When `]` closes a span the first tag box takes the keys: type a name, Enter to add it, Tab
+     * to the next box, and Enter on an empty box saves the clip. An effect on the out point,
+     * because that is the moment: a new `]` after the first moves focus back here too. Nothing
+     * else in the bar takes focus on its own.
      */
     const tagsBox = useRef<HTMLDivElement>(null);
-    const [typed, setTyped] = useState("");
     const ready = complete ? endMs : null;
 
     useEffect(() => {
         if (ready === null) return;
-        tagsBox.current?.querySelector<HTMLInputElement>("input")?.focus();
+
+        // A tick later: the effect runs inside the `]` keydown, and focus moved there takes the
+        // key's own character -- every first tag began "]".
+        const timer = window.setTimeout(() =>
+            tagsBox.current?.querySelector<HTMLInputElement>("input")?.focus()
+        );
+
+        return () => window.clearTimeout(timer);
     }, [ready]);
-
-    const onTagKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
-        const input = event.target;
-
-        if (!(input instanceof HTMLInputElement)) return;
-
-        if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (typed !== "") setTyped("");
-            else input.blur();
-            return;
-        }
-
-        if (event.key === "Enter" && input.value.trim() === "") {
-            event.preventDefault();
-            event.stopPropagation();
-            save();
-        }
-    };
 
     return (
         <Paper withBorder p="xs" radius="sm">
@@ -287,69 +340,34 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                     </KeyTip>
                 </Group>
 
-                {/* Tags, under the controls rather than among them: a box and a switch in the row
-                above pushed Save off the end of a phone's width. */}
-                <Group gap="sm" wrap="wrap" align="flex-start">
-                    <Box w={260} maw="100%">
-                        <DestinationControl
-                            size="xs"
-                            options={DESTINATIONS}
-                            value={destination}
-                            onChange={setDestination}
-                        />
-                    </Box>
-                    <Box ref={tagsBox} onKeyDownCapture={onTagKeys}>
-                        <TagNameInput
-                            kind={destination.kind}
-                            scope={destination.scope}
-                            value={[]}
-                            exclude={tags
-                                .filter(
-                                    (tag) =>
-                                        tag.kind === destination.kind &&
-                                        tag.scope === destination.scope
-                                )
-                                .map((tag) => tag.name)}
-                            placeholder={
-                                complete
-                                    ? "Tags, Enter — then Enter again to save"
-                                    : "Tags — type and press Enter"
-                            }
-                            searchValue={typed}
-                            onSearchChange={setTyped}
-                            onChange={(next) => next.forEach(addTag)}
-                            w={260}
-                            maw="100%"
-                        />
-                    </Box>
-                    {tags.length > 0 && (
-                        <Group gap={6} wrap="wrap">
-                            {tags.map((tag) => (
-                                <ItemTagChip
-                                    key={`${tag.scope}:${tag.kind}:${tag.name}`}
-                                    chip={{
-                                        name:
-                                            allowsPrivate(tag.kind) && tag.scope === "private"
-                                                ? `${tag.name} (private)`
-                                                : tag.name,
-                                        pending: false,
-                                    }}
-                                    onRemove={() =>
-                                        setTags((current) =>
-                                            current.filter((other) => !sameTag(other, tag))
-                                        )
-                                    }
-                                />
-                            ))}
-                        </Group>
-                    )}
-                </Group>
-                {allowsPrivate(destination.kind) && (
-                    <Text size="xs" c="dimmed">
-                        Clip tags are only visible to you. Shared means the library&rsquo;s word;
-                        private means your own.
-                    </Text>
-                )}
+                {/* Tags, under the controls rather than among them: one small box per facet,
+                    side by side in one input's height from a tablet's width up. */}
+                <Box ref={tagsBox}>
+                    <SimpleGrid cols={{ base: 1, sm: DESTINATIONS.length }} spacing="xs">
+                        {DESTINATIONS.map((destination, index) => (
+                            <PendingTagBox
+                                key={destinationKey(destination)}
+                                destination={destination}
+                                names={tags
+                                    .filter((tag) => inBox(tag, destination))
+                                    .map((tag) => tag.name)}
+                                onNames={(names) => setNames(destination, names)}
+                                onSave={save}
+                                hint={
+                                    index === 0
+                                        ? complete
+                                            ? "Enter adds · Enter again saves"
+                                            : "Type, then Enter"
+                                        : undefined
+                                }
+                            />
+                        ))}
+                    </SimpleGrid>
+                </Box>
+                <Text size="xs" c="dimmed">
+                    Clip tags are only visible to you. Keywords are the library&rsquo;s words;
+                    private keywords are your own.
+                </Text>
             </Stack>
         </Paper>
     );

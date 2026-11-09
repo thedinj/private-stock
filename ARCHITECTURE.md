@@ -8411,10 +8411,12 @@ is sixty Tabs away behind the sidebar and the filters.
 **The review pass never needs the mouse** (2026-11-08): `Enter` on the list, `Shift+D`, then per
 item `[` `]`, a tag and `Enter` to add it, `Enter` on the empty box to save the clip, `w`/`t` for
 the item's own boxes, `d`. Every `Esc` has one meaning per press, so none ever has to be undone with
-the pointer. In the clip's tag box the first `Esc` clears a half-typed tag (as a facet box does),
+the pointer. In a clip's tag box the first `Esc` clears a half-typed tag (as a facet box does),
 the next leaves the box with the span kept, and one more -- with no field focused -- drops the span,
-which is the clip bar's Clear. Which facet the clip's tags go to (the switch beside it) is
-`Shift+Tab` from the box, the arrows, and `Tab` back.
+which is the clip bar's Clear. The clip bar has a box per facet -- people, keywords, private
+keywords -- side by side in one input's height, each holding its own chips (2026-11-09; it was one
+box and a facet switch, set before every name, with the chips on a row of their own). `]` puts the
+keys in the first; `Tab` is the next.
 
 **The field keys follow the facet's role, not the room's word for it**: `w` for who, `o` for
 origin, `t` for tag, `r` for remark. A key per room label would give `p` to Players (taken by
