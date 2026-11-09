@@ -112,6 +112,69 @@ export const unassign = (clipId: string, tagId: string): number =>
         return removed;
     })();
 
+/**
+ * Takes these tags off these clips, and prunes any tag left unused (§14d "Tagging clips").
+ *
+ * The caller has checked the clips are one person's and the tags are theirs to see. Returns how
+ * many clips lost something.
+ */
+export const unassignMany = (clipIds: string[], tagIds: string[]): number =>
+    db.transaction((): number => {
+        const params = { clips: JSON.stringify(clipIds), tags: JSON.stringify(tagIds) };
+        const touched = (
+            db
+                .prepare(
+                    `SELECT count(DISTINCT "clipId") AS n FROM "ClipTag"
+                      WHERE "clipId" IN (SELECT value FROM json_each(:clips))
+                        AND "tagId" IN (SELECT value FROM json_each(:tags))`
+                )
+                .get(params) as { n: number }
+        ).n;
+
+        db.prepare(
+            `DELETE FROM "ClipTag"
+              WHERE "clipId" IN (SELECT value FROM json_each(:clips))
+                AND "tagId" IN (SELECT value FROM json_each(:tags))`
+        ).run(params);
+
+        if (touched > 0) {
+            pruneUnused(tagIds);
+        }
+
+        return touched;
+    })();
+
+/** What a selection of clips carries, with how many carry each -- for the untag dialogue. */
+export interface ClipSelectionTagRow {
+    tagId: string;
+    kind: string;
+    name: string;
+    colorKey: string | null;
+    ownerId: string | null;
+    count: number;
+}
+
+export const listForSelection = (clipIds: string[], limit: number): ClipSelectionTagRow[] => {
+    if (clipIds.length === 0) {
+        return [];
+    }
+
+    return db
+        .prepare(
+            // `ownerId` breaks the tie between the library's tag and a private one of the same
+            // name, NULL first, so the same selection lists them in the same order every read.
+            `SELECT t."id" AS "tagId", t."kind", t."name", t."colorKey", t."ownerId",
+                    count(*) AS "count"
+               FROM "ClipTag" ct
+               JOIN "Tag" t ON t."id" = ct."tagId"
+              WHERE ct."clipId" IN (SELECT value FROM json_each(:ids))
+              GROUP BY t."id"
+              ORDER BY "count" DESC, t."name" COLLATE NOCASE, t."ownerId" IS NOT NULL
+              LIMIT :limit`
+        )
+        .all({ ids: JSON.stringify(clipIds), limit }) as ClipSelectionTagRow[];
+};
+
 /** Where the next tag of a facet goes, so performers keep the order they were typed in. */
 export const nextPosition = (clipId: string, kind: string): number =>
     (

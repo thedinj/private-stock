@@ -7588,12 +7588,30 @@ is in, and inheriting would make every clip of it match. Where that is what some
 neither the clip nor its video. The fields are flat id lists rather than `FilterGroup`s, which
 carry rules that mean nothing to a clip and would carry `orVideo` into `MediaQuery`.
 
-**Tagged three ways**: while marking (the clip bar sends them with the save), in the clip editor
-(chip by chip, queued like an item's), and on a selection in the browser as one `TagBatch` with
-`clipCount` set, withdrawn by the same route as a batch of items. A clip batch writes no public
-`MediaTag`, so it is never on an administrator's list (§5d) — it is its owner's alone, like the
-clips. The bar's tags start empty for every span: carried over from the last, they would be wrong
-as often as right, and silently so.
+**Tagged four ways**: while marking (the clip bar sends them with the save); one clip at a time,
+chip by chip and queued like an item's, in the clip editor, in a popover from a card's tag line on
+the wall, and under the picture in the clip viewer; and on a selection in the browser as one
+`TagBatch` with `clipCount` set, withdrawn by the same route as a batch of items. A clip batch
+writes no public `MediaTag`, so it is never on an administrator's list (§5d) — it is its owner's
+alone, like the clips. The bar's tags start empty for every span: carried over from the last, they
+would be wrong as often as right, and silently so.
+
+**The wall's own tag line is the way in, and the rest of the card still ticks** (2026-11-08). Until
+then the browser could only add: one clip's tags were reached by opening its video, and a selection
+had Tag… and nothing to take a name off. The popover, the viewer and the dialogue's Untag… came out
+of a round of clickable mockups, chosen over a card that turns over, a wall-wide editing mode, a
+docked panel, a keyboard pass with numbered tags, one sheet for adding and removing, quick chips on
+the selection bar and a tag "brush". The popover is one compact editor
+(`ClipQuickTags`): the clip bar's destination switch and box, with every facet's chips in one row.
+The viewer has the room and the keyboard for more, so it has a box per facet and audience
+(`ClipTagFields`), each labelled with — and jumped into by — the item page's key for that field: w,
+t, Shift+T (`viewerKeys.ts`). A switch is something to tab to and arrow through before every name.
+
+**Untagging a selection** is the item untag's dialogue pointed at clips: what the ticked clips carry
+(`POST /api/clips/bulk/carried`), counted per clip, then removal by id
+(`POST /api/clips/bulk/untag`) — ids rather than names for the item untag's reason, so a removal
+can never coin. Every id must be the caller's clip or nothing is removed, as with tagging. It is
+not a batch, as an item untag is not: the dialogue shows exactly what goes before anything does.
 
 **What it does not do.** Clip tags are not in any search document; the browser's text box stays a
 match on the label. The library's own filter does not gain "has a clip tagged…" — the clip browser
@@ -8367,7 +8385,7 @@ free.
 | Playing          | `space` / `k` play/pause · `←` `→` ±5 s, shift ±30 s · `j` `l` by the bar's jump lengths (§14b) · `,` `.` frame step (paused) · `0`–`9` jump to 0–90% · `-` `+` speed (0.25×–4×) · `m` mute · `f` full screen · `s` capture the frame |
 | Through the set  | `n` next · `p` previous                                                                                                                                                                                                               |
 | Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
-| Judging it       | `d` in review mode: reviewed for the pass, and next · shift `d` review mode on or off · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                                                                                 |
+| Judging it       | `d` in review mode: reviewed for the pass, and next · shift `d` review mode on or off · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                 |
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
 | Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
 
@@ -10148,7 +10166,7 @@ the Advanced editor builds rules from, which dates are not (yet).
 `?addedFrom=2026-10-03`, `?capturedFrom=2025-10-01&capturedTo=2025-10-15` — either end optional,
 both inclusive, by calendar day. The names are `MediaQuery`'s own, so a saved filter copies them
 without a mapping and round-trips them like the measures. Nobody thinks in pairs, though, so the
-open row asks *Since / Until / Between / On* first and each word sets the pair: Since fills
+open row asks _Since / Until / Between / On_ first and each word sets the pair: Since fills
 `from`, Until fills `to`, On fills both with one day. Switching keeps the day already picked, and
 a range is applied only once both ends are, so its first click does not refetch the library for
 a "since" nobody meant. A set filter shows its own comparison whatever was last clicked, so a

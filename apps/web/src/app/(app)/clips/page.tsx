@@ -29,6 +29,7 @@ import {
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { BulkTagDialog } from "@/components/library/BulkTagDialog";
+import { UntagDialog } from "@/components/library/UntagDialog";
 import { FlipWall } from "@/components/FlipWall";
 import { ClipCard } from "@/components/media/ClipCard";
 import { ClipTagFilter, type ClipTagFilterValue } from "@/components/media/ClipTagFilter";
@@ -43,6 +44,7 @@ import {
     useClips,
     useCreateReel,
     useOwnReels,
+    useUntagClips,
 } from "@/lib/api/reels";
 import { useUndoBatch } from "@/lib/api/tags";
 import { settling } from "@/lib/settling";
@@ -142,6 +144,7 @@ const ClipsPage: React.FC = () => {
     /** The batch the last "Tag…" wrote, while its Undo is on offer. */
     const [lastBatch, setLastBatch] = useState<TagBatch | null>(null);
     const [tagging, setTagging] = useState(false);
+    const [untagging, setUntagging] = useState(false);
     /** The clip being watched over the wall, by id so a refetch cannot strand a stale copy. */
     const [watching, setWatching] = useState<string | null>(null);
     const undo = useUndoBatch(() => {
@@ -166,6 +169,21 @@ const ClipsPage: React.FC = () => {
         0;
     const dated = Boolean(view.addedFrom || view.addedTo);
     const filtering = Boolean(view.search) || unusedOnly || tagFiltering || dated;
+
+    /**
+     * Taking tags off the ticked clips, chosen from what they carry (`UntagDialog`). Not a batch,
+     * as an item untag is not: the dialogue already showed exactly what goes.
+     */
+    const untag = useUntagClips((result) => {
+        setUntagging(false);
+        setSelected([]);
+        setLastBatch(null);
+        setDone(
+            result.clips === 0
+                ? "Nothing was changed"
+                : `Untagged ${result.clips} clip${result.clips === 1 ? "" : "s"}`
+        );
+    });
 
     const reels = useOwnReels();
     const addItems = useAddReelItems();
@@ -537,6 +555,9 @@ const ClipsPage: React.FC = () => {
                         <Button size="sm" variant="default" onClick={() => setTagging(true)}>
                             Tag…
                         </Button>
+                        <Button size="sm" variant="default" onClick={() => setUntagging(true)}>
+                            Untag…
+                        </Button>
 
                         <Menu position="top-end" withinPortal>
                             <Menu.Target>
@@ -639,6 +660,15 @@ const ClipsPage: React.FC = () => {
                     }}
                 />
             )}
+
+            <UntagDialog
+                opened={untagging}
+                onClose={() => setUntagging(false)}
+                selected={selected}
+                of="clips"
+                onRemove={(tagIds) => untag.mutate({ clipIds: selected, tagIds })}
+                busy={untag.isPending}
+            />
 
             <Modal opened={naming} onClose={() => setNaming(false)} title="New reel" centered>
                 <Stack gap="md">

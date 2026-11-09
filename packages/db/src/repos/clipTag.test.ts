@@ -332,6 +332,57 @@ describe("a clip batch", () => {
     });
 });
 
+describe("untagging a selection of clips", () => {
+    it("counts what the selection carries, once per clip", () => {
+        addMedia("a");
+        const one = newClip("a");
+        const two = newClip("a");
+        const outside = newClip("a");
+        const pool = publicTag("pool");
+        const mine = privateTag("pool");
+        const jumping = publicTag("jumping");
+        [one, two, outside].forEach((clipId) => clipTagRepo.assign({ clipId, tagId: pool }));
+        clipTagRepo.assign({ clipId: one, tagId: mine });
+        clipTagRepo.assign({ clipId: two, tagId: jumping });
+
+        expect(
+            clipTagRepo
+                .listForSelection([one, two], 10)
+                .map((row) => [row.name, row.ownerId === null ? "shared" : "private", row.count])
+        ).toEqual([
+            ["pool", "shared", 2],
+            ["jumping", "shared", 1],
+            ["pool", "private", 1],
+        ]);
+    });
+
+    it("takes the tags off only the clips named, and prunes what nothing uses", () => {
+        addMedia("a");
+        const one = newClip("a");
+        const two = newClip("a");
+        const kept = newClip("a");
+        const pool = publicTag("pool");
+        const typo = publicTag("jumpign");
+        [one, two, kept].forEach((clipId) => clipTagRepo.assign({ clipId, tagId: pool }));
+        clipTagRepo.assign({ clipId: one, tagId: typo });
+
+        expect(clipTagRepo.unassignMany([one, two], [pool, typo])).toBe(2);
+
+        expect(tagsOn(one)).toEqual([]);
+        expect(tagsOn(two)).toEqual([]);
+        expect(tagsOn(kept)).toEqual(["pool"]);
+        expect(tagRepo.findById(pool)).toBeDefined();
+        expect(tagRepo.findById(typo)).toBeUndefined();
+    });
+
+    it("counts no clip that had none of the tags", () => {
+        addMedia("a");
+        const bare = newClip("a");
+
+        expect(clipTagRepo.unassignMany([bare], [publicTag("pool")])).toBe(0);
+    });
+});
+
 describe("searching clips by tag", () => {
     let poolJump: string;
     let poolSwim: string;

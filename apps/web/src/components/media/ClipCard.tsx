@@ -1,13 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { ActionIcon, Anchor, Badge, Box, Checkbox, Group, Paper, Stack, Text } from "@mantine/core";
+import {
+    ActionIcon,
+    Anchor,
+    Badge,
+    Box,
+    Checkbox,
+    Group,
+    Paper,
+    Popover,
+    Stack,
+    Text,
+    UnstyledButton,
+} from "@mantine/core";
 
 import type { Clip } from "@private-stock/core";
 
 import { PlayGlyph } from "@/components/media/Glyph";
 import { rememberReturn } from "@/lib/returnTo";
 
+import { ClipQuickTags } from "./ClipQuickTags";
 import { ClipTagLine } from "./ClipTagLine";
 import { ClipThumb } from "./ClipThumb";
 
@@ -41,6 +54,43 @@ interface ClipCardProps {
     /** Hidden when the wall is already grouped by item, where it would be on every card. */
     showSource?: boolean;
 }
+
+/**
+ * The card's tag line, as the way to change them (§14d "Tagging clips").
+ *
+ * The rest of the card ticks it, which is what the wall is for; this one line opens a small
+ * editor over the card instead, so fixing one clip's tags does not mean ticking it, opening a
+ * dialogue that can only add, and unticking it again. Nothing it does reaches the card's
+ * click: React carries a portal's events up the tree it was rendered from, so the dropdown
+ * stops them itself.
+ *
+ * 44px high, the touch target, for the line a finger aims at.
+ */
+const ClipTagButton: React.FC<{ clip: Clip }> = ({ clip }) => (
+    <Popover position="bottom" width={300} shadow="md" withinPortal trapFocus>
+        <Popover.Target>
+            <UnstyledButton
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`Tags on ${clip.label ?? "this clip"}`}
+                mih={44}
+                style={{ display: "flex", alignItems: "center", minWidth: 0 }}
+            >
+                {clip.tags.length > 0 ? (
+                    <Text size="xs" c="dimmed" lineClamp={1} td="underline dotted">
+                        {clip.tags.map((tag) => tag.name).join(" · ")}
+                    </Text>
+                ) : (
+                    <Text size="xs" c="dimmed">
+                        + Add tags
+                    </Text>
+                )}
+            </UnstyledButton>
+        </Popover.Target>
+        <Popover.Dropdown onClick={(event) => event.stopPropagation()}>
+            <ClipQuickTags clip={clip} />
+        </Popover.Dropdown>
+    </Popover>
+);
 
 export const ClipCard: React.FC<ClipCardProps> = ({
     clip,
@@ -158,7 +208,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                     )}
                 </Group>
 
-                <ClipTagLine tags={clip.tags} />
+                {clip.mine ? <ClipTagButton clip={clip} /> : <ClipTagLine tags={clip.tags} />}
 
                 {showSource && (
                     <Anchor

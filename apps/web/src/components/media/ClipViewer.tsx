@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Alert, Anchor, Button, Group, Modal, Text } from "@mantine/core";
+import { Alert, Anchor, Box, Button, Group, Modal, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import { locateInReel, type Clip } from "@private-stock/core";
 
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { rememberReturn } from "@/lib/returnTo";
+import { isTypingTarget } from "@/lib/typingTarget";
+import { fieldForPress, keyPress } from "@/lib/viewerKeys";
+
+import { CLIP_TAG_FIELDS, ClipTagFields } from "./ClipTagFields";
 
 /**
  * Watch one clip without leaving the clip browser (§14d).
@@ -22,6 +26,11 @@ import { rememberReturn } from "@/lib/returnTo";
  * it, and reaching the out point offers replay instead of resuming the file past it. Nothing is
  * reported as watched: seeing twelve seconds of a film to decide whether to use them is not
  * having watched the film.
+ *
+ * **Tags under the picture**, because seeing a clip is how anybody knows what is in it: watch,
+ * tag, Next, without closing anything (§14d "Tagging clips"). One box per facet and audience,
+ * each jumped into by the item page's key for that field (`ClipTagFields`). Keyed by clip like
+ * the player, so a half-typed name does not carry over to the next one.
  */
 
 const formatTime = (ms: number): string => {
@@ -41,6 +50,34 @@ interface ClipViewerProps {
 
 export const ClipViewer: React.FC<ClipViewerProps> = ({ clip, onClose, onPrevious, onNext }) => {
     const phone = useMediaQuery("(max-width: 48em)");
+
+    /**
+     * w, t and Shift+T into the tag boxes, from anywhere in the viewer that is not already a
+     * field -- the item page's keys for the same fields. Not on a repeat, which would type the
+     * letter into the box it opened.
+     */
+    useEffect(() => {
+        if (!clip.mine) return;
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+                return;
+            }
+
+            const field = fieldForPress(keyPress(event));
+
+            if (!field || !CLIP_TAG_FIELDS.includes(field)) return;
+
+            event.preventDefault();
+            if (!event.repeat) {
+                document.querySelector<HTMLElement>(`[data-clip-field="${field}"]`)?.focus();
+            }
+        };
+
+        document.addEventListener("keydown", onKeyDown);
+
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, [clip.mine]);
 
     return (
         <Modal
@@ -77,6 +114,12 @@ export const ClipViewer: React.FC<ClipViewerProps> = ({ clip, onClose, onPreviou
                     </Button>
                 </Group>
             </Group>
+
+            {clip.mine && (
+                <Box mt="sm">
+                    <ClipTagFields key={clip.id} clip={clip} />
+                </Box>
+            )}
         </Modal>
     );
 };

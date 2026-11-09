@@ -379,6 +379,8 @@ export const queryKeys = {
         labels: () => ["clips", "labels"],
         /** The chips for the browser's "Video has" and "Clip has" fields (§14d). */
         tagFacets: () => ["clips", "tags"],
+        /** What ticked clips carry, for the untag dialogue; keyed by the sorted ids. */
+        selection: (clipIds: string) => ["clips", "selection", clipIds],
     },
     savedFilters: () => ["filters"],
     /**

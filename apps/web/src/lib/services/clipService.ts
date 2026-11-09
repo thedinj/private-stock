@@ -3,12 +3,16 @@ import {
     ConflictError,
     NotFoundError,
     REEL_ITEM_LIMIT,
+    SELECTION_TAG_LIMIT,
     ValidationError,
     clampSpan,
     clipNaturalDirection,
     spanRunMs,
     type BulkClipTagInput,
+    type BulkClipUntagInput,
+    type BulkClipUntagResult,
     type BulkTagResult,
+    type ClipSelectionInput,
     type Clip,
     type ClipDetail,
     type ClipIdsResponse,
@@ -18,6 +22,7 @@ import {
     type ClipTagFacets,
     type CreateClipInput,
     type EditClipTagsInput,
+    type SelectionTagsResponse,
     type UpdateClipInput,
 } from "@private-stock/core";
 import {
@@ -320,11 +325,7 @@ export const editClipTags = (
  * the rest, because a selection that quietly shrank is not the one somebody confirmed.
  */
 export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTagResult => {
-    const clipIds = [...new Set(input.clipIds)];
-
-    if (clipTagRepo.ownedClipIds(clipIds, auth.userId).length !== clipIds.length) {
-        throw new NotFoundError("Clip not found");
-    }
+    const clipIds = ownSelection(input.clipIds, auth);
 
     const scope = writesTo(input.scope, auth);
     const coins = input.names.some(
@@ -356,6 +357,65 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
     }
 
     return { batch: toTagBatch(batch), assigned };
+};
+
+/** Refuses the whole request unless every id is one of the caller's clips (see `bulkTagClips`). */
+const ownSelection = (ids: string[], auth: AuthContext): string[] => {
+    const clipIds = [...new Set(ids)];
+
+    if (clipTagRepo.ownedClipIds(clipIds, auth.userId).length !== clipIds.length) {
+        throw new NotFoundError("Clip not found");
+    }
+
+    return clipIds;
+};
+
+/**
+ * Every tag a selection of clips carries, with how many carry each (§14d "Tagging clips").
+ *
+ * The item untag's read (`tagService.listSelectionTags`), for clips. Every tag on a clip is its
+ * owner's to see, so nothing needs filtering by viewer once the clips are known to be theirs.
+ */
+export const listClipSelectionTags = (
+    input: ClipSelectionInput,
+    auth: AuthContext
+): SelectionTagsResponse => {
+    const clipIds = ownSelection(input.clipIds, auth);
+    const rows = clipTagRepo.listForSelection(clipIds, SELECTION_TAG_LIMIT + 1);
+
+    return {
+        tags: rows.slice(0, SELECTION_TAG_LIMIT).map((row) => ({
+            tagId: row.tagId,
+            kind: row.kind,
+            name: row.name,
+            colorKey: row.colorKey,
+            scope: row.ownerId === null ? "public" : "private",
+            count: row.count,
+        })),
+        selected: clipIds.length,
+        truncated: rows.length > SELECTION_TAG_LIMIT,
+    };
+};
+
+/**
+ * Takes tags off a selection of clips (§14d "Tagging clips").
+ *
+ * By id, from the list above. Somebody else's private tag is skipped rather than refused, as on
+ * items: it cannot be in that list, so only a hand-written request reaches one, and the answer
+ * is the one every read of a private tag gets -- it is not there (§6).
+ */
+export const bulkUntagClips = (
+    input: BulkClipUntagInput,
+    auth: AuthContext
+): BulkClipUntagResult => {
+    const clipIds = ownSelection(input.clipIds, auth);
+    const tagIds = [...new Set(input.tagIds)].filter((tagId) => {
+        const tag = tagRepo.findById(tagId);
+
+        return tag !== undefined && (tag.ownerId === null || tag.ownerId === auth.userId);
+    });
+
+    return { clips: tagIds.length > 0 ? clipTagRepo.unassignMany(clipIds, tagIds) : 0 };
 };
 
 /** The chips for /clips' two tag fields, counted over all of the viewer's clips. */

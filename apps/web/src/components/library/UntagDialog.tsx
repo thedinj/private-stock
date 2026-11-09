@@ -43,8 +43,13 @@ import { ScopeLabel } from "@/components/tags/ScopeLabel";
 interface UntagDialogProps {
     opened: boolean;
     onClose: () => void;
-    /** The ticked items, exactly as the grid has them. */
+    /** The ticked ids, exactly as the grid or the clip wall has them. */
     selected: string[];
+    /**
+     * Whose tags: library items, or your clips on /clips (§14d "Tagging clips"). A clip's tags
+     * are its owner's alone, so nothing removed there is "removed for everyone".
+     */
+    of?: "items" | "clips";
     onRemove: (tagIds: string[]) => void;
     busy: boolean;
 }
@@ -98,7 +103,10 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
     selected,
     onRemove,
     busy,
+    of = "items",
 }) => {
+    const clips = of === "clips";
+    const noun = (count: number) => `${clips ? "clip" : "item"}${count === 1 ? "" : "s"}`;
     const [ticked, setTicked] = useState<string[]>([]);
 
     /**
@@ -108,11 +116,11 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
     const key = useMemo(() => [...selected].sort().join(","), [selected]);
 
     const carried = useQuery({
-        queryKey: queryKeys.tags.selection(key),
+        queryKey: clips ? queryKeys.clips.selection(key) : queryKeys.tags.selection(key),
         queryFn: () =>
-            api<SelectionTagsResponse>("/api/media/bulk/tags", {
+            api<SelectionTagsResponse>(clips ? "/api/clips/bulk/carried" : "/api/media/bulk/tags", {
                 method: "POST",
-                body: JSON.stringify({ mediaIds: selected }),
+                body: JSON.stringify(clips ? { clipIds: selected } : { mediaIds: selected }),
             }),
         enabled: opened,
     });
@@ -121,7 +129,9 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
     /** The denominator every count is read against, as the server counted it. */
     const selectedCount = carried.data?.selected ?? selected.length;
     const sections = groupByFacet(tags);
-    const publicRemoval = describePublicRemoval(tags.filter((tag) => ticked.includes(tag.tagId)));
+    const publicRemoval = clips
+        ? null
+        : describePublicRemoval(tags.filter((tag) => ticked.includes(tag.tagId)));
 
     const close = () => {
         setTicked([]);
@@ -132,7 +142,7 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
         <Modal
             opened={opened}
             onClose={close}
-            title={`Untag ${selected.length} item${selected.length === 1 ? "" : "s"}`}
+            title={`Untag ${selected.length} ${noun(selected.length)}`}
             centered
         >
             <Stack gap="md">
@@ -154,7 +164,7 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
                                the end of is a tag they cannot remove (§5c). */
                             <Alert color="brass" variant="light">
                                 Showing the {SELECTION_TAG_LIMIT.toLocaleString()} most common.
-                                Untag fewer items at a time to reach the rest.
+                                Untag fewer {noun(2)} at a time to reach the rest.
                             </Alert>
                         )}
 
@@ -194,7 +204,7 @@ export const UntagDialog: React.FC<UntagDialogProps> = ({
                         }}
                     >
                         Remove {ticked.length} tag{ticked.length === 1 ? "" : "s"} from{" "}
-                        {selected.length} item{selected.length === 1 ? "" : "s"}
+                        {selected.length} {noun(selected.length)}
                     </Button>
                 </Group>
             </Stack>

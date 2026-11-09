@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
     AddReelItemsInput,
+    BulkClipUntagInput,
+    BulkClipUntagResult,
     Clip,
     ClipDetail,
     ClipIdsResponse,
@@ -21,6 +23,7 @@ import type {
 } from "@private-stock/core";
 
 import { queryKeys } from "@/lib/api/queryKeys";
+import { invalidateVocabulary } from "@/lib/api/tags";
 import { api } from "./client";
 
 /**
@@ -284,3 +287,26 @@ export const useDeleteClip = (onDeleted?: (reelsChanged: number) => void) =>
         (args) => args.mediaId,
         (result) => onDeleted?.(result.reelsChanged)
     );
+
+/**
+ * Takes tags off ticked clips (§14d "Tagging clips").
+ *
+ * `invalidateVocabulary`, as tagging a selection of clips does: a removal can retire the tag
+ * (`pruneUnused`), and that reaches `clips.all()` -- the wall's cards, its facet chips and the
+ * selection read the dialogue was built from. See docs/CACHE_KEYS.md.
+ */
+export const useUntagClips = (onDone: (result: BulkClipUntagResult) => void) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: BulkClipUntagInput) =>
+            api<BulkClipUntagResult>("/api/clips/bulk/untag", {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: (result) => {
+            invalidateVocabulary(queryClient);
+            onDone(result);
+        },
+    });
+};

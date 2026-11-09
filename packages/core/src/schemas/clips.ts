@@ -127,6 +127,32 @@ export const bulkClipTagSchema = z
 export type BulkClipTagInput = z.infer<typeof bulkClipTagSchema>;
 
 /**
+ * Ticked clips, for asking what they carry (§14d "Tagging clips"). Answered with the item
+ * selection's `SelectionTagsResponse`, so the untag dialogue reads either.
+ */
+export const clipSelectionSchema = z.object({
+    clipIds: z.array(z.string()).min(1).max(CLIP_BULK_LIMIT),
+});
+export type ClipSelectionInput = z.infer<typeof clipSelectionSchema>;
+
+/**
+ * Taking tags off ticked clips, by id rather than by name -- for the reason the item untag
+ * takes ids: a name here could only be a spelling test, and one passed through `ensureTag`
+ * would coin what it meant to remove.
+ */
+export const bulkClipUntagSchema = z.object({
+    clipIds: z.array(z.string()).min(1).max(CLIP_BULK_LIMIT),
+    tagIds: z.array(z.string()).min(1).max(200),
+});
+export type BulkClipUntagInput = z.infer<typeof bulkClipUntagSchema>;
+
+export const bulkClipUntagResultSchema = z.object({
+    /** Clips that lost at least one tag. */
+    clips: z.number(),
+});
+export type BulkClipUntagResult = z.infer<typeof bulkClipUntagResultSchema>;
+
+/**
  * A tag as it sits on a clip: the item-tag shape without the fields only items have.
  *
  * No `source`, `confidence` or `addedBy` -- only the clip's owner writes to it, and only by typing.
