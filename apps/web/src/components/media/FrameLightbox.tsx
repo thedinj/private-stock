@@ -43,6 +43,11 @@ interface FrameLightboxProps {
     /** Write or clear a capture's caption. The field is offered only on frames you may alter. */
     onRename?: (artifactId: string, label: string | null) => void;
     busy: boolean;
+    /**
+     * Step on by itself, each frame held this long once its picture has arrived: the Stills tab
+     * played from the top (§14e "Playing the small kinds"). Absent, the frames wait to be stepped.
+     */
+    showDwellMs?: number;
 }
 
 const atLabel = (atMs: number | null): string | null =>
@@ -100,6 +105,7 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
     seekHref,
     onRename,
     busy,
+    showDwellMs,
 }) => {
     const surfaceRef = useRef<HTMLDivElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
@@ -113,9 +119,14 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
      * the same detail can be compared across several; reset when the view closes.
      */
     const [actualSize, setActualSize] = useState(false);
+    /** The show's pause (`showDwellMs`), forgotten with the rest when the view closes. */
+    const [paused, setPaused] = useState(false);
 
     useEffect(() => {
-        if (openId === null) setActualSize(false);
+        if (openId === null) {
+            setActualSize(false);
+            setPaused(false);
+        }
     }, [openId]);
 
     /** At 1:1, start at the middle of the frame rather than its top-left corner. */
@@ -203,6 +214,41 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
     };
 
     /**
+     * The show: on to the next frame after the dwell, counted from when this one's picture has
+     * loaded -- a slow disk otherwise spends the hold on a blank stage. Paused by the button or
+     * the space bar, and while at 1:1, which is somebody looking closely. The next picture is
+     * fetched while this one is held, so the step lands on a picture rather than a wait.
+     */
+    const [loadedId, setLoadedId] = useState<string | null>(null);
+    const showing = showDwellMs !== undefined;
+    const atLast = index === frames.length - 1;
+
+    // Keyed by the frame's id, not the object: a refetch of the list -- live updates arrive every
+    // few seconds while the worker is busy -- hands over equal frames as new objects, and the hold
+    // restarted on each one, so the show never moved.
+    const frameId = frame?.artifactId ?? null;
+
+    useEffect(() => {
+        if (!showing || frameId === null || paused || actualSize || atLast) return;
+        if (loadedId !== frameId) return;
+
+        const timer = setTimeout(() => onOpenId(frames[index + 1].artifactId), showDwellMs);
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showing, frameId, paused, actualSize, atLast, loadedId, showDwellMs]);
+
+    useEffect(() => {
+        const next = frames[index + 1];
+
+        if (!showing || !next) return;
+
+        const picture = new window.Image();
+
+        picture.src = next.fullUrl;
+    }, [showing, frames, index]);
+
+    /**
      * The keys this view owns while it is open.
      *
      * The player has stood down by now — it is told not to listen — so arrows move between
@@ -221,7 +267,10 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
                 return;
             }
 
-            if (event.key === "ArrowLeft") {
+            if (event.key === " " && showing) {
+                event.preventDefault();
+                setPaused((current) => !current);
+            } else if (event.key === "ArrowLeft") {
                 event.preventDefault();
                 step(-1);
             } else if (event.key === "ArrowRight") {
@@ -347,7 +396,12 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
                             src={frame.fullUrl}
                             alt=""
                             draggable={false}
-                            onLoad={centre}
+                            onLoad={() => {
+                                centre();
+                                setLoadedId(frame.artifactId);
+                            }}
+                            // A picture that will not load is not a reason for the show to stop.
+                            onError={() => setLoadedId(frame.artifactId)}
                             /**
                              * Fitted, it fills the stage and is letterboxed inside it, which is
                              * what enlarging a picture is for: a still smaller than the window —
@@ -413,6 +467,23 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
                         >
                             ›
                         </Button>
+
+                        {showing && (
+                            <Button
+                                variant="default"
+                                onClick={() => {
+                                    if (atLast) {
+                                        setPaused(false);
+                                        onOpenId(frames[0].artifactId);
+                                    } else {
+                                        setPaused((current) => !current);
+                                    }
+                                }}
+                                title="Pause or play the show (space)"
+                            >
+                                {atLast ? "From the top" : paused ? "Play" : "Pause"}
+                            </Button>
+                        )}
 
                         <Button
                             variant="default"
@@ -485,7 +556,7 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
                                 disabled={busy}
                                 onClick={() => onDelete(frame.artifactId)}
                             >
-                                Discard this capture
+                                Discard this still
                             </Button>
                         )}
 

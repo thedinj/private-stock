@@ -1,4 +1,5 @@
 import {
+    REEL_ITEM_LIMIT,
     entryOrder,
     librarySort,
     mediaWindowStart,
@@ -6,6 +7,7 @@ import {
     naturalDirection,
     shuffleKey,
     withSortOverride,
+    type LibraryClipRun,
     type LibraryCountResponse,
     type LibraryEntry,
     type LibraryListResponse,
@@ -26,6 +28,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { clipsForLibrary } from "./clipService";
 import { capturesForLibrary } from "./frameService";
 import { countMediaReads, listMediaReads, listPage } from "./mediaService";
+import { playableEntries } from "./reelService";
 
 /**
  * The library's Clips, Stills and All tabs (§14e "What a kind is", §20 "All, merged").
@@ -202,3 +205,32 @@ export const countLibraryOffThread = (
     auth: AuthContext,
     overlayUserId?: string
 ): Promise<LibraryCountResponse> => runOffThread(countLibraryReads(query, auth, overlayUserId));
+
+/**
+ * The Clips tab from the top: its first reel's worth of clips in the tab's order, ready for the
+ * reel player (§14e "Playing the small kinds").
+ */
+export const playClipsOffThread = async (
+    query: LibraryQuery,
+    auth: AuthContext,
+    overlayUserId?: string
+): Promise<LibraryClipRun> => {
+    const page = await runOffThread(
+        listLibraryReads(
+            { ...query, kind: "clip", page: 0, limit: REEL_ITEM_LIMIT },
+            auth,
+            overlayUserId
+        )
+    );
+    const clips = page.items.flatMap((entry) => (entry.type === "clip" ? [entry.clip] : []));
+    const items = playableEntries(
+        clips.map((clip, position) => ({ id: clip.id, position, clip })),
+        auth
+    );
+
+    return {
+        items,
+        runningMs: items.reduce((sum, entry) => sum + entry.clip.runMs, 0),
+        more: page.hasMore,
+    };
+};

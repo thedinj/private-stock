@@ -153,6 +153,9 @@ export const queryKeys = {
         libraryAll: () => ["media", "library"],
         libraryPage: (filter: FilterParams, page: number) => ["media", "library", filter, page],
         libraryCount: (filter: FilterParams) => ["media", "library", "count", filter],
+        /** A Clips or Stills tab played from the top: its first reel's worth, in one answer. */
+        libraryClipRun: (filter: FilterParams) => ["media", "library", "clipRun", filter],
+        libraryStillRun: (filter: FilterParams) => ["media", "library", "stillRun", filter],
         facets: () => ["media", "facets"],
         /**
          * The filter panel's tags. Not keyed by the filter: the numbers are library-wide (§20

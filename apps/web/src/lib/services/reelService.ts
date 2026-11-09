@@ -195,48 +195,65 @@ export const listReelEntries = (reelId: string, auth: AuthContext): ReelItemsRes
         entries.map((entry) => entry.clipId),
         auth
     );
+    const items = playableEntries(
+        entries.flatMap((entry) => {
+            const clip = clips.get(entry.clipId);
 
-    const media = new Map(
-        mediaRepo
-            .listByIds(
-                [...new Set(entries.map((entry) => entry.mediaId))],
-                auth.userId,
-                auth.accessibleRootIds
-            )
-            .map((row) => [row.id, row])
+            return clip ? [{ id: entry.id, position: entry.position, clip }] : [];
+        }),
+        auth
     );
-
-    const items: ReelEntry[] = [];
-
-    for (const entry of entries) {
-        const clip = clips.get(entry.clipId);
-        const row = media.get(entry.mediaId);
-
-        if (!clip || !row) {
-            continue;
-        }
-
-        const detail = mediaRepo.findDetail(row.id, auth.userId, auth.accessibleRootIds);
-
-        items.push({
-            id: entry.id,
-            position: entry.position,
-            clip,
-            media: {
-                id: row.id,
-                title: row.title ?? "Untitled",
-                coverUrl: coverUrl(row.id, row.coverPath, row.coverGeneratedAt),
-                durationMs: row.durationMs,
-                directPlay: detail ? resolvePlaybackPlan(detail).directPlay : false,
-            },
-        });
-    }
 
     return {
         items,
         total: entries.length,
         runningMs: reelRepo.runningMs(reelId),
     };
+};
+
+/**
+ * Spans as a player takes them: each with its video's title, cover and whether the browser can
+ * play it as it stands -- the flag a player cannot pay a round trip per span to learn.
+ *
+ * A reel's entries and the library's Clips tab played from the top (§14e) both come through
+ * here. A span whose video this viewer cannot reach is dropped.
+ */
+export const playableEntries = (
+    spans: { id: string; position: number; clip: Clip }[],
+    auth: AuthContext
+): ReelEntry[] => {
+    const media = new Map(
+        mediaRepo
+            .listByIds(
+                [...new Set(spans.map((span) => span.clip.mediaId))],
+                auth.userId,
+                auth.accessibleRootIds
+            )
+            .map((row) => [row.id, row])
+    );
+
+    return spans.flatMap(({ id, position, clip }): ReelEntry[] => {
+        const row = media.get(clip.mediaId);
+
+        if (!row) return [];
+
+        const detail = mediaRepo.findDetail(row.id, auth.userId, auth.accessibleRootIds);
+
+        return [
+            {
+                id,
+                position,
+                clip,
+                media: {
+                    id: row.id,
+                    title: row.title ?? "Untitled",
+                    coverUrl: coverUrl(row.id, row.coverPath, row.coverGeneratedAt),
+                    durationMs: row.durationMs,
+                    directPlay: detail ? resolvePlaybackPlan(detail).directPlay : false,
+                },
+            },
+        ];
+    });
 };
 
 /**

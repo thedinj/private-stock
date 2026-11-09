@@ -10433,6 +10433,25 @@ a tag was on no list and its page said nothing carried it.
 
 `/clips` and `/captures` redirect to the tabs, carrying their search and filters.
 
+#### Playing the small kinds
+
+The Clips and Stills tabs have one way to play: **from the top**, in the tab's order (2026-11-09).
+Review, Showcase and Tasting are absent there, not disabled — each is about whole files (a decision
+to keep or delete one, a wall of covers, a few seconds of each file).
+
+- **Clips** play as an **unsaved reel**: `/api/library/play` answers the tab's first
+  `REEL_ITEM_LIMIT` clips as reel entries (`playableEntries`, shared with a reel's own list, so each
+  carries `directPlay`), and the reel player takes them — next span warmed at its in point,
+  unplayable ones skipped and counted, nothing recorded as watched. More than a reel's worth says
+  "the first 200" rather than paging, for a reel's reason: a player must not stop to ask.
+- **Stills** play in the still lightbox, stepping on by itself at the viewer's dwell
+  (`ps:dwellSeconds`), counted from when each picture has loaded and with the next one fetched
+  meanwhile. Space or the button pauses; 1:1 pauses too. Also the first 200.
+
+**All still plays only its videos and photos.** The item viewer's set walk (`/api/media/ids`), its
+warming and its restore know only items; stepping it into a span of another file and back out is
+the delicate part of the player, and was judged not worth that risk.
+
 ### Telling a filter from a sort
 
 Both change what the grid shows; only one of them hides things. The panel cannot carry that

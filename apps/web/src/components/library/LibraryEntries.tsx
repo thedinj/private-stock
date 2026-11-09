@@ -39,11 +39,12 @@ import { ClipViewer } from "@/components/media/ClipViewer";
 import { FrameLightbox } from "@/components/media/FrameLightbox";
 import { CloseGlyph } from "@/components/media/Glyph";
 import { BulkTagDialog } from "@/components/library/BulkTagDialog";
+import { ClipRunPlayer } from "@/components/library/ClipRunPlayer";
 import { SelectionBar } from "@/components/library/SelectionBar";
 import { UntagDialog } from "@/components/library/UntagDialog";
 import { api } from "@/lib/api/client";
 import { useDiscardCaptures, useRenameCapture } from "@/lib/api/captures";
-import { useLibraryCount, useLibraryPage } from "@/lib/api/libraryTabs";
+import { useLibraryCount, useLibraryPage, useLibraryStillRun } from "@/lib/api/libraryTabs";
 import { queryKeys } from "@/lib/api/queryKeys";
 import {
     useAddReelItems,
@@ -55,6 +56,7 @@ import {
 import { describeBulkResult } from "@/components/library/describeBulkResult";
 import { GALLERY_TRACKS, GRID_GAP, GRID_TRACKS, PRIORITY_TILES } from "@/lib/gridGeometry";
 import { effectiveSort, libraryRequestParams, type LibraryView } from "@/lib/libraryQuery";
+import { useDwellSeconds } from "@/lib/playbackPrefs";
 import { settling } from "@/lib/settling";
 
 import selectionClasses from "./SelectionBar.module.scss";
@@ -90,6 +92,9 @@ interface LibraryEntriesProps {
     wide: boolean;
     onPage: (page: number) => void;
     canDelete: boolean;
+    /** Play from the top was pressed on the Clips or Stills tab, and the show is on. */
+    playing: boolean;
+    onStopPlaying: () => void;
 }
 
 export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
@@ -99,6 +104,8 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
     wide,
     onPage,
     canDelete,
+    playing,
+    onStopPlaying,
 }) => {
     const page = useLibraryPage(view, true);
     const count = useLibraryCount(view);
@@ -112,6 +119,24 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
     const clips = entries.flatMap((entry) => (entry.type === "clip" ? [entry.clip] : []));
     const stills = entries.flatMap((entry) => (entry.type === "capture" ? [entry.capture] : []));
     const watchIndex = clips.findIndex((clip) => clip.id === watching);
+
+    /**
+     * The Stills tab from the top: its first reel's worth, in the tab's order, through the same
+     * lightbox as one still opened by hand -- stepping on by itself at the viewer's dwell.
+     */
+    const [dwellSeconds] = useDwellSeconds();
+    const stillRun = useLibraryStillRun(view, playing && view.kind === "capture");
+    const showStills = (stillRun.data?.items ?? []).flatMap((entry) =>
+        entry.type === "capture" ? [entry.capture] : []
+    );
+    const [showAt, setShowAt] = useState<string | null>(null);
+    const showOpen =
+        playing && view.kind === "capture" ? (showAt ?? showStills[0]?.artifactId ?? null) : null;
+
+    const stopShow = () => {
+        setShowAt(null);
+        onStopPlaying();
+    };
 
     const discard = useDiscardCaptures();
     const rename = useRenameCapture();
@@ -361,6 +386,30 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
                     }
                 />
             )}
+
+            {playing && view.kind === "clip" && (
+                <ClipRunPlayer view={view} onClose={onStopPlaying} />
+            )}
+
+            <FrameLightbox
+                frames={showStills}
+                openId={showOpen}
+                onClose={stopShow}
+                onOpenId={setShowAt}
+                onDelete={(artifactId) => discard.mutate([artifactId])}
+                seekHref={(frame) =>
+                    `/media/${showStills.find((still) => still.artifactId === frame.artifactId)?.mediaId}?at=${frame.atMs}`
+                }
+                onRename={(artifactId, label) => {
+                    const still = showStills.find(
+                        (candidate) => candidate.artifactId === artifactId
+                    );
+
+                    if (still) rename.mutate({ mediaId: still.mediaId, artifactId, label });
+                }}
+                busy={discard.isPending}
+                showDwellMs={dwellSeconds * 1000}
+            />
 
             <FrameLightbox
                 frames={stills}

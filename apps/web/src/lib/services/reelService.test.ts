@@ -223,8 +223,15 @@ vi.mock("@private-stock/db", () => ({
 
 vi.mock("./ocrMatchHooks", () => ({ vocabularyChanged: () => undefined }));
 
-const { createReel, updateReel, deleteReel, getReel, addReelItems, createClipInReel } =
-    await import("./reelService");
+const {
+    createReel,
+    updateReel,
+    deleteReel,
+    getReel,
+    addReelItems,
+    createClipInReel,
+    playableEntries,
+} = await import("./reelService");
 const {
     listClipsFor,
     clipsForLibrary,
@@ -613,5 +620,33 @@ describe("a clip's tags", () => {
             expect.objectContaining({ clipIds: ["c1"], tagIds: ["jumping"], userId: OWNER })
         );
         expect(result.batch.clipCount).toBe(1);
+    });
+});
+
+describe("spans as a player takes them", () => {
+    it("keeps their order and drops one whose video this viewer cannot reach", () => {
+        const clip = (id: string) => clipsByIds([id], auth(OWNER)).get(id) ?? expect.unreachable();
+
+        clips = [
+            { id: "c1", mediaId: "media-1", userId: OWNER, startMs: 0, endMs: 5000, speed: null },
+            { id: "c2", mediaId: "media-2", userId: OWNER, startMs: 0, endMs: 5000, speed: null },
+            { id: "c3", mediaId: "media-1", userId: OWNER, startMs: 0, endMs: 5000, speed: null },
+        ];
+        visibleMedia = ["media-1", "media-2"];
+
+        const spans = ["c1", "c2", "c3"].map((id, position) => ({
+            id,
+            position,
+            clip: clip(id),
+        }));
+
+        visibleMedia = ["media-1"];
+
+        const entries = playableEntries(spans, auth(OWNER));
+
+        expect(entries.map((entry) => [entry.id, entry.position, entry.media.id])).toEqual([
+            ["c1", 0, "media-1"],
+            ["c3", 2, "media-1"],
+        ]);
     });
 });

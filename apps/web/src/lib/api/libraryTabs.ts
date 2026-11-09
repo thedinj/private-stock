@@ -2,7 +2,12 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import type { LibraryCountResponse, LibraryListResponse } from "@private-stock/core";
+import {
+    REEL_ITEM_LIMIT,
+    type LibraryClipRun,
+    type LibraryCountResponse,
+    type LibraryListResponse,
+} from "@private-stock/core";
 
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
@@ -45,5 +50,30 @@ export const useLibraryCount = (view: LibraryView, enabled = true) => {
         enabled,
         staleTime: 60_000,
         placeholderData: keepPreviousData,
+    });
+};
+
+/**
+ * Played from the top (§14e "Playing the small kinds"): the tab's first reel's worth in one
+ * answer, so a show never stops to ask for the next page. Fetched when Play is pressed.
+ */
+export const useLibraryClipRun = (view: LibraryView, enabled: boolean) => {
+    const params = paramsOf(view);
+
+    return useQuery({
+        queryKey: queryKeys.media.libraryClipRun(params),
+        queryFn: () => api<LibraryClipRun>(`/api/library/play?${params}`),
+        enabled,
+    });
+};
+
+export const useLibraryStillRun = (view: LibraryView, enabled: boolean) => {
+    const params = paramsOf(view);
+
+    return useQuery({
+        queryKey: queryKeys.media.libraryStillRun(params),
+        queryFn: () =>
+            api<LibraryListResponse>(`/api/library?${params}&limit=${REEL_ITEM_LIMIT}&page=0`),
+        enabled,
     });
 };

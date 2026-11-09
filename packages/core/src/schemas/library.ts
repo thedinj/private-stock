@@ -4,6 +4,7 @@ import { tagIdListSchema } from "./tags.js";
 import { captureSchema } from "./captures.js";
 import { clipSchema } from "./clips.js";
 import { mediaListItemSchema, mediaQuerySchema, type MediaSort } from "./media.js";
+import { reelEntrySchema } from "./reels.js";
 
 /**
  * The library's tabs beyond Videos and Photos (§14e "What a kind is"): your clips, your
@@ -79,3 +80,16 @@ export const libraryCountResponseSchema = z.object({
     byType: z.object({ media: z.number(), clip: z.number(), capture: z.number() }),
 });
 export type LibraryCountResponse = z.infer<typeof libraryCountResponseSchema>;
+
+/**
+ * The Clips tab played from the top (§14e "Playing the small kinds"): its clips in the tab's
+ * order, as the reel player takes them -- an unsaved reel. Not paged, for a reel's reason: a
+ * player must not ask a second question part way through. `REEL_ITEM_LIMIT` bounds it, and
+ * `more` says the tab holds more than that.
+ */
+export const libraryClipRunSchema = z.object({
+    items: z.array(reelEntrySchema),
+    runningMs: z.number(),
+    more: z.boolean(),
+});
+export type LibraryClipRun = z.infer<typeof libraryClipRunSchema>;

@@ -125,8 +125,8 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
         return (
             <Alert color="gray" variant="light">
                 {entries.length === 0
-                    ? "This reel has no clips yet."
-                    : "None of this reel's clips can be played yet — their files are waiting on a web-safe rendition (§8)."}
+                    ? "There are no clips here yet."
+                    : "None of these clips can be played yet — their files are waiting on a web-safe rendition (§8)."}
             </Alert>
         );
     }

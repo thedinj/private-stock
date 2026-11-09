@@ -43,7 +43,7 @@ import { KindTabs } from "@/components/library/KindTabs";
 import { LibraryEntries } from "@/components/library/LibraryEntries";
 import { useLibraryCount } from "@/lib/api/libraryTabs";
 import { LayoutSwitch } from "@/components/library/LayoutSwitch";
-import { MoreGlyph } from "@/components/media/Glyph";
+import { MoreGlyph, PlayGlyph } from "@/components/media/Glyph";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { LibraryEmptyState } from "@/components/LibraryEmptyState";
 import { LoadFailed } from "@/components/LoadFailed";
@@ -465,6 +465,7 @@ export const LibraryCellar: React.FC = () => {
 
     /** Play from the top (`usePlayFromTop`), from this view. */
     const playFromTop = usePlayFromTop();
+    const [playingSmall, setPlayingSmall] = useState(false);
 
     /**
      * The page on screen, re-checked rather than refetched (§13b).
@@ -804,7 +805,20 @@ export const LibraryCellar: React.FC = () => {
                 aside={smallTab ? undefined : <SavedViewControl view={view} onApply={applyView} />}
                 actions={
                     <Group gap="xs" wrap="nowrap">
-                        {/* Plays the items: on All, the videos and photos among the four. */}
+                        {/* Plays the items: on All, the videos and photos among the four. Clips and
+                            stills have one way to play, from the top (§14e "Playing the small
+                            kinds"): Review, Showcase and Tasting are about whole files. */}
+                        {smallTab && (
+                            <Button
+                                color="brass"
+                                h={touchHeight}
+                                leftSection={<PlayGlyph size={16} />}
+                                disabled={total === 0}
+                                onClick={() => setPlayingSmall(true)}
+                            >
+                                Play
+                            </Button>
+                        )}
                         {!smallTab && (
                             <PlayMenu
                                 setParams={viewToParams(view)}
@@ -914,6 +928,8 @@ export const LibraryCellar: React.FC = () => {
                         touch={touch}
                         wide={wide ?? false}
                         canDelete={hasScope("delete")}
+                        playing={playingSmall && smallTab}
+                        onStopPlaying={() => setPlayingSmall(false)}
                         onPage={(next) => {
                             applyView({ ...view, page: next });
                             window.scrollTo({ top: 0, behavior: "smooth" });
