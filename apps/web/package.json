@@ -4,6 +4,7 @@
     "private": true,
     "description": "Next.js UI, API routes, and media serving",
     "scripts": {
+        "dev:test-account": "tsx scripts/devTestAccount.mts",
         "dev": "node ../../scripts/dev-web.mjs",
         "build": "next build",
         "start": "next start --port 8842",

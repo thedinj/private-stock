@@ -34,6 +34,7 @@ pnpm db:migrate              # apply pending migrations
 pnpm db:migrate:rollback     # roll back the last one (development only)
 pnpm db:diagnose             # row counts, sizes, and what the slow queries actually cost
 
+pnpm dev:test-account        # sign-in + test-pattern library for checking work on `pnpm dev` (below)
 pnpm models:fetch            # download + verify the §5e models (once; needed by smoke and integration)
 pnpm bench:embed             # what the models cost on this machine; --smoke checks they answer
 # db:baseline and db:reset were the pre-release workflow and now refuse to run — see below
@@ -50,6 +51,24 @@ nothing else would notice an import Node cannot resolve. Run it before shipping 
 `moduleResolution: "nodenext"` because their output is loaded by Node directly; the extension
 is what Node requires and the compiler enforces it (TS2835). `apps/web` is on `bundler` and
 does not.
+
+### Checking work on the dev server
+
+`pnpm dev:test-account` gives an assistant (or anyone) a way to sign in to `pnpm dev` without a
+real account or the real library. Each run resets the password of `claude-test@example.test` (no
+scopes: not an admin, cannot delete) and writes it to `.dev/test-account.json` (git-ignored) —
+read it from there, never paste it into chat or a commit. It also generates ffmpeg test patterns
+(colour bars, a test card, fractals) into `media/claude-test` and registers them as the library
+**Test patterns** in the family room (Parlour), then queues a scan; the worker from `pnpm dev`
+has to be running to scan and process them.
+
+Work in the **Parlour** room: set `localStorage`/`sessionStorage` `ps:domain` to `family` after
+signing in if the browser opens elsewhere. Per-library access is not built yet, so the account
+can still reach the Cellar's libraries — don't go there; the library content is explicit. The
+script refuses under `NODE_ENV=production` and against a database outside this checkout.
+
+Don't run `pnpm build` while `pnpm dev` is serving: it broke the dev server's page compiler once
+(every page a 500, "Jest worker encountered 2 child process exceptions") until it was restarted.
 
 In VS Code, "Debug: Full Stack (Web + Worker)" runs both processes with server-side
 breakpoints bound. The two sessions are independent on purpose: the worker runs ffmpeg

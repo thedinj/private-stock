@@ -82,5 +82,8 @@ docker/docker-compose.qnap.yml
 # Personal runbook for this network's Pi; kept locally
 docs/PI-TO-ETHERNET.md
 
+# The dev test account's generated password (`pnpm dev:test-account`)
+/.dev/
+
 # Machine-local one-off scripts
 scripts/local/

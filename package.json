@@ -9,6 +9,7 @@
     ],
     "scripts": {
         "dev": "turbo run dev",
+        "dev:test-account": "pnpm --filter @private-stock/web dev:test-account",
         "build": "turbo run build",
         "test": "turbo run test",
         "test:integration": "turbo run test:integration",
