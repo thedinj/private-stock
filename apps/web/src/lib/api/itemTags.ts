@@ -232,8 +232,8 @@ export const useItemFacetTags = (
 /**
  * One facet's tags on one clip (§14d "Tagging clips").
  *
- * The clip detail takes the stored list directly; the browser's pages, its tag chips and the
- * item page's strip (which rides `media.detail`) are invalidated. See docs/CACHE_KEYS.md
+ * The clip detail takes the stored list directly; the browser's pages, its tag chips, the filter
+ * panel's facets and the item page's strip (which rides `media.detail`) are invalidated. See docs/CACHE_KEYS.md
  * "Tag edits on one clip".
  */
 export const useClipFacetTags = (
@@ -258,6 +258,8 @@ export const useClipFacetTags = (
             );
             void queryClient.invalidateQueries({ queryKey: queryKeys.clips.all() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.libraryAll() });
+            // The Clips and All tabs' filter panel lists and counts clip tags.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.facets() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.detail(mediaId) });
             refreshSuggestions(queryClient, kind, scope, op);
         },

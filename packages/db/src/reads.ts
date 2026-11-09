@@ -23,6 +23,7 @@ export const reads = {
     facetCountsForTags: mediaRepo.facetCountsForTags,
     favoriteTagCount: mediaRepo.favoriteTagCount,
     listFacetValues: tagRepo.listFacetValues,
+    listClipFacetValues: tagRepo.listClipFacetValues,
     tagsForMediaIds: tagRepo.listForMediaIds,
 };
 

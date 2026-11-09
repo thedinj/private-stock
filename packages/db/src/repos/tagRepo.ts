@@ -14,6 +14,7 @@ import {
 
 import { db } from "../db.js";
 import { tagNameMatchSql } from "../tagNameMatch.js";
+import { notHiddenSql } from "./hiddenSql.js";
 
 /**
  * Faceted tags and their assignments (§5b).
@@ -1012,6 +1013,79 @@ export const listFacetValues = (options: FacetValueOptions): FacetValueRow[] => 
              ORDER BY "kind", "uses" DESC, "name" COLLATE NOCASE`
         )
         .all({ ...params, limit: options.limit }) as FacetValueRow[];
+};
+
+export interface ClipFacetOptions extends Omit<FacetValueOptions, "limit"> {
+    /** Whose clips: the library lists a person's own and nobody else's (§14e). */
+    userId: string;
+    /** Libraries the viewer may reach in this room; `null` for all of them. */
+    accessibleRootIds: string[] | null;
+    /** A clip also counts as carrying its video's tags ("or its video", §14d). */
+    orVideo: boolean;
+}
+
+/**
+ * The filter panel's values for the Clips and All tabs: the tags the viewer's clips carry, each
+ * with how many of those clips the pick would find (§14e "What a kind is").
+ *
+ * `listFacetValues` reads the item vocabulary through `MediaTag`, so a tag carried only by
+ * clips -- most clip tags, since naming the moment is what clip tags are for -- was never
+ * offered, and on the Clips tab there was nothing to pick. Scoped exactly as the Clips tab
+ * lists clips (own, listable, not hidden, a library within reach), so the number beside a chip
+ * is what picking it shows.
+ *
+ * Uncapped and uncached: a person has hundreds of clips, so this is a few hundred index probes
+ * against the item vocabulary's full scan. The caller caps it with the rest.
+ */
+export const listClipFacetValues = (options: ClipFacetOptions): FacetValueRow[] => {
+    const { where, params } = facetValueFilters(options);
+
+    if (options.accessibleRootIds !== null && options.accessibleRootIds.length === 0) {
+        return [];
+    }
+
+    const roots =
+        options.accessibleRootIds === null
+            ? ""
+            : `AND m."listRootId" IN (SELECT value FROM json_each(:roots))`;
+    const visible = `c."userId" = :userId AND m."listable" = 1 ${roots}
+                     AND ${notHiddenSql('c."mediaId"')}`;
+
+    return db
+        .prepare(
+            `WITH "carried" AS (
+                 SELECT ct."tagId", c."id" AS "clipId"
+                   FROM "Clip" c
+                   JOIN "Media" m ON m."id" = c."mediaId"
+                   JOIN "ClipTag" ct ON ct."clipId" = c."id"
+                  WHERE ${visible}
+                 UNION
+                 SELECT mt."tagId", c."id"
+                   FROM "Clip" c
+                   JOIN "Media" m ON m."id" = c."mediaId"
+                   JOIN "MediaTag" mt ON mt."mediaId" = c."mediaId" AND mt."userId" IS :owner
+                  WHERE :orVideo = 1 AND ${visible}
+             )
+             SELECT "tagId", "kind", "name", "colorKey", "uses",
+                    count(*) OVER (PARTITION BY "kind") AS "total"
+               FROM (
+                 SELECT t."id" AS "tagId", t."kind", t."name", t."colorKey",
+                        count(DISTINCT ca."clipId") AS "uses"
+                   FROM "carried" ca
+                   JOIN "Tag" t ON t."id" = ca."tagId"
+                  WHERE ${where.join(" AND ")}
+                  GROUP BY t."id"
+               )
+              ORDER BY "kind", "uses" DESC, "name" COLLATE NOCASE`
+        )
+        .all({
+            ...params,
+            userId: options.userId,
+            orVideo: options.orVideo ? 1 : 0,
+            ...(options.accessibleRootIds === null
+                ? {}
+                : { roots: JSON.stringify(options.accessibleRootIds) }),
+        }) as FacetValueRow[];
 };
 
 export interface VocabularyOptions {

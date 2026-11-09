@@ -9,6 +9,7 @@ import {
     FACET_EXPANDED_LIMIT,
     isKnownFacet,
     mediaQuerySchema,
+    type LibraryTab,
     normalizeName,
     SELECTION_TAG_LIMIT,
     orderTagMatches,
@@ -1140,6 +1141,43 @@ const FACET_VALUES_TTL_MS = 60_000;
 /** Keyed by vocabulary, depth and search; a handful of entries in practice. */
 const facetValuesCache = createTtlCache<FacetValueRow[]>(FACET_VALUES_TTL_MS, 64);
 
+/** Which tab the filter panel is answering for, as far as its values care (§14e). */
+export interface FacetTab {
+    /** Clips, Stills or All; `null` for Videos and Photos. */
+    kind: LibraryTab | null;
+    /** The Clips tab's "Tags may be on the clip's video". */
+    orVideo: boolean;
+}
+
+/**
+ * The items' facet values with the viewer's clip tags folded in, for the Clips and All tabs.
+ *
+ * A tag on both counts both -- on All that is what picking it finds. One only clips carry joins
+ * its facet and its facet's total, so "show all" still says what all is. `totals` is updated in
+ * place; the item rows' own totals are already in it.
+ */
+const mergeClipValues = (
+    values: FacetValueRow[],
+    clipValues: FacetValueRow[],
+    totals: Map<string, number>
+): FacetValueRow[] => {
+    const clipUses = new Map(clipValues.map((row) => [row.tagId, row.uses]));
+    const listed = new Set(values.map((row) => row.tagId));
+    const merged = values.map((row) => ({
+        ...row,
+        uses: row.uses + (clipUses.get(row.tagId) ?? 0),
+    }));
+
+    for (const row of clipValues) {
+        if (listed.has(row.tagId)) continue;
+
+        merged.push(row);
+        totals.set(row.kind, (totals.get(row.kind) ?? 0) + 1);
+    }
+
+    return merged;
+};
+
 /**
  * The filter panel's facets: a complete list of values, each with how many items carry it
  * across the library (§5c, §20 "Facets without counts").
@@ -1177,7 +1215,13 @@ function* facetsReads(
      * not be found by typing their name into a list that never contained them. Searching the
      * vocabulary reaches every value the facet has.
      */
-    search?: string
+    search?: string,
+    /**
+     * The library tab the panel is beside (§14e "What a kind is"). On Clips the values are the
+     * tags your clips carry, counted in clips; on All those are added to the items' own. Every
+     * other tab reads the item vocabulary alone -- a still has no tags but its video's.
+     */
+    tab: FacetTab = { kind: null, orVideo: false }
 ): ReadPlan<{ facets: Facet[] }> {
     const limitFor = (kind: string): number =>
         expanded.includes(kind) ? FACET_EXPANDED_LIMIT : perFacetLimit;
@@ -1199,11 +1243,28 @@ function* facetsReads(
          * Two reads to fetch two depths would pay for the vocabulary scan twice to save a few
          * hundred rows inside one process.
          */
-        let values = facetValuesCache.peek(key);
+        let values: FacetValueRow[] = [];
+        const totals = new Map<string, number>();
 
-        if (!values) {
-            values = yield* read("listFacetValues", options);
-            facetValuesCache.set(key, values);
+        if (tab.kind !== "clip") {
+            const cached = facetValuesCache.peek(key);
+
+            values = cached ?? (yield* read("listFacetValues", options));
+            if (!cached) facetValuesCache.set(key, values);
+            for (const row of values) totals.set(row.kind, row.total);
+        }
+
+        if (tab.kind === "clip" || tab.kind === "all") {
+            const clipValues = yield* read("listClipFacetValues", {
+                domain: options.domain,
+                owner,
+                search,
+                userId: auth.userId,
+                accessibleRootIds: auth.accessibleRootIds,
+                orVideo: tab.kind === "clip" && tab.orVideo,
+            });
+
+            values = mergeClipValues(values, clipValues, totals);
         }
 
         /**
@@ -1218,13 +1279,17 @@ function* facetsReads(
         const selected =
             unlisted.length === 0
                 ? []
-                : yield* read(
+                : (yield* read(
                       "facetCountsForTags",
                       mediaQuerySchema.parse({}),
                       auth.userId,
                       auth.accessibleRootIds,
                       unlisted,
                       scope
+                  )).map((row) =>
+                      // Every tag your clips carry is listed, so on Clips one picked that is
+                      // not finds none; its item count would promise what the grid cannot show.
+                      tab.kind === "clip" ? { ...row, count: 0 } : row
                   );
 
         return buildFacets({
@@ -1232,7 +1297,7 @@ function* facetsReads(
             scope,
             values,
             selected: selected.map((row) => ({ ...row, uses: row.count })),
-            totals: new Map(values.map((row) => [row.kind, row.total])),
+            totals,
             selectedTagIds,
             order: listFacetKinds(auth),
         });

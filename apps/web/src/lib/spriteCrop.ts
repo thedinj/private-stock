@@ -5,29 +5,35 @@ import type { Clip } from "@private-stock/core";
 type SpriteRect = NonNullable<Clip["thumbRect"]>;
 
 /**
- * The square at the centre of a sprite tile, as a rectangle of the same sheet.
+ * The largest rectangle of `aspect` (width / height) at the centre of a sprite tile, as a
+ * rectangle of the same sheet -- what `background-size: cover` would show, done on the crop.
  *
- * For a box that is square, which is how a look's matching frame is shown (§5e): a frame of any
- * shape — a 16:9 film, a 9:16 phone video — fills a square without stretching, where cropping
- * the whole tile into the grid's 16:9 box squashed every upright frame flat.
+ * For a box of a fixed shape: a frame of any shape -- a 16:9 film, a 9:16 phone video -- fills it
+ * without stretching, where cropping the whole tile into the box squashed every upright frame
+ * flat, and taking the tile's own shape made one upright clip three rows tall on a wall of wide
+ * ones.
  */
-export const centreSquare = (rect: SpriteRect): SpriteRect => {
-    const side = Math.min(rect.width, rect.height);
+export const centreCrop = (rect: SpriteRect, aspect: number): SpriteRect => {
+    const width = Math.min(rect.width, rect.height * aspect);
+    const height = width / aspect;
 
     return {
         ...rect,
-        x: rect.x + (rect.width - side) / 2,
-        y: rect.y + (rect.height - side) / 2,
-        width: side,
-        height: side,
+        x: rect.x + (rect.width - width) / 2,
+        y: rect.y + (rect.height - height) / 2,
+        width,
+        height,
     };
 };
+
+/** The square at the centre of a sprite tile, for a square box: a look's matching frame (§5e). */
+export const centreSquare = (rect: SpriteRect): SpriteRect => centreCrop(rect, 1);
 
 /**
  * The style that shows `rect` of a sprite sheet filling its box (§14d).
  *
- * **The box must be the rectangle's shape**, or the picture stretches: a clip in a strip takes its
- * tile's aspect, and a square box — a look's tile, a clip card — is given `centreSquare`.
+ * **The box must be the rectangle's shape**, or the picture stretches: crop to the box first with
+ * `centreCrop` (or `centreSquare`).
  *
  * **In percentages, so it scales with whatever box it is given.** A card in a fluid grid has no
  * width until it is laid out; a crop in pixels would need that width in advance, which is the

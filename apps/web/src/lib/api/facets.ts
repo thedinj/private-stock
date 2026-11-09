@@ -20,14 +20,22 @@ const selectedTagIds = (view: LibraryView): string[] =>
     [...new Set([...view.tags, ...view.notTags, ...tagIdsInGroups(view.groups)])].sort();
 
 /**
- * The query string the panel's tags are asked with, which is only the filter's tag ids: the
- * numbers are library-wide (§20 "Facets without counts"). `FacetModal` adds its own facet and
+ * The query string the panel's tags are asked with: the filter's tag ids, and which tab -- the
+ * numbers are library-wide (§20 "Facets without counts"), but what a clip carries is not what
+ * its video does. `FacetModal` adds its own facet and
  * search to it.
  */
 export const facetParams = (view: LibraryView): string => {
     const ids = selectedTagIds(view);
+    const params = new URLSearchParams();
 
-    return ids.length > 0 ? `selected=${ids.join(",")}` : "";
+    if (ids.length > 0) params.set("selected", ids.join(","));
+    // The Clips and All tabs offer the tags clips carry too, counted in clips -- which "or its
+    // video" changes on the Clips tab (§14e "What a kind is").
+    if (view.kind === "clip" || view.kind === "all") params.set("for", view.kind);
+    if (view.kind === "clip" && view.orVideo) params.set("orVideo", "1");
+
+    return params.toString().replace(/%2C/g, ",");
 };
 
 /**

@@ -11982,6 +11982,15 @@ Now:
 - **The ♥ chip says no number**; its name still says how many favourites it means.
 - **Names are their own request** (`/api/tags/names`, `useTagNames`), a lookup by id, so the
   chips above the grid, the panel's sections and the Advanced editor no longer cost a count.
+- **The Clips and All tabs count clips too** (2026-11-09, `listClipFacetValues`). The vocabulary
+  read is `MediaTag`, so a tag only clips carried -- most clip tags, since naming a moment is
+  what they are for -- was never offered, and the Clips tab's panel said there was nothing to
+  pick. On Clips the values are the tags your clips carry, each counted in your clips (with "Tags
+  may be on the clip's video" on, a clip counts its video's tags as well); on All those counts
+  are added to the items'. Uncached and uncapped before the trim: a person has hundreds of clips,
+  so it is a few hundred index probes beside the vocabulary's scan. The request names its tab
+  (`for`, `orVideo`), which makes it a separate cache entry per tab. Stills keep the item
+  vocabulary, since a still is matched by its video's tags.
 
 What was given up: a chip no longer warns that it would empty the grid. For a library whose main
 job is organising, that warning did not earn seconds of disk on every click; a chip that leaves

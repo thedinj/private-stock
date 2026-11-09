@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { libraryTabSchema } from "@private-stock/core";
+
 import { requireAuth } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
 import { getFacets } from "@/lib/services/tagService";
@@ -60,7 +62,13 @@ const selectedIds = (value: string | undefined): string[] =>
 export async function GET(request: Request) {
     try {
         const auth = await requireAuth(request);
-        const { selected, expand, find } = Object.fromEntries(new URL(request.url).searchParams);
+        const params = Object.fromEntries(new URL(request.url).searchParams);
+        const { selected, expand, find } = params;
+        // Which tab the panel is beside: Clips and All also offer the tags clips carry.
+        const tab = libraryTabSchema
+            .nullable()
+            .catch(null)
+            .parse(params.for ?? null);
 
         return NextResponse.json(
             await getFacets(
@@ -68,7 +76,8 @@ export async function GET(request: Request) {
                 auth,
                 undefined,
                 expandedKinds(expand),
-                facetSearch(find)
+                facetSearch(find),
+                { kind: tab, orVideo: params.orVideo === "1" }
             )
         );
     } catch (error) {

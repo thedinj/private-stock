@@ -4,7 +4,7 @@ import { Box } from "@mantine/core";
 
 import type { Clip } from "@private-stock/core";
 
-import { centreSquare, spriteCropStyle } from "@/lib/spriteCrop";
+import { centreCrop, spriteCropStyle } from "@/lib/spriteCrop";
 
 /**
  * A clip's face, cropped out of the scrubber's sprite sheet (§14d).
@@ -26,8 +26,9 @@ interface ClipThumbProps {
     /** A fixed width, for a strip. Omitted, it fills its container — which is what a card wants. */
     width?: number;
     /**
-     * Crop to the centre square of the frame, so a wall of clips from films and phone videos
-     * lines up instead of every card taking its own source's shape.
+     * A square rather than 16:9. Either way the frame is cropped to the box from its centre, so a
+     * wall of clips from films and phone videos lines up instead of every card taking its own
+     * source's shape -- an upright phone clip was a card three rows tall.
      */
     square?: boolean;
     fallbackUrl?: string | null;
@@ -42,7 +43,8 @@ export const ClipThumb: React.FC<ClipThumbProps> = ({
     fallbackUrl = null,
     children,
 }) => {
-    const rect = clip.thumbRect && square ? centreSquare(clip.thumbRect) : clip.thumbRect;
+    const aspect = square ? 1 : 16 / 9;
+    const rect = clip.thumbRect ? centreCrop(clip.thumbRect, aspect) : null;
 
     return (
         <Box
@@ -50,7 +52,7 @@ export const ClipThumb: React.FC<ClipThumbProps> = ({
                 position: "relative",
                 width: width ? `${width}px` : "100%",
                 flex: width ? "0 0 auto" : undefined,
-                aspectRatio: square ? "1 / 1" : rect ? `${rect.width} / ${rect.height}` : "16 / 9",
+                aspectRatio: square ? "1 / 1" : "16 / 9",
                 borderRadius: 4,
                 overflow: "hidden",
                 background: fallbackUrl

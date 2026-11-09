@@ -495,3 +495,64 @@ describe("clips by when their video was added (§14d)", () => {
         ).toEqual([]);
     });
 });
+
+describe("the filter panel's clip tags (§14e)", () => {
+    const values = (orVideo = false, userId = USER, owner: string | null = null) =>
+        tagRepo
+            .listClipFacetValues({
+                domain: "cellar",
+                owner,
+                userId,
+                accessibleRootIds: null,
+                orVideo,
+            })
+            .map((row) => [row.name, row.uses, row.total]);
+
+    it("offers a tag only clips carry, counted in clips", () => {
+        const video = addMedia("m1");
+        const tag = publicTag("jumping");
+
+        clipTagRepo.assign({ clipId: newClip(video), tagId: tag });
+        clipTagRepo.assign({ clipId: newClip(video), tagId: tag });
+        newClip(video);
+
+        expect(values()).toEqual([["jumping", 2, 1]]);
+    });
+
+    it("counts a video's tags only with 'or its video', and a clip once for both", () => {
+        const video = addMedia("m1");
+        const tag = publicTag("beach");
+        const clip = newClip(video);
+
+        tagMedia(video, tag);
+        expect(values()).toEqual([]);
+
+        clipTagRepo.assign({ clipId: clip, tagId: tag });
+        newClip(video);
+        expect(values(true)).toEqual([["beach", 2, 1]]);
+    });
+
+    it("is the viewer's clips alone, and leaves out a video they hid", () => {
+        const video = addMedia("m1");
+        const tag = publicTag("jumping");
+
+        clipTagRepo.assign({ clipId: newClip(video, FRIEND), tagId: tag });
+        expect(values()).toEqual([]);
+
+        clipTagRepo.assign({ clipId: newClip(video), tagId: tag });
+        db.prepare(
+            `INSERT INTO "UserMedia" ("userId", "mediaId", "hidden", "updatedAt")
+             VALUES (?, ?, 1, CURRENT_TIMESTAMP)`
+        ).run(USER, video);
+        expect(values()).toEqual([]);
+    });
+
+    it("keeps a private tag to its own pass", () => {
+        const video = addMedia("m1");
+
+        clipTagRepo.assign({ clipId: newClip(video), tagId: privateTag("mine") });
+
+        expect(values()).toEqual([]);
+        expect(values(false, USER, USER)).toEqual([["mine", 1, 1]]);
+    });
+});
