@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { LibraryListResponse } from "@private-stock/core";
 
 import { SectionHead } from "@/components/library/LibraryRoom";
 import { ClipCard } from "@/components/media/ClipCard";
-import { ClipViewer } from "@/components/media/ClipViewer";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { useOpenClip } from "@/lib/clipPage";
+import { DEFAULT_VIEW } from "@/lib/libraryQuery";
 import { GRID_GAP, GRID_TRACKS } from "@/lib/gridGeometry";
 
 /** A row's worth: one shelf, as the item shelves above it are. */
@@ -28,12 +28,14 @@ export const TagClipsShelf: React.FC<{ tagId: string }> = ({ tagId }) => {
         queryKey: queryKeys.media.libraryPage(`shelf:${params.toString()}`, 0),
         queryFn: () => api<LibraryListResponse>(`/api/library?${params.toString()}`),
     });
-    const [watching, setWatching] = useState<string | null>(null);
+    const openClip = useOpenClip();
+    // Opening one carries on through this tag's clips, as the Clips tab filtered to it would.
+    const open = (clipId: string) =>
+        openClip(clipId, { ...DEFAULT_VIEW, mode: "grid", kind: "clip", tags: [tagId] });
 
     const clips = (data?.items ?? []).flatMap((entry) =>
         entry.type === "clip" ? [entry.clip] : []
     );
-    const index = clips.findIndex((clip) => clip.id === watching);
 
     if (clips.length === 0) {
         return null;
@@ -52,26 +54,13 @@ export const TagClipsShelf: React.FC<{ tagId: string }> = ({ tagId }) => {
                         clip={clip}
                         // A shelf is for looking and playing; ticking is the Clips tab's.
                         selected={false}
-                        onToggle={() => setWatching(clip.id)}
-                        onPlay={() => setWatching(clip.id)}
+                        onToggle={() => open(clip.id)}
+                        onPlay={() => open(clip.id)}
                         square={false}
                         showSource={false}
                     />
                 ))}
             </div>
-
-            {index >= 0 && (
-                <ClipViewer
-                    clip={clips[index]}
-                    onClose={() => setWatching(null)}
-                    onPrevious={index > 0 ? () => setWatching(clips[index - 1].id) : undefined}
-                    onNext={
-                        index < clips.length - 1
-                            ? () => setWatching(clips[index + 1].id)
-                            : undefined
-                    }
-                />
-            )}
         </div>
     );
 };

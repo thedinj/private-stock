@@ -19,7 +19,7 @@ import { facetField, fieldKey, fieldTitle, type ViewerField } from "@/lib/viewer
  * Three boxes rather than the popover's one box and a switch: under a player the hands are on
  * the keyboard, and a switch is a thing to tab to and arrow through before every name. Each box
  * is labelled with the item page's key for the same field -- w, t, Shift+T (`viewerKeys.ts`) --
- * and `ClipViewer` listens for them, so a name goes where it belongs in one press.
+ * and the clip page listens for them, so a name goes where it belongs in one press.
  *
  * The boxes carry `data-clip-field` rather than the item page's `data-viewer-field`: the viewer
  * is a dialogue over the clip wall and finds its own boxes, and nothing on the item page should

@@ -154,6 +154,8 @@ export const returnLabel = (href: string | null): string => {
     if (path === "/tags/performers") return "performers";
     if (path === "/tags/sources") return "sources";
     if (path === "/tags/keywords") return "keywords";
+    if (path.startsWith("/tags/")) return "the tag";
+    if (path.startsWith("/clips/")) return "the clip";
     if (path !== "/") return "the previous page";
 
     const query = href.includes("?") ? new URLSearchParams(href.slice(href.indexOf("?"))) : null;

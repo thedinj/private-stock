@@ -7603,7 +7603,7 @@ carry rules that mean nothing to a clip and would carry `orVideo` into `MediaQue
 
 **Tagged four ways**: while marking (the clip bar sends them with the save); one clip at a time,
 chip by chip and queued like an item's, in the clip editor, in a popover from a card's tag line on
-the wall, and under the picture in the clip viewer; and on a selection in the browser as one
+the wall, and under the picture on the clip's page (§14e "Playing the small kinds"); and on a selection in the browser as one
 `TagBatch` with `clipCount` set, withdrawn by the same route as a batch of items. A clip batch
 writes no public `MediaTag`, so it is never on an administrator's list (§5d) — it is its owner's
 alone, like the clips. The bar's tags start empty for every span: carried over from the last, they
@@ -10447,6 +10447,25 @@ to keep or delete one, a wall of covers, a few seconds of each file).
 - **Stills** play in the still lightbox, stepping on by itself at the viewer's dwell
   (`ps:dwellSeconds`), counted from when each picture has loaded and with the next one fetched
   meanwhile. Space or the button pauses; 1:1 pauses too. Also the first 200.
+
+**A clip has a page: `/clips/:id`** (2026-11-09), with the Clips tab's query in its address. It
+was a modal over the grid, and a modal could not go fullscreen: fullscreen lays the player over
+the page (§14b "Fullscreen is given to the document"), and inside a transformed, clipped dialog
+"the page" was the dialog. Opening a clip, Play from the top and a tag page's "Your clips" shelf
+all arrive there; the page runs the reel player over that query's run, starting at the clip, with
+the clip's stars, heart and tag boxes under it and a link to its video at the in point.
+
+- **Not the item page.** `/media/:id` is about a file — progress, review, casting, captures, the
+  set walk by ids — and nearly all of it would need a "but not for a clip". The reel player
+  (`ReelPlayer`) is what was generalised: a starting entry, a callback as the entry changes (the
+  address follows by `replaceState`, so Back leaves the page), n / p and Previous / Next, and
+  whether it rolls on.
+- **Rolls on by the viewer's "Autoplay next"**, as items do; Play from the top (`run=1`) always
+  rolls on. Held while a tag box has focus, so a name is never filed under the clip after.
+- **The run is frozen on arrival.** Rating while sorted by rating, or tagging a clip out of the
+  filter, refetches it; the order is the one the page opened with, fields are taken fresh.
+- **A clip not in its run** — past the first 200, or opened with no query — plays alone
+  (`/api/clips/:id/play`) rather than carrying on through a set it is not in.
 
 **All still plays only its videos and photos.** The item viewer's set walk (`/api/media/ids`), its
 warming and its restore know only items; stepping it into a span of another file and back out is

@@ -1,4 +1,5 @@
 import {
+    NotFoundError,
     REEL_ITEM_LIMIT,
     entryOrder,
     librarySort,
@@ -233,4 +234,21 @@ export const playClipsOffThread = async (
         runningMs: items.reduce((sum, entry) => sum + entry.clip.runMs, 0),
         more: page.hasMore,
     };
+};
+
+/**
+ * One of your clips as the player takes it: the clip page's answer when the clip it was opened
+ * on is not in the run its address describes -- past the first reel's worth, or since filtered
+ * out by an edit. It plays alone rather than carrying on through a set it is not in.
+ */
+export const playOneClip = (clipId: string, auth: AuthContext): LibraryClipRun => {
+    const clip = clipsForLibrary([clipId], auth).get(clipId);
+
+    if (!clip) {
+        throw new NotFoundError("Clip not found");
+    }
+
+    const items = playableEntries([{ id: clip.id, position: 0, clip }], auth);
+
+    return { items, runningMs: clip.runMs, more: false };
 };

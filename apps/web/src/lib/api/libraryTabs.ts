@@ -57,15 +57,18 @@ export const useLibraryCount = (view: LibraryView, enabled = true) => {
  * Played from the top (§14e "Playing the small kinds"): the tab's first reel's worth in one
  * answer, so a show never stops to ask for the next page. Fetched when Play is pressed.
  */
-export const useLibraryClipRun = (view: LibraryView, enabled: boolean) => {
-    const params = paramsOf(view);
+/** The Clips tab's run as one query, so the clip page and Play from the top share its cache. */
+export const clipRunQuery = (view: LibraryView) => {
+    const params = paramsOf({ ...view, kind: "clip" });
 
-    return useQuery({
+    return {
         queryKey: queryKeys.media.libraryClipRun(params),
         queryFn: () => api<LibraryClipRun>(`/api/library/play?${params}`),
-        enabled,
-    });
+    };
 };
+
+export const useLibraryClipRun = (view: LibraryView, enabled: boolean) =>
+    useQuery({ ...clipRunQuery(view), enabled });
 
 export const useLibraryStillRun = (view: LibraryView, enabled: boolean) => {
     const params = paramsOf(view);

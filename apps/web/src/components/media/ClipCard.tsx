@@ -49,7 +49,7 @@ interface ClipCardProps {
     clip: Clip;
     selected: boolean;
     onToggle: () => void;
-    /** Watch it, without leaving the wall (`ClipViewer`). */
+    /** Watch it, on its page (`/clips/:id`). */
     onPlay: () => void;
     /** Hidden when the wall is already grouped by item, where it would be on every card. */
     showSource?: boolean;

@@ -7,9 +7,11 @@ import { locateInReel, type ReelEntry } from "@private-stock/core";
 
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { ClipThumb } from "@/components/media/ClipThumb";
+import { isTypingTarget } from "@/lib/typingTarget";
 
 /**
- * Playing a reel through (§14d).
+ * Playing a run of spans through: a reel (§14d), and the clip page's run of the Clips tab (§14e
+ * "Playing the small kinds").
  *
  * The seam is §8b's, unchanged: two `<video>` elements, one showing and one warming, and moving on
  * changes which is on screen. What a reel adds is that a span has a **position inside a file**, so
@@ -55,10 +57,38 @@ interface Cue {
 interface ReelPlayerProps {
     entries: ReelEntry[];
     runningMs: number;
+    /** The entry to start on, by `ReelEntry.id`; the first when absent or not playable. */
+    startId?: string;
+    /** Told when the entry on screen changes, so a page can follow it -- its address, its panel. */
+    onCurrent?: (entry: ReelEntry) => void;
+    /**
+     * Whether the end of one span starts the next. On for a reel, which is a cut meant to run;
+     * the clip page follows the viewer's "play the next automatically" (§14b). Off, a span stops
+     * at its out point and Next, n or the strip moves on.
+     */
+    rollOn?: boolean;
+    /** The page's own switches, beside Loop. */
+    controls?: React.ReactNode;
 }
 
-export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) => {
-    const [cue, setCue] = useState<Cue>({ index: 0, atMs: null, nonce: 0 });
+export const ReelPlayer: React.FC<ReelPlayerProps> = ({
+    entries,
+    runningMs,
+    startId,
+    onCurrent,
+    rollOn = true,
+    controls,
+}) => {
+    const [cue, setCue] = useState<Cue>(() => ({
+        index: Math.max(
+            0,
+            entries
+                .filter((entry) => entry.media.directPlay)
+                .findIndex((entry) => entry.id === startId)
+        ),
+        atMs: null,
+        nonce: 0,
+    }));
     const [ended, setEnded] = useState(false);
     const [loop, setLoop] = useState(false);
     const freezeRef = useRef<(() => void) | null>(null);
@@ -84,6 +114,17 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
 
     const current = playable[cue.index];
     const next = playable[cue.index + 1] ?? (loop ? playable[0] : undefined);
+    const previousIndex = cue.index > 0 ? cue.index - 1 : loop ? playable.length - 1 : null;
+    const nextIndex =
+        cue.index + 1 < playable.length ? cue.index + 1 : loop && playable.length > 1 ? 0 : null;
+
+    const currentId = current?.id;
+
+    useEffect(() => {
+        if (current) onCurrent?.(current);
+        // Told once per arrival: a refetch handing over an equal entry is not a new one.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentId]);
 
     /** Run time before the current span, and of the whole thing: what the bar is measured against. */
     const offsetMs = playable.slice(0, cue.index).reduce((sum, entry) => sum + entry.clip.runMs, 0);
@@ -102,6 +143,38 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
         setEnded(false);
         setCue((previous) => ({ index, atMs, nonce: previous.nonce + 1 }));
     };
+
+    /** n and p, as in the item viewer (§14b): the next span and the one before. */
+    const stepRef = useRef<{ previous: number | null; next: number | null }>({
+        previous: null,
+        next: null,
+    });
+
+    stepRef.current = { previous: previousIndex, next: nextIndex };
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+                return;
+            }
+
+            const target =
+                event.key === "n"
+                    ? stepRef.current.next
+                    : event.key === "p"
+                      ? stepRef.current.previous
+                      : undefined;
+
+            if (target === undefined) return;
+
+            event.preventDefault();
+            if (target !== null && !event.repeat) goTo(target);
+        };
+
+        document.addEventListener("keydown", onKeyDown);
+
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, []);
 
     /**
      * Land on whatever span covers a position in reel time.
@@ -140,7 +213,9 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
      * the last clip was cut from.
      */
     const advance = () => {
-        if (cue.index + 1 < playable.length) {
+        if (!rollOn) {
+            setEnded(true);
+        } else if (cue.index + 1 < playable.length) {
             goTo(cue.index + 1);
         } else if (loop) {
             goTo(0);
@@ -175,14 +250,16 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
                 reportProgress={false}
                 timeline={{ offsetMs, totalMs: playableMs, onSeek: seekReel }}
                 atEnd={ended}
-                onReplay={() => goTo(0)}
+                // A run that stops at each span replays that span; one that rolls on has stopped
+                // only at its end, and starts again.
+                onReplay={() => goTo(rollOn ? 0 : cue.index)}
                 freezeRef={freezeRef}
             />
 
             <Group justify="space-between" wrap="wrap" gap="xs">
                 <Group gap="sm">
                     <Text size="sm" c="dimmed">
-                        {ended
+                        {ended && nextIndex === null
                             ? `Finished · ${playable.length} clip${playable.length === 1 ? "" : "s"} · ${formatRun(playableMs)}`
                             : `${cue.index + 1} of ${playable.length} · ${formatRun(playableMs)}`}
                         {skipped > 0 &&
@@ -191,24 +268,45 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({ entries, runningMs }) =>
 
                     {/* Also on the transport, where the play button is; here as well because this
                         is where the eye is when a reel stops. */}
-                    {ended && (
+                    {ended && nextIndex === null && (
                         <Button size="compact-xs" variant="default" onClick={() => goTo(0)}>
                             Play again
                         </Button>
                     )}
                 </Group>
 
-                {/*
-                 * Loop rather than shuffle. A reel's order is the cut, so a permutation of it is a
-                 * different artefact; what people want from a highlight reel is for it to run
-                 * again. Device-local, writing nothing.
-                 */}
-                <Switch
-                    size="xs"
-                    label="Loop"
-                    checked={loop}
-                    onChange={(event) => setLoop(event.currentTarget.checked)}
-                />
+                <Group gap="sm">
+                    <Button
+                        size="compact-sm"
+                        variant="default"
+                        disabled={previousIndex === null}
+                        onClick={() => previousIndex !== null && goTo(previousIndex)}
+                        title="Previous (p)"
+                    >
+                        ‹ Previous
+                    </Button>
+                    <Button
+                        size="compact-sm"
+                        variant="default"
+                        disabled={nextIndex === null}
+                        onClick={() => nextIndex !== null && goTo(nextIndex)}
+                        title="Next (n)"
+                    >
+                        Next ›
+                    </Button>
+                    {controls}
+                    {/*
+                     * Loop rather than shuffle. A reel's order is the cut, so a permutation of it is a
+                     * different artefact; what people want from a highlight reel is for it to run
+                     * again. Device-local, writing nothing.
+                     */}
+                    <Switch
+                        size="xs"
+                        label="Loop"
+                        checked={loop}
+                        onChange={(event) => setLoop(event.currentTarget.checked)}
+                    />
+                </Group>
             </Group>
 
             {/*

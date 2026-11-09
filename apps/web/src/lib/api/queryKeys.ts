@@ -376,6 +376,8 @@ export const queryKeys = {
         all: () => ["clips"],
         /** One clip and the reels holding it, read by the retime and discard dialogues. */
         detail: (clipId: string) => ["clips", clipId],
+        /** One clip as the clip page plays it when it is not in its run (`/api/clips/:id/play`). */
+        play: (clipId: string) => ["clips", clipId, "play"],
         labels: () => ["clips", "labels"],
         /** What ticked clips carry, for the untag dialogue; keyed by the sorted ids. */
         selection: (clipIds: string) => ["clips", "selection", clipIds],

@@ -35,11 +35,9 @@ import { LoadFailed } from "@/components/LoadFailed";
 import { MediaTile } from "@/components/MediaTile";
 import { CaptureCard } from "@/components/media/CaptureCard";
 import { ClipCard } from "@/components/media/ClipCard";
-import { ClipViewer } from "@/components/media/ClipViewer";
 import { FrameLightbox } from "@/components/media/FrameLightbox";
 import { CloseGlyph } from "@/components/media/Glyph";
 import { BulkTagDialog } from "@/components/library/BulkTagDialog";
-import { ClipRunPlayer } from "@/components/library/ClipRunPlayer";
 import { SelectionBar } from "@/components/library/SelectionBar";
 import { UntagDialog } from "@/components/library/UntagDialog";
 import { api } from "@/lib/api/client";
@@ -56,6 +54,7 @@ import {
 import { describeBulkResult } from "@/components/library/describeBulkResult";
 import { GALLERY_TRACKS, GRID_GAP, GRID_TRACKS, PRIORITY_TILES } from "@/lib/gridGeometry";
 import { effectiveSort, libraryRequestParams, type LibraryView } from "@/lib/libraryQuery";
+import { useOpenClip } from "@/lib/clipPage";
 import { useDwellSeconds } from "@/lib/playbackPrefs";
 import { settling } from "@/lib/settling";
 
@@ -92,7 +91,7 @@ interface LibraryEntriesProps {
     wide: boolean;
     onPage: (page: number) => void;
     canDelete: boolean;
-    /** Play from the top was pressed on the Clips or Stills tab, and the show is on. */
+    /** Play from the top was pressed on the Stills tab, and the show is on. (Clips go to their page.) */
     playing: boolean;
     onStopPlaying: () => void;
 }
@@ -113,12 +112,9 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
 
     const [selected, setSelected] = useState<Map<Key, LibraryEntry>>(new Map());
     const [outcome, setOutcome] = useState<string | null>(null);
-    const [watching, setWatching] = useState<string | null>(null);
     const [stillOpen, setStillOpen] = useState<string | null>(null);
 
-    const clips = entries.flatMap((entry) => (entry.type === "clip" ? [entry.clip] : []));
     const stills = entries.flatMap((entry) => (entry.type === "capture" ? [entry.capture] : []));
-    const watchIndex = clips.findIndex((clip) => clip.id === watching);
 
     /**
      * The Stills tab from the top: its first reel's worth, in the tab's order, through the same
@@ -138,6 +134,7 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
         onStopPlaying();
     };
 
+    const openClip = useOpenClip();
     const discard = useDiscardCaptures();
     const rename = useRenameCapture();
 
@@ -262,7 +259,7 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
                                         clip={entry.clip}
                                         selected={isSelected}
                                         onToggle={() => toggle(entry)}
-                                        onPlay={() => setWatching(entry.clip.id)}
+                                        onPlay={() => openClip(entry.clip.id, view)}
                                         square={false}
                                         // The viewer names the video; on the library's grid
                                         // a third line made every row a clip is in taller.
@@ -370,25 +367,6 @@ export const LibraryEntries: React.FC<LibraryEntriesProps> = ({
                         </Button>
                     </Group>
                 </Paper>
-            )}
-
-            {watchIndex >= 0 && (
-                <ClipViewer
-                    clip={clips[watchIndex]}
-                    onClose={() => setWatching(null)}
-                    onPrevious={
-                        watchIndex > 0 ? () => setWatching(clips[watchIndex - 1].id) : undefined
-                    }
-                    onNext={
-                        watchIndex < clips.length - 1
-                            ? () => setWatching(clips[watchIndex + 1].id)
-                            : undefined
-                    }
-                />
-            )}
-
-            {playing && view.kind === "clip" && (
-                <ClipRunPlayer view={view} onClose={onStopPlaying} />
             )}
 
             <FrameLightbox

@@ -82,6 +82,7 @@ import { useMentionsMatching } from "@/lib/api/tags";
 import { useLibraries, useLibraryStats } from "@/lib/api/libraries";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { rememberTagNames } from "@/lib/rememberedPages";
+import { usePlayClipsFromTop } from "@/lib/clipPage";
 import { fetchLibraryPage, usePlayFromTop } from "@/lib/playFromTop";
 import { settling } from "@/lib/settling";
 import { useFlipGrid } from "@/lib/useFlipGrid";
@@ -466,6 +467,7 @@ export const LibraryCellar: React.FC = () => {
     /** Play from the top (`usePlayFromTop`), from this view. */
     const playFromTop = usePlayFromTop();
     const [playingSmall, setPlayingSmall] = useState(false);
+    const playClips = usePlayClipsFromTop();
 
     /**
      * The page on screen, re-checked rather than refetched (§13b).
@@ -814,7 +816,11 @@ export const LibraryCellar: React.FC = () => {
                                 h={touchHeight}
                                 leftSection={<PlayGlyph size={16} />}
                                 disabled={total === 0}
-                                onClick={() => setPlayingSmall(true)}
+                                onClick={() =>
+                                    view.kind === "clip"
+                                        ? void playClips(view).catch(() => undefined)
+                                        : setPlayingSmall(true)
+                                }
                             >
                                 Play
                             </Button>
@@ -928,7 +934,7 @@ export const LibraryCellar: React.FC = () => {
                         touch={touch}
                         wide={wide ?? false}
                         canDelete={hasScope("delete")}
-                        playing={playingSmall && smallTab}
+                        playing={playingSmall && view.kind === "capture"}
                         onStopPlaying={() => setPlayingSmall(false)}
                         onPage={(next) => {
                             applyView({ ...view, page: next });
