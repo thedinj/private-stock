@@ -1475,7 +1475,11 @@ none reads a document. Relevance ranks the document's matches by bm25 and puts i
 partly through your tags after them, as it already did for private-only hits.
 
 Deliberately not included, by decision: private notes, capture captions and clip labels. The box
-searches an item's own name, text and tags; moments are searched in their own browsers.
+searches an item's own name, text and tags; moments are searched in their own browsers. **Since
+2026-11-08 those browsers are the library's Clips and Stills tabs** (§14e "What a kind is"), so the
+same search box finds your clips by name and your stills by caption or title there — as a `LIKE`
+over your own few hundred rows, never in the shared FTS document, which still cannot hold one
+person's text.
 
 ### When to revisit
 
@@ -4913,6 +4917,10 @@ prevent.
 
 ### Your captures, in one place
 
+> **Superseded 2026-11-08**: `/captures` is the library's **Stills** tab, and "capture" is now
+> "still" everywhere a person reads it (§14e "What a kind is"). The rules below — your own, listable,
+> reachable, captioned — carry over unchanged; the page's own sort and grouping went with it.
+
 The strip answers "what stills exist of this item". `/captures` answers "what have I grabbed",
 across the library, and it has its own nav entry beside Reels and Clips.
 
@@ -7469,6 +7477,11 @@ short names than it does to the library, so nothing here earns a second search t
 
 ### Keeping a few hundred clips usable
 
+> **Superseded 2026-11-08**: `/clips` is the library's **Clips** tab (§14e "What a kind is"). It
+> keeps "not in a reel", select all matching for a reel's worth, and the clip card and viewer; it
+> drops the "By video" grouping — a clip is browsed as a thing of its own now, and its video is on
+> the card and in the viewer.
+
 The working case is a reel of a holiday: forty spans marked across dozens of videos over weeks,
 gathered afterwards. Four things make that possible, and the first changes the feel of the page.
 
@@ -7615,7 +7628,9 @@ not a batch, as an item untag is not: the dialogue shows exactly what goes befor
 
 **What it does not do.** Clip tags are not in any search document; the browser's text box stays a
 match on the label. The library's own filter does not gain "has a clip tagged…" — the clip browser
-is where clips are found. And a reel is still built by ticking and adding: a query-backed reel
+is where clips are found. (Since 2026-11-08 the clip browser _is_ a library tab, §14e "What a kind
+is": the library's tag picks are read as a clip's own tags there, and an item is still never found
+through one of its clips.) And a reel is still built by ticking and adding: a query-backed reel
 would refill itself in no particular order, and a reel's order is the cut.
 
 ### A clip carries a speed, and it changes what a duration is
@@ -10368,6 +10383,56 @@ _Rejected: not cataloguing photos, per library or at all._ They are wanted somet
 them help name people, and they are not kept in folders of their own, so a library-level switch
 would have nothing to switch.
 
+### What a kind is: clips and stills in the library
+
+Decided 2026-11-08, after the clip wall got its own tagging and the question became why clips were
+a separate page at all. A clip is a span of a video, a still a frame of one; both are things a
+person made, browses and judges much as they do the library's items. So **the library's tabs are
+Videos · Photos · Clips · Stills · All**, and All means all four.
+
+**Yours alone, still.** The Clips and Stills tabs, and the clips and stills in All, are the
+viewer's own — the §14d and §9 rules, unchanged. A shared reel still grants a span and never its
+owner's tags.
+
+**Two endpoints, deliberately.** Videos and Photos stay `/api/media` and `MediaQuery`, untouched:
+the grid's walk is the most measured statement in the app (§20). Clips, Stills and All are
+`/api/library`, whose query is the library's with a wider kind (`LibraryQuery`). `MediaQuery.kind`
+is not widened — it reaches every shelf, playlist and saved view, and `Media.kind`'s CHECK.
+
+**Every filter is read as the kind can answer it** (`libraryRepo`), in one of three ways: the
+row's own fact (a clip's own tags, stars, heart and run time; either one's name and the day it was
+made), its video's fact (library, measures, orientation, captured date — and a still's tags, since
+a still has none of its own), or nothing it can answer (watched, review passes, a look, mentions,
+animated; for a still, stars, heart and run time). **A filter a kind cannot answer leaves that kind
+out**, as a video-only measure leaves the photos out (§14e "A filter that cannot apply is
+absent"). A clip's tag pick is strict — its own tags — and one switch on the Clips tab widens every
+pick to "or its video", the old per-chip `orVideo` made whole-filter.
+
+**Clips have their own stars and heart** (`Clip.rating`, `Clip.favorite`, on the row because a
+clip has one owner). Stills gained nothing: they are found by their video's tags and judged by
+looking.
+
+**The sorts every kind can answer, and no others**: date added (a clip's or still's own creation),
+name (its label, else its video's title), run time, rating, shuffle and relevance (`LIBRARY_SORTS`).
+A merged list sorted by bit rate would have nowhere honest to put a clip.
+
+**All, merged, without a second walk** (§20 "All, merged"): the viewer's clips and stills are read
+whole with their sort keys — hundreds — and merged into one window of the library's own page walk
+(`libraryMerge`). Positions `[o, o + n)` can only hold items ranked `[o − |small|, o + n)`, so the
+walk is the grid's own, `|small|` rows longer, and a count of the small set ahead of its first row
+places it. Shuffle gives a clip the slot the library's permutation gives a hashed id. With none of
+yours matching, All is the library's own list, kept orders and looks included.
+
+**A mixed selection does what applies and says so**: tagging and stars reach items and clips, a
+reel only clips, discarding only stills, and the outcome names what was left alone. Videos and
+photos alone keep the library's own selection bar.
+
+**Tag pages count your clips** (`clipCount` on browse rows and the profile): a tag only your clips
+carry is listed — after every tag with an item — and its page has a "Your clips" shelf. Before, such
+a tag was on no list and its page said nothing carried it.
+
+`/clips` and `/captures` redirect to the tabs, carrying their search and filters.
+
 ### Telling a filter from a sort
 
 Both change what the grid shows; only one of them hides things. The panel cannot carry that
@@ -11773,6 +11838,19 @@ is the one sort whose cost grows with the library.
 against 0.4 ms for the page — and its answer cannot change by turning a page. It is fetched
 once per _filter_ and cached there, which is what makes an exact total affordable at all. The
 grid degrades to previous/next if it is missing, so the count is optional by construction.
+
+### All, merged
+
+The All tab mixes the library's items with the viewer's own clips and stills (§14e "What a kind
+is") without a second walk of the library and without O(result set) work. The clips and stills are
+one person's — hundreds — so they are read whole, keys only, and sorted in the web process
+(`libraryRepo.smallKeys`, `libraryMerge`). The library side is the grid's own paging statement,
+returning each row's sort key as well (`mediaRepo.pageKeys`, off the thread like the grid's):
+merged positions `[o, o + n)` hold only items ranked `[o − |small|, o + n)`, so one page costs the
+grid's page walk plus `|small|` index rows, and the count is the grid's count plus `|small|`. The
+comparison is SQLite's — NULL, then numbers, then text, NOCASE folding ASCII only — and a
+property test pages random data in both directions and checks the pages laid end to end are
+exactly a plain sort. With nothing of the viewer's matching, All is the grid's own request.
 
 ### A filter never depends on the sort
 

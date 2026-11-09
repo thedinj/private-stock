@@ -101,7 +101,6 @@ describe("returnLabel", () => {
         expect(returnLabel("/tasting?view=grid&page=3")).toBe("the tasting");
         expect(returnLabel("/playlists/p?page=2")).toBe("the playlist");
         expect(returnLabel("/review/duplicates?page=1")).toBe("duplicates");
-        expect(returnLabel("/captures?sort=title&page=2")).toBe("captures");
         expect(returnLabel("/tags/performers?q=ann&seed=4")).toBe("performers");
         expect(returnLabel("/?view=grid&page=2")).toBe("library");
         expect(returnLabel("/")).toBe("Home");

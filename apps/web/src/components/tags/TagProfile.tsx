@@ -33,6 +33,7 @@ import { isTypingTarget } from "@/lib/typingTarget";
 import { useTagSeed } from "@/lib/useTagSeed";
 
 import { CompanionsSection } from "./CompanionsSection";
+import { TagClipsShelf } from "./TagClipsShelf";
 import { KindCounts } from "./KindCounts";
 import { TagPictureInset } from "./TagPictureInset";
 import { TagPicturePicker } from "./TagPicturePicker";
@@ -239,30 +240,37 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                             tagId={tag.id}
                             videoCount={data.videoCount}
                             imageCount={data.imageCount}
+                            clipCount={data.clipCount}
                             size="lg"
                         />
 
                         <Group gap="xs" wrap="wrap" mt={4}>
                             {/* Play, See all and Organise in the open; on a phone they and the
                                 menu are one line, so See all drops its count there. */}
-                            <PlayMenu
-                                setParams={setParams}
-                                onFromTop={(review) =>
-                                    void playFromTop(parseView(setParams), review).catch(
-                                        () => undefined
-                                    )
-                                }
-                                empty={total === 0}
-                                height={touchHeight}
-                            />
-                            <Button
-                                component={Link}
-                                href={allHref}
-                                variant="default"
-                                h={touchHeight}
-                            >
-                                {touch ? "See all" : `See all ${shown.toLocaleString()}`}
-                            </Button>
+                            {/* Both are about the items. A tag only your clips carry has none,
+                                and its clips have their own shelf and "See all" below. */}
+                            {total > 0 && (
+                                <>
+                                    <PlayMenu
+                                        setParams={setParams}
+                                        onFromTop={(review) =>
+                                            void playFromTop(parseView(setParams), review).catch(
+                                                () => undefined
+                                            )
+                                        }
+                                        empty={total === 0}
+                                        height={touchHeight}
+                                    />
+                                    <Button
+                                        component={Link}
+                                        href={allHref}
+                                        variant="default"
+                                        h={touchHeight}
+                                    >
+                                        {touch ? "See all" : `See all ${shown.toLocaleString()}`}
+                                    </Button>
+                                </>
+                            )}
                             {/* Finding more of this tag is its own page: what it asks
                             reads faces across the library, and browsing must never wait on it
                             (§6 "Tags", §5f "Starting from the performer"). */}
@@ -343,6 +351,9 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                 {shelf("Top rated", shelves.topRated, `${allHref}&sort=rating`)}
                 {shelf("Shuffled", shelves.shuffled, `${allHref}&sort=random&seed=${seed}`)}
 
+                {/* Your own clips, after the items and in a lane of their own (§14e). */}
+                {data.clipCount > 0 && <TagClipsShelf tagId={tag.id} />}
+
                 {/* Last, and asked for only once it is nearly in view: the tag's own items
                     are what the page is for, and the page no longer waits on this (§20).
                     Library performers only -- nothing else has companions. */}
@@ -350,7 +361,7 @@ export const TagProfile: React.FC<{ tagId: string }> = ({ tagId }) => {
                     <CompanionsSection tagId={tag.id} seed={seed} />
                 )}
 
-                {total === 0 && (
+                {total === 0 && data.clipCount === 0 && (
                     <Text size="sm" c="dimmed">
                         Nothing you can see carries this tag right now.
                     </Text>

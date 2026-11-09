@@ -1128,6 +1128,8 @@ export interface BrowseTagRow extends TagRow {
     /** Listable items carrying it, videos and photos counted apart. */
     videoCount: number;
     imageCount: number;
+    /** The viewer's own clips carrying it (§14e "What a kind is"): theirs alone, never anyone's. */
+    clipCount: number;
     aliases: string[];
     /** The viewer's own mark (§6 "Favourite tags"), 1 or null like every flag. */
     favorite: 1 | null;
@@ -1210,9 +1212,11 @@ const viewerParams = (viewer: TagViewer): { viewer: string; rootIds: string } =>
 
 const BROWSE_ORDER: Record<BrowseSort, string> = {
     // Videos are what somebody browses a facet for; photos only break a tie.
-    count: `"videoCount" DESC, "imageCount" DESC, t."name" COLLATE NOCASE`,
+    // Clips after both: a tag only your clips carry sorts below every tag with an item.
+    count: `"videoCount" DESC, "imageCount" DESC, "clipCount" DESC, t."name" COLLATE NOCASE`,
     name: `t."name" COLLATE NOCASE`,
-    recent: `max(mt."createdAt") DESC, t."name" COLLATE NOCASE`,
+    recent: `max(coalesce(media."recent", ''), coalesce(clips."recent", '')) DESC,
+             t."name" COLLATE NOCASE`,
 };
 
 /**
@@ -1260,21 +1264,50 @@ export const browseTags = (
         }
     }
 
+    /**
+     * Counted apart, then joined to the tag: what the viewer can see of the library, and their
+     * own clips (§14e "What a kind is", 2026-11-08). A tag only clips carry used to be on no list
+     * at all, and its page said nothing carried it.
+     *
+     * Each count is narrowed to this facet and system first, as the single join it replaced was,
+     * so neither reads the assignments of tags the page cannot show.
+     */
+    const counted = `WITH "itemCounts" AS (
+                SELECT mt."tagId" AS "id",
+                       sum(m."kind" = 'video') AS "v", sum(m."kind" = 'image') AS "i",
+                       max(mt."createdAt") AS "recent"
+                  FROM "Tag" ct0
+                  JOIN "MediaTag" mt ON mt."tagId" = ct0."id" AND mt."userId" IS :owner
+                  JOIN ${MEDIA_VISIBLE} ON m."id" = mt."mediaId" AND ${VISIBLE_TO_VIEWER}
+                 WHERE ct0."domain" = :domain AND ct0."ownerId" IS :owner AND ct0."kind" = :kind
+                 GROUP BY mt."tagId"
+            ), "clipCounts" AS (
+                SELECT ct."tagId" AS "id", count(*) AS "c", max(ct."createdAt") AS "recent"
+                  FROM "Tag" ct1
+                  JOIN "ClipTag" ct ON ct."tagId" = ct1."id"
+                  JOIN "Clip" c ON c."id" = ct."clipId" AND c."userId" = :viewer
+                  JOIN "Media" cm ON cm."id" = c."mediaId" AND cm."listable" = 1
+                       AND cm."listRootId" IN (SELECT value FROM json_each(:rootIds))
+                 WHERE ct1."domain" = :domain AND ct1."ownerId" IS :owner AND ct1."kind" = :kind
+                 GROUP BY ct."tagId"
+            )`;
     const from = `FROM "Tag" t
-               JOIN "MediaTag" mt ON mt."tagId" = t."id" AND mt."userId" IS :owner
-               JOIN ${MEDIA_VISIBLE} ON m."id" = mt."mediaId" AND ${VISIBLE_TO_VIEWER}
+               LEFT JOIN "itemCounts" media ON media."id" = t."id"
+               LEFT JOIN "clipCounts" clips ON clips."id" = t."id"
                LEFT JOIN "UserTag" ut ON ut."tagId" = t."id" AND ut."userId" = :viewer
-              WHERE ${where.join(" AND ")}`;
+              WHERE ${where.join(" AND ")}
+                AND (media."id" IS NOT NULL OR clips."id" IS NOT NULL)`;
 
     const rows = db
         .prepare(
-            `SELECT t."id", t."kind", t."name", t."nameNorm", t."colorKey", t."description",
+            `${counted}
+             SELECT t."id", t."kind", t."name", t."nameNorm", t."colorKey", t."description",
                     t."ownerId", t."domain", ut."favorite",
-                    sum(m."kind" = 'video') AS "videoCount",
-                    sum(m."kind" = 'image') AS "imageCount",
+                    coalesce(media."v", 0) AS "videoCount",
+                    coalesce(media."i", 0) AS "imageCount",
+                    coalesce(clips."c", 0) AS "clipCount",
                     ${ALIASES_COLUMN}
                ${from}
-              GROUP BY t."id"
               ORDER BY ${BROWSE_ORDER[options.sort]}
               LIMIT :limit OFFSET :offset`
         )
@@ -1282,7 +1315,7 @@ export const browseTags = (
         .map((row) => parseAliases(row as WithAliasesJson<BrowseTagRow>));
 
     const total = (
-        db.prepare(`SELECT count(DISTINCT t."id") AS n ${from}`).get(params) as { n: number }
+        db.prepare(`${counted} SELECT count(*) AS n ${from}`).get(params) as { n: number }
     ).n;
 
     return { rows, total };
@@ -1362,20 +1395,30 @@ export const sampleMediaIdsByTag = (
 export const countByKind = (
     tagId: string,
     viewer: TagViewer
-): { videoCount: number; imageCount: number } => {
+): { videoCount: number; imageCount: number; clipCount: number } => {
     if (viewer.rootIds.length === 0) {
-        return { videoCount: 0, imageCount: 0 };
+        return { videoCount: 0, imageCount: 0, clipCount: 0 };
     }
 
     return db
         .prepare(
             `SELECT COALESCE(sum(m."kind" = 'video'), 0) AS "videoCount",
-                    COALESCE(sum(m."kind" = 'image'), 0) AS "imageCount"
+                    COALESCE(sum(m."kind" = 'image'), 0) AS "imageCount",
+                    -- The viewer's own clips, as the browse rows count them (§14e).
+                    (SELECT count(*) FROM "ClipTag" ct
+                       JOIN "Clip" c ON c."id" = ct."clipId" AND c."userId" = :viewer
+                       JOIN "Media" cm ON cm."id" = c."mediaId" AND cm."listable" = 1
+                            AND cm."listRootId" IN (SELECT value FROM json_each(:rootIds))
+                      WHERE ct."tagId" = :tagId) AS "clipCount"
                FROM "MediaTag" mt
                JOIN ${MEDIA_VISIBLE} ON m."id" = mt."mediaId" AND ${VISIBLE_TO_VIEWER}
               WHERE mt."tagId" = :tagId`
         )
-        .get({ tagId, ...viewerParams(viewer) }) as { videoCount: number; imageCount: number };
+        .get({ tagId, ...viewerParams(viewer) }) as {
+        videoCount: number;
+        imageCount: number;
+        clipCount: number;
+    };
 };
 
 export interface CompanionRow {

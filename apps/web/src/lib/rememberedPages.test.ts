@@ -41,9 +41,9 @@ describe("remembering a page", () => {
     });
 
     it("records a listed page's whole address", () => {
-        rememberPage("/clips", "q=intro&page=2");
+        rememberPage("/reels", "q=intro&page=2");
 
-        expect(store.get("ps:page:/clips")).toBe("q=intro&page=2");
+        expect(store.get("ps:page:/reels")).toBe("q=intro&page=2");
     });
 
     it("keeps a moved page's old key, and remembers the review queue last used", () => {
@@ -54,7 +54,6 @@ describe("remembering a page", () => {
     });
 
     it("remembers the Studio page last used, as the list rather than one reel", () => {
-        rememberPage("/clips", "");
         rememberPage("/reels/r1", "");
 
         expect(store.get("ps:section:studio")).toBe("/reels");

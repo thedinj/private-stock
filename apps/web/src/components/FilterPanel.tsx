@@ -243,6 +243,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     heading = true,
     clearAll = true,
 }) => {
+    /** Clips or stills alone: no look, no history, no review passes (§14e "What a kind is"). */
+    const small = view.kind === "clip" || view.kind === "capture";
     /**
      * Which measurements are worth offering, given what is on screen.
      *
@@ -262,7 +264,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         (view.watched ? 1 : 0) +
         view.reviewedFor.length +
         view.notReviewedFor.length +
-        (view.minRating !== null || view.maxRating !== null ? 1 : 0);
+        (view.minRating !== null || view.maxRating !== null ? 1 : 0) +
+        (view.kind === "clip" && view.unused ? 1 : 0);
 
     const dateFilterCount = DATE_AXES.filter((axis) => isDateSet(view.dates[axis])).length;
 
@@ -513,8 +516,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                 )}
             </Group>
 
-            {/* Not in a room that does not embed (§21). */}
-            {roomRuns("embed") && (
+            {/* Not in a room that does not embed (§21), and not for clips or stills, which a
+                look has never seen. */}
+            {roomRuns("embed") && !small && (
                 <>
                     <SectionHeading label="Look" count={hasLook(view) ? 1 : 0} />
 
@@ -522,154 +526,184 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                 </>
             )}
 
-            <SectionHeading label="Your marks" count={markFilterCount} />
+            {/* A still has no marks of its own, and a clip no history (§14e "What a kind is"). */}
+            {view.kind !== "capture" && (
+                <SectionHeading label="Your marks" count={markFilterCount} />
+            )}
 
-            <Stack gap="xs">
-                <Switch
-                    label="Favourites only"
-                    color="oxblood"
-                    checked={view.favorite}
-                    onChange={(event) =>
-                        onChange({ ...view, favorite: event.currentTarget.checked })
-                    }
-                />
+            {view.kind === "clip" && (
+                <Stack gap="xs" mb="xs">
+                    <Switch
+                        label="Not in a reel yet"
+                        color="brass"
+                        checked={view.unused}
+                        onChange={(event) =>
+                            onChange({ ...view, unused: event.currentTarget.checked })
+                        }
+                    />
+                    {/* "Or its video" for every tag picked below (§14d "Tagging clips"): a clip
+                        does not carry its video's tags, and sometimes that is what is meant. */}
+                    <Switch
+                        label="Tags may be on the clip's video"
+                        color="brass"
+                        checked={view.orVideo}
+                        onChange={(event) =>
+                            onChange({ ...view, orVideo: event.currentTarget.checked })
+                        }
+                    />
+                </Stack>
+            )}
 
-                <Switch
-                    label="Unrated only"
-                    color="brass"
-                    checked={view.unrated}
-                    onChange={(event) =>
-                        // Mutually exclusive with a minimum rating: an item cannot be both
-                        // unrated and rated at least three, so allowing both would guarantee
-                        // an empty grid with no obvious cause.
-                        onChange({
-                            ...view,
-                            unrated: event.currentTarget.checked,
-                            minRating: event.currentTarget.checked ? null : view.minRating,
-                        })
-                    }
-                />
+            {view.kind !== "capture" && (
+                <Stack gap="xs">
+                    <Switch
+                        label="Favourites only"
+                        color="oxblood"
+                        checked={view.favorite}
+                        onChange={(event) =>
+                            onChange({ ...view, favorite: event.currentTarget.checked })
+                        }
+                    />
 
-                {/* Three states, so a segmented control rather than the switches above.
+                    <Switch
+                        label="Unrated only"
+                        color="brass"
+                        checked={view.unrated}
+                        onChange={(event) =>
+                            // Mutually exclusive with a minimum rating: an item cannot be both
+                            // unrated and rated at least three, so allowing both would guarantee
+                            // an empty grid with no obvious cause.
+                            onChange({
+                                ...view,
+                                unrated: event.currentTarget.checked,
+                                minRating: event.currentTarget.checked ? null : view.minRating,
+                            })
+                        }
+                    />
+
+                    {/* Three states, so a segmented control rather than the switches above.
                     A switch can only offer "watched only", and the companion people
                     actually reach for is the other one: "unrated only" pairs with
                     "unwatched only" (§14b). */}
-                <Group gap="xs" align="center">
-                    <Text size="sm" c="dimmed">
-                        Watched
-                    </Text>
-                    <SegmentedControl
-                        size="xs"
-                        color="brass"
-                        value={view.watched ?? "any"}
-                        onChange={(value) =>
-                            onChange({
-                                ...view,
-                                watched: value === "any" ? null : (value as "yes" | "no"),
-                            })
-                        }
-                        data={[
-                            { value: "any", label: "Any" },
-                            // Yes and no, because the row already asks the question.
-                            // Spelling the answers out again -- "Seen", "Unseen" -- renamed
-                            // the control in the middle of itself, and the chip it produced
-                            // then made one filter look like two.
-                            { value: "yes", label: "Yes" },
-                            { value: "no", label: "No" },
-                        ]}
-                    />
-                </Group>
+                    {!small && (
+                        <Group gap="xs" align="center">
+                            <Text size="sm" c="dimmed">
+                                Watched
+                            </Text>
+                            <SegmentedControl
+                                size="xs"
+                                color="brass"
+                                value={view.watched ?? "any"}
+                                onChange={(value) =>
+                                    onChange({
+                                        ...view,
+                                        watched: value === "any" ? null : (value as "yes" | "no"),
+                                    })
+                                }
+                                data={[
+                                    { value: "any", label: "Any" },
+                                    // Yes and no, because the row already asks the question.
+                                    // Spelling the answers out again -- "Seen", "Unseen" -- renamed
+                                    // the control in the middle of itself, and the chip it produced
+                                    // then made one filter look like two.
+                                    { value: "yes", label: "Yes" },
+                                    { value: "no", label: "No" },
+                                ]}
+                            />
+                        </Group>
+                    )}
 
-                {/* Reviewed for each of your passes in this room (§14d): what the d key
+                    {/* Reviewed for each of your passes in this room (§14d): what the d key
                     leaves behind on the item page. "Not yet" is a backlog, and passes
                     combine -- reviewed for Players, not yet for Wins. Absent until there is
                     a pass; one the view names that has gone still shows, so it can be
                     cleared from here. */}
-                {reviewRows.length > 0 && (
-                    <Stack gap={6}>
-                        <Text size="sm" c="dimmed">
-                            Reviewed for
-                        </Text>
-                        {reviewRows.map((pass) => (
-                            <Group key={pass.id} gap="xs" align="center" wrap="nowrap">
-                                <Text size="sm" truncate="end" style={{ flex: 1, minWidth: 0 }}>
-                                    {pass.name}
-                                </Text>
-                                <SegmentedControl
-                                    size="xs"
-                                    color="brass"
-                                    aria-label={`Reviewed for ${pass.name}`}
-                                    value={reviewFilterState(view, pass.id) ?? "any"}
-                                    onChange={(value) =>
-                                        onChange(
-                                            withReviewFilter(
-                                                view,
-                                                pass.id,
-                                                value === "any" ? null : (value as "yes" | "no")
+                    {reviewRows.length > 0 && !small && (
+                        <Stack gap={6}>
+                            <Text size="sm" c="dimmed">
+                                Reviewed for
+                            </Text>
+                            {reviewRows.map((pass) => (
+                                <Group key={pass.id} gap="xs" align="center" wrap="nowrap">
+                                    <Text size="sm" truncate="end" style={{ flex: 1, minWidth: 0 }}>
+                                        {pass.name}
+                                    </Text>
+                                    <SegmentedControl
+                                        size="xs"
+                                        color="brass"
+                                        aria-label={`Reviewed for ${pass.name}`}
+                                        value={reviewFilterState(view, pass.id) ?? "any"}
+                                        onChange={(value) =>
+                                            onChange(
+                                                withReviewFilter(
+                                                    view,
+                                                    pass.id,
+                                                    value === "any" ? null : (value as "yes" | "no")
+                                                )
                                             )
-                                        )
-                                    }
-                                    data={[
-                                        { value: "any", label: "Any" },
-                                        { value: "yes", label: "Yes" },
-                                        { value: "no", label: "Not yet" },
-                                    ]}
-                                />
-                            </Group>
-                        ))}
-                    </Stack>
-                )}
+                                        }
+                                        data={[
+                                            { value: "any", label: "Any" },
+                                            { value: "yes", label: "Yes" },
+                                            { value: "no", label: "Not yet" },
+                                        ]}
+                                    />
+                                </Group>
+                            ))}
+                        </Stack>
+                    )}
 
-                {/* Two rows rather than one two-ended control, because "at least" is the
+                    {/* Two rows rather than one two-ended control, because "at least" is the
                     question nearly everybody asks and it should cost one click. "At most" is
                     the re-review case — three stars and under, to go back through — and it
                     reads as a second thought because it is one. */}
-                <Group
-                    gap="xs"
-                    align="center"
-                    className={view.minRating === null ? classes.quiet : undefined}
-                >
-                    <Text size="sm" c="dimmed" w={58}>
-                        At least
-                    </Text>
-                    <Rating
-                        value={view.minRating ?? 0}
-                        color="brass"
-                        size="sm"
-                        onChange={(value) =>
-                            onChange({
-                                ...view,
-                                // Clicking the current minimum clears it — the only way back
-                                // to "any rating" without a separate control.
-                                minRating: value === view.minRating ? null : value,
-                                unrated: false,
-                            })
-                        }
-                    />
-                </Group>
+                    <Group
+                        gap="xs"
+                        align="center"
+                        className={view.minRating === null ? classes.quiet : undefined}
+                    >
+                        <Text size="sm" c="dimmed" w={58}>
+                            At least
+                        </Text>
+                        <Rating
+                            value={view.minRating ?? 0}
+                            color="brass"
+                            size="sm"
+                            onChange={(value) =>
+                                onChange({
+                                    ...view,
+                                    // Clicking the current minimum clears it — the only way back
+                                    // to "any rating" without a separate control.
+                                    minRating: value === view.minRating ? null : value,
+                                    unrated: false,
+                                })
+                            }
+                        />
+                    </Group>
 
-                <Group
-                    gap="xs"
-                    align="center"
-                    className={view.maxRating === null ? classes.quiet : undefined}
-                >
-                    <Text size="sm" c="dimmed" w={58}>
-                        At most
-                    </Text>
-                    <Rating
-                        value={view.maxRating ?? 0}
-                        color="brass"
-                        size="sm"
-                        onChange={(value) =>
-                            onChange({
-                                ...view,
-                                maxRating: value === view.maxRating ? null : value,
-                                unrated: false,
-                            })
-                        }
-                    />
-                </Group>
-            </Stack>
+                    <Group
+                        gap="xs"
+                        align="center"
+                        className={view.maxRating === null ? classes.quiet : undefined}
+                    >
+                        <Text size="sm" c="dimmed" w={58}>
+                            At most
+                        </Text>
+                        <Rating
+                            value={view.maxRating ?? 0}
+                            color="brass"
+                            size="sm"
+                            onChange={(value) =>
+                                onChange({
+                                    ...view,
+                                    maxRating: value === view.maxRating ? null : value,
+                                    unrated: false,
+                                })
+                            }
+                        />
+                    </Group>
+                </Stack>
+            )}
 
             {/* Its own section rather than rows of "The file": when somebody added an item is
                 not a property of the file, and these two are not offered to the Advanced

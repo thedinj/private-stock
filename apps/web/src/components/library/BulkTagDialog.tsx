@@ -67,7 +67,13 @@ export type BulkTagTarget =
      * Ticked clips on /clips (§14d "Tagging clips"). Like a selection, no preview; unlike one, it
      * writes a batch, so the page can offer Undo straight away.
      */
-    | { type: "clips"; clipIds: string[] };
+    | { type: "clips"; clipIds: string[] }
+    /**
+     * Items and clips ticked together on the library's All tab (§14e). Performer and keyword
+     * only, since that is all a clip takes; the items' tags are written as a selection's are and
+     * the clips' as a batch, and the outcome says both.
+     */
+    | { type: "mixed"; mediaIds: string[]; clipIds: string[] };
 
 /**
  * A tag to open holding, already in its facet and audience (§5d "Find untagged").
@@ -132,9 +138,9 @@ export const BulkTagDialog: React.FC<BulkTagDialogProps> = ({
     suggested,
 }) => {
     const queryClient = useQueryClient();
-    const clips = target.type === "clips";
+    const clips = target.type === "clips" || target.type === "mixed";
     const DESTINATIONS = clips ? CLIP_DESTINATIONS : ITEM_DESTINATIONS;
-    const noun = clips ? "clip" : "item";
+    const noun = target.type === "clips" ? "clip" : "item";
     /**
      * The first facet in `tagKinds` order — Performer, the one most bulk edits want.
      *
@@ -176,11 +182,44 @@ export const BulkTagDialog: React.FC<BulkTagDialogProps> = ({
             ? target.mediaIds.length
             : target.type === "clips"
               ? target.clipIds.length
-              : (preview.data?.affected ?? 0);
+              : target.type === "mixed"
+                ? target.mediaIds.length + target.clipIds.length
+                : (preview.data?.affected ?? 0);
     const overLimit = filter !== null && (preview.data?.overLimit ?? false);
 
     const apply = useMutation({
         mutationFn: async (names: string[]): Promise<{ message: string; batch?: TagBatch }> => {
+            if (target.type === "mixed") {
+                const said: string[] = [];
+
+                if (target.mediaIds.length > 0) {
+                    const result = await api<BulkActionResult>("/api/media/bulk", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            action: "tag",
+                            mediaIds: target.mediaIds,
+                            kind,
+                            names,
+                            scope,
+                        }),
+                    });
+
+                    said.push(describeBulkResult(result));
+                }
+
+                if (target.clipIds.length > 0) {
+                    const result = await api<BulkTagResult>("/api/clips/bulk/tags", {
+                        method: "POST",
+                        body: JSON.stringify({ clipIds: target.clipIds, kind, names, scope }),
+                    });
+                    const count = result.batch.clipCount ?? 0;
+
+                    said.push(`Tagged ${count.toLocaleString()} clip${count === 1 ? "" : "s"}`);
+                }
+
+                return { message: said.join(" · ") };
+            }
+
             if (target.type === "clips") {
                 const result = await api<BulkTagResult>("/api/clips/bulk/tags", {
                     method: "POST",
@@ -320,7 +359,7 @@ export const BulkTagDialog: React.FC<BulkTagDialogProps> = ({
 
                 {/* The filter-wide apply and a clip apply write a batch; a selection's tags come
                     off with Untag, from the same bar. */}
-                {target.type !== "selection" && (
+                {target.type !== "selection" && target.type !== "mixed" && (
                     <Text size="xs" c="dimmed">
                         This can be withdrawn afterwards from Tags › Manage. Withdrawing removes
                         only what this apply wrote.

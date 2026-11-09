@@ -144,6 +144,15 @@ export const queryKeys = {
         /** A few items by id, as tiles — the viewer's up-next strip. `ids` comma-joined. */
         lookup: (ids: string) => ["media", "lookup", ids],
         count: (filter: FilterParams) => ["media", "count", filter],
+        /**
+         * The Clips, Stills and All tabs (§14e "What a kind is"): `/api/library`.
+         *
+         * Under `media.all()`, so a rating, a tag or a trashed item reaches them like any page;
+         * the clip and still mutations invalidate `libraryAll()` beside their own prefixes.
+         */
+        libraryAll: () => ["media", "library"],
+        libraryPage: (filter: FilterParams, page: number) => ["media", "library", filter, page],
+        libraryCount: (filter: FilterParams) => ["media", "library", "count", filter],
         facets: () => ["media", "facets"],
         /**
          * The filter panel's tags. Not keyed by the filter: the numbers are library-wide (§20
@@ -151,17 +160,6 @@ export const queryKeys = {
          * facet and its search in the "show all" list.
          */
         facetsFor: (params: string) => ["media", "facets", params],
-        /**
-         * The Captures page (§9): this viewer's own stills of listable items.
-         *
-         * Under `media` rather than a namespace of its own because the page is filtered on
-         * `listable`, so trashing, restoring, purging and merging an item all change it — and
-         * every one of those already invalidates `media.all()`. Deliberately *not* under
-         * `list()`: the live feed patches every entry under that prefix as a page of grid
-         * tiles, and a page of captures is a different shape.
-         */
-        captures: () => ["media", "captures"],
-        capturesPage: (params: FilterParams, page: number) => ["media", "captures", params, page],
     },
 
     tags: {
@@ -373,12 +371,9 @@ export const queryKeys = {
      */
     clips: {
         all: () => ["clips"],
-        list: (params: FilterParams, page: number) => ["clips", "list", params, page],
         /** One clip and the reels holding it, read by the retime and discard dialogues. */
         detail: (clipId: string) => ["clips", clipId],
         labels: () => ["clips", "labels"],
-        /** The chips for the browser's "Video has" and "Clip has" fields (§14d). */
-        tagFacets: () => ["clips", "tags"],
         /** What ticked clips carry, for the untag dialogue; keyed by the sorted ids. */
         selection: (clipIds: string) => ["clips", "selection", clipIds],
     },

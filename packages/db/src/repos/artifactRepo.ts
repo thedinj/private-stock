@@ -340,17 +340,8 @@ const buildCaptureSearch = (
     return { where: `WHERE ${clauses.join(" AND ")}`, params };
 };
 
-export const searchCaptures = (
-    query: Pick<CaptureQuery, "search" | "sort" | "limit" | "page">,
-    scope: CaptureScope,
-    direction: "asc" | "desc"
-): CaptureSummaryRow[] => {
-    const { where, params } = buildCaptureSearch(query, scope);
-    const order = direction === "asc" ? "ASC" : "DESC";
-
-    return db
-        .prepare(
-            `SELECT a."id", a."mediaId", a."kind", a."ordinal", a."relPath", a."width",
+/** A capture with its item's title and its grid rendering: what the Captures page draws. */
+const CAPTURE_SUMMARY = `SELECT a."id", a."mediaId", a."kind", a."ordinal", a."relPath", a."width",
                     a."height", a."tileCount", a."intervalMs", a."bytes", a."atMs", a."source",
                     a."createdByUserId", a."label", a."generatorVersion", a."generatedAt",
                     m."title" AS "mediaTitle",
@@ -365,7 +356,19 @@ export const searchCaptures = (
                LEFT JOIN "Artifact" r ON a."ordinal" > 0
                                      AND r."mediaId" = a."mediaId"
                                      AND r."kind" = 'cover'
-                                     AND r."ordinal" = a."ordinal"
+                                     AND r."ordinal" = a."ordinal"`;
+
+export const searchCaptures = (
+    query: Pick<CaptureQuery, "search" | "sort" | "limit" | "page">,
+    scope: CaptureScope,
+    direction: "asc" | "desc"
+): CaptureSummaryRow[] => {
+    const { where, params } = buildCaptureSearch(query, scope);
+    const order = direction === "asc" ? "ASC" : "DESC";
+
+    return db
+        .prepare(
+            `${CAPTURE_SUMMARY}
               ${where}
               ORDER BY ${CAPTURE_SORT[query.sort](order)}
               LIMIT :limit OFFSET :offset`
@@ -410,3 +413,20 @@ export const recordArtifactChange = (
         detail: kind,
     });
 };
+
+/**
+ * Captures by id, as `searchCaptures` draws them, for the library's merged list (§14e).
+ *
+ * The ids come from `libraryRepo.smallKeys`, which applied the owner, access and hidden rules;
+ * `kind = 'capture'` and `listable` are asked again so a stale id draws nothing.
+ */
+export const capturesByIds = (ids: string[]): CaptureSummaryRow[] =>
+    ids.length === 0
+        ? []
+        : (db
+              .prepare(
+                  `${CAPTURE_SUMMARY}
+                    WHERE a."id" IN (SELECT value FROM json_each(?))
+                      AND a."kind" = 'capture' AND m."listable" = 1`
+              )
+              .all(JSON.stringify(ids)) as CaptureSummaryRow[]);

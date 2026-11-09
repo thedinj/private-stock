@@ -2340,14 +2340,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             !remote &&
                             keyTip(
                                 "capture",
-                                "Capture this frame",
+                                "Take a still",
                                 <ActionIcon
                                     variant="subtle"
                                     color={captureFailed ? "oxblood" : "brass"}
                                     size={iconSize}
                                     loading={capturing}
                                     onClick={captureHere}
-                                    aria-label="Capture this frame"
+                                    aria-label="Take a still"
                                 >
                                     <CaptureGlyph />
                                 </ActionIcon>
@@ -2517,7 +2517,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                                             disabled={capturing}
                                                             leftSection={<CaptureGlyph />}
                                                         >
-                                                            Capture this frame
+                                                            Take a still
                                                         </Menu.Item>
                                                     )}
                                                     {markClip && (

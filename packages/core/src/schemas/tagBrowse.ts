@@ -52,6 +52,8 @@ export const tagBrowseRowSchema = z.object({
     favorite: z.boolean(),
     videoCount: z.number(),
     imageCount: z.number(),
+    /** The viewer's own clips carrying it (§14e "What a kind is"). */
+    clipCount: z.number(),
     /** A few of its items, in the seed's order, already filtered to what the viewer may see. */
     strip: z.array(mediaListItemSchema),
 });
@@ -110,6 +112,8 @@ export const tagProfileSchema = z.object({
     favorite: z.boolean(),
     videoCount: z.number(),
     imageCount: z.number(),
+    /** The viewer's own clips carrying it (§14e). */
+    clipCount: z.number(),
     /** The picture at the top, from the seed's shuffle. Null when nothing visible carries it. */
     hero: mediaListItemSchema.nullable(),
     shelves: z.object({

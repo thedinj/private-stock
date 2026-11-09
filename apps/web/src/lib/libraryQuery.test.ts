@@ -114,6 +114,8 @@ describe("parseView", () => {
             filterId: null,
             page: 0,
             seed: null,
+            orVideo: false,
+            unused: false,
         });
     });
 

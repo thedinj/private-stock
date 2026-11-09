@@ -33,6 +33,7 @@ export * as trashRepo from "./trashRepo.js";
 export * as jobRepo from "./jobRepo.js";
 export * as clipRepo from "./clipRepo.js";
 export * as clipTagRepo from "./clipTagRepo.js";
+export * as libraryRepo from "./libraryRepo.js";
 export * as playlistRepo from "./playlistRepo.js";
 export * as reelRepo from "./reelRepo.js";
 export * as savedFilterRepo from "./savedFilterRepo.js";
@@ -92,6 +93,7 @@ export type { TrashEntryRow, TrashListRow, CreateTrashEntryInput } from "./trash
 export type { PlaylistRow, PlaylistSummaryRow, NewPlaylistInput } from "./playlistRepo.js";
 export type { ClipRow, ClipSummaryRow, NewClipInput } from "./clipRepo.js";
 export type { ClipTagRow, ClipTagFacetRow } from "./clipTagRepo.js";
+export type { SmallKeyRow, SmallType } from "./libraryRepo.js";
 export type { ReelRow, ReelSummaryRow, ReelEntryRow, NewReelInput } from "./reelRepo.js";
 export type { OverlayRow } from "./userMediaRepo.js";
 export type { SavedFilterRow, NewSavedFilterInput } from "./savedFilterRepo.js";

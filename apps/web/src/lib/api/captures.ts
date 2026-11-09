@@ -1,13 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import type {
-    CaptureListResponse,
-    CaptureQuery,
-    DiscardCapturesResult,
-    MediaFrame,
-} from "@private-stock/core";
+import type { DiscardCapturesResult, MediaFrame } from "@private-stock/core";
 
 import { queryKeys } from "@/lib/api/queryKeys";
 import { api } from "./client";
@@ -19,24 +14,6 @@ import { invalidateCovers } from "./frames";
  * Keys live under `media`, so the strokes that change which items can be listed — trash,
  * restore, purge — reach this page without knowing it exists. `docs/CACHE_KEYS.md` §2.
  */
-
-const serialise = (query: Partial<CaptureQuery>): string =>
-    new URLSearchParams(
-        Object.entries(query)
-            .filter(([, value]) => value !== undefined && value !== "")
-            .map(([key, value]) => [key, String(value)])
-    ).toString();
-
-export const useCaptures = (query: Partial<CaptureQuery>) => {
-    const params = serialise(query);
-
-    return useQuery({
-        queryKey: queryKeys.media.capturesPage(params, query.page ?? 0),
-        queryFn: () => api<CaptureListResponse>(`/api/captures?${params}`),
-        // Keeps the current page on screen while the next loads, as the other indexes do.
-        placeholderData: (previous) => previous,
-    });
-};
 
 /**
  * Write or clear a capture's caption.
@@ -62,7 +39,7 @@ export const useRenameCapture = () => {
                 body: JSON.stringify({ label }),
             }),
         onSuccess: (_frame, { mediaId }) => {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.media.captures() });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.libraryAll() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.detail(mediaId) });
         },
     });

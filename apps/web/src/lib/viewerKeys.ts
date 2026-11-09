@@ -124,7 +124,7 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         group: "transport",
         presses: ["s"],
         shown: "s",
-        does: "Capture this frame",
+        does: "Take a still of this frame",
         action: "capture",
         tip: ["s"],
     },

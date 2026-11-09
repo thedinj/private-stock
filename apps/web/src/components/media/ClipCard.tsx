@@ -53,6 +53,11 @@ interface ClipCardProps {
     onPlay: () => void;
     /** Hidden when the wall is already grouped by item, where it would be on every card. */
     showSource?: boolean;
+    /**
+     * A square picture, or the library tile's 16:9 -- among the library's own tiles on the All
+     * tab, a taller card would leave every row it is in ragged.
+     */
+    square?: boolean;
 }
 
 /**
@@ -67,29 +72,33 @@ interface ClipCardProps {
  * 44px high, the touch target, for the line a finger aims at.
  */
 const ClipTagButton: React.FC<{ clip: Clip }> = ({ clip }) => (
-    <Popover position="bottom" width={300} shadow="md" withinPortal trapFocus>
-        <Popover.Target>
-            <UnstyledButton
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Tags on ${clip.label ?? "this clip"}`}
-                mih={44}
-                style={{ display: "flex", alignItems: "center", minWidth: 0 }}
-            >
-                {clip.tags.length > 0 ? (
-                    <Text size="xs" c="dimmed" lineClamp={1} td="underline dotted">
-                        {clip.tags.map((tag) => tag.name).join(" · ")}
-                    </Text>
-                ) : (
-                    <Text size="xs" c="dimmed">
-                        + Add tags
-                    </Text>
-                )}
-            </UnstyledButton>
-        </Popover.Target>
-        <Popover.Dropdown onClick={(event) => event.stopPropagation()}>
-            <ClipQuickTags clip={clip} />
-        </Popover.Dropdown>
-    </Popover>
+    // The stop is on a wrapper: `Popover.Target` replaces its child's own click handler with its
+    // toggle, so a stop on the button never ran and the card behind it was ticked as well.
+    <Box onClick={(event) => event.stopPropagation()}>
+        <Popover position="bottom" width={300} shadow="md" withinPortal trapFocus>
+            <Popover.Target>
+                <UnstyledButton
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`Tags on ${clip.label ?? "this clip"}`}
+                    mih={44}
+                    style={{ display: "flex", alignItems: "center", minWidth: 0 }}
+                >
+                    {clip.tags.length > 0 ? (
+                        <Text size="xs" c="dimmed" lineClamp={1} td="underline dotted">
+                            {clip.tags.map((tag) => tag.name).join(" · ")}
+                        </Text>
+                    ) : (
+                        <Text size="xs" c="dimmed">
+                            + Add tags
+                        </Text>
+                    )}
+                </UnstyledButton>
+            </Popover.Target>
+            <Popover.Dropdown onClick={(event) => event.stopPropagation()}>
+                <ClipQuickTags clip={clip} />
+            </Popover.Dropdown>
+        </Popover>
+    </Box>
 );
 
 export const ClipCard: React.FC<ClipCardProps> = ({
@@ -98,6 +107,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
     onToggle,
     onPlay,
     showSource = true,
+    square = true,
 }) => (
     <Paper
         withBorder
@@ -118,7 +128,7 @@ export const ClipCard: React.FC<ClipCardProps> = ({
         }}
     >
         <Stack gap={6}>
-            <ClipThumb clip={clip} square>
+            <ClipThumb clip={clip} square={square}>
                 {/*
                  * Always drawn, not only on hover: selecting is what this page is *for*, and a
                  * control that appears when the pointer finds it is a control nobody discovers on
@@ -173,6 +183,31 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                 >
                     <PlayGlyph size={16} />
                 </ActionIcon>
+
+                {/* Your stars and heart, in the corner the library's tiles keep them in. */}
+                {(clip.rating !== null || clip.favorite) && (
+                    <Group
+                        gap={4}
+                        wrap="nowrap"
+                        style={{ position: "absolute", left: 6, bottom: 6 }}
+                    >
+                        {clip.rating !== null && (
+                            <Badge size="xs" variant="filled" color="dark">
+                                ★ {clip.rating}
+                            </Badge>
+                        )}
+                        {clip.favorite && (
+                            <Badge
+                                size="xs"
+                                variant="filled"
+                                color="oxblood"
+                                aria-label="Favourite"
+                            >
+                                ♥
+                            </Badge>
+                        )}
+                    </Group>
+                )}
 
                 <Group gap={4} wrap="nowrap" style={{ position: "absolute", right: 6, bottom: 6 }}>
                     {clip.speed !== null && (

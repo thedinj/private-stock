@@ -40,8 +40,7 @@ let chosenCover: string | null = null;
 let removed: string[] = [];
 /** Row removals and file deletions, interleaved, so their order can be asserted. */
 let steps: string[] = [];
-/** What the fake capture search was last asked, and what it answers. */
-let searched: { query: unknown; scope: unknown; direction: string } | null = null;
+/** What the fake capture lookup answers. */
 let searchRows: Record<string, unknown>[] = [];
 /** What the live feed was told, as `mediaId:detail`. */
 let announced: string[] = [];
@@ -146,12 +145,7 @@ vi.mock("@private-stock/db", () => ({
 
             return true;
         },
-        searchCaptures: (query: unknown, scope: unknown, direction: string) => {
-            searched = { query, scope, direction };
-
-            return searchRows;
-        },
-        countCaptures: () => searchRows.length + 100,
+        capturesByIds: () => searchRows,
         recordArtifactChange: (mediaId: string, _rootId: string | null, detail: string) => {
             announced.push(`${mediaId}:${detail}`);
         },
@@ -192,7 +186,7 @@ const {
     captureFrame,
     deleteCapture,
     discardCaptures,
-    listCaptures,
+    capturesForLibrary,
     listFrames,
     renameCapture,
     setCover,
@@ -244,7 +238,6 @@ beforeEach(() => {
     chosenCover = null;
     removed = [];
     steps = [];
-    searched = null;
     searchRows = [];
     announced = [];
     spawned = [];
@@ -841,7 +834,7 @@ describe("captions", () => {
     });
 });
 
-describe("the Captures page", () => {
+describe("stills in the library", () => {
     const row = (overrides: Record<string, unknown> = {}) => ({
         id: "cap-1",
         mediaId: "m1",
@@ -861,24 +854,10 @@ describe("the Captures page", () => {
         ...overrides,
     });
 
-    it("asks for this viewer's own, in the sort's natural direction", () => {
-        listCaptures({ sort: "created", limit: 60, page: 0 }, AUTH);
-        expect(searched).toMatchObject({
-            scope: { userId: "u1", accessibleRootIds: ["root"] },
-            direction: "desc",
-        });
-
-        listCaptures({ sort: "title", limit: 60, page: 0 }, AUTH);
-        expect(searched?.direction).toBe("asc");
-
-        listCaptures({ sort: "title", direction: "desc", limit: 60, page: 0 }, AUTH);
-        expect(searched?.direction).toBe("desc");
-    });
-
     it("draws the rendering and opens the still", () => {
         searchRows = [row()];
 
-        const [capture] = listCaptures({ sort: "created", limit: 60, page: 0 }, AUTH).items;
+        const [capture] = capturesForLibrary(["cap-1"], AUTH).values();
 
         expect(capture.url).toContain("/cover-1?");
         expect(capture.fullUrl).toContain("/capture-1?");
@@ -901,21 +880,10 @@ describe("the Captures page", () => {
             }),
         ];
 
-        const [capture] = listCaptures({ sort: "created", limit: 60, page: 0 }, AUTH).items;
+        const [capture] = capturesForLibrary(["cap-1"], AUTH).values();
 
         expect(capture.url).toBe(capture.fullUrl);
         expect(capture.coverable).toBe(false);
         expect(capture.isCover).toBe(false);
-    });
-
-    it("knows whether there is another page from the total", () => {
-        searchRows = [row()];
-
-        // The fake counts a hundred more than it returns.
-        const response = listCaptures({ sort: "created", limit: 60, page: 1 }, AUTH);
-
-        expect(response.total).toBe(101);
-        expect(response.hasMore).toBe(false);
-        expect(listCaptures({ sort: "created", limit: 60, page: 0 }, AUTH).hasMore).toBe(true);
     });
 });

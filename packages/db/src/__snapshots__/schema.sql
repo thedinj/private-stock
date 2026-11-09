@@ -67,6 +67,8 @@ CREATE TABLE "Clip" (
             "speed" REAL CHECK("speed" IS NULL OR ("speed" >= 0.25 AND "speed" <= 4)),
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "rating" INTEGER CHECK("rating" IS NULL OR "rating" BETWEEN 1 AND 5),
+            "favorite" INTEGER CHECK("favorite" IS NULL OR "favorite" = 1),
             FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE SET NULL,
             CHECK("startMs" >= 0),

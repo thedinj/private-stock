@@ -153,6 +153,24 @@ export const bulkClipUntagResultSchema = z.object({
 export type BulkClipUntagResult = z.infer<typeof bulkClipUntagResultSchema>;
 
 /**
+ * Rating or favouriting your clips, one or many (§14d "Clips in the library").
+ *
+ * The library's selection bar rates a mixed selection by sending the clips here and the items to
+ * `/api/media/bulk`; the clip viewer sends one. Either field may be left out; `rating: null`
+ * clears the stars.
+ */
+export const clipMarksSchema = z
+    .object({
+        clipIds: z.array(z.string()).min(1).max(CLIP_BULK_LIMIT),
+        rating: z.number().int().min(1).max(5).nullable().optional(),
+        favorite: z.boolean().optional(),
+    })
+    .refine((value) => value.rating !== undefined || value.favorite !== undefined, {
+        message: "Nothing to mark",
+    });
+export type ClipMarksInput = z.infer<typeof clipMarksSchema>;
+
+/**
  * A tag as it sits on a clip: the item-tag shape without the fields only items have.
  *
  * No `source`, `confidence` or `addedBy` -- only the clip's owner writes to it, and only by typing.
@@ -233,6 +251,9 @@ export const clipSchema = z.object({
      * read `reels` off the single-clip response.
      */
     reelCount: z.number(),
+    /** The owner's own stars, 1–5, or null (§14d "Clips in the library"). */
+    rating: z.number().nullable(),
+    favorite: z.boolean(),
     createdAt: z.string(),
     updatedAt: z.string(),
 });

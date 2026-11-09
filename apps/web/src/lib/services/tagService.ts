@@ -982,6 +982,7 @@ export const browseTags = (query: TagBrowseQuery, auth: AuthContext): TagBrowseR
             favorite: row.favorite === 1,
             videoCount: row.videoCount,
             imageCount: row.imageCount,
+            clipCount: row.clipCount,
             strip: strips.get(row.id) ?? [],
         })),
         total,

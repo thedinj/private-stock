@@ -2,11 +2,9 @@ import {
     AuthorizationError,
     ConflictError,
     NotFoundError,
-    REEL_ITEM_LIMIT,
     SELECTION_TAG_LIMIT,
     ValidationError,
     clampSpan,
-    clipNaturalDirection,
     spanRunMs,
     type BulkClipTagInput,
     type BulkClipUntagInput,
@@ -15,11 +13,8 @@ import {
     type ClipSelectionInput,
     type Clip,
     type ClipDetail,
-    type ClipIdsResponse,
-    type ClipListResponse,
-    type ClipQuery,
+    type ClipMarksInput,
     type ClipTag,
-    type ClipTagFacets,
     type CreateClipInput,
     type EditClipTagsInput,
     type SelectionTagsResponse,
@@ -117,6 +112,8 @@ const toClip = (row: clipRepo.ClipSummaryRow, auth: AuthContext, tags: ClipTag[]
         mine: row.userId !== null && row.userId === auth.userId,
         editable: mayAlterOwnWork(row.userId, auth),
         reelCount: row.reelCount,
+        rating: row.rating,
+        favorite: row.favorite === 1,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
     };
@@ -130,6 +127,36 @@ const toClip = (row: clipRepo.ClipSummaryRow, auth: AuthContext, tags: ClipTag[]
 export const clipsByIds = (ids: string[], auth: AuthContext): Map<string, Clip> =>
     new Map(clipRepo.listByIds(ids).map((row) => [row.id, toClip(row, auth)]));
 
+/**
+ * The viewer's own clips by id, with their tags, for the library's lists (§14e).
+ *
+ * Somebody else's id draws nothing: the library lists a person's own clips, and the ids come
+ * from a query that already said so.
+ */
+export const clipsForLibrary = (ids: string[], auth: AuthContext): Map<string, Clip> => {
+    const rows = clipRepo.listByIds(ids).filter((row) => row.userId === auth.userId);
+    const tags = ownTagsFor(rows);
+
+    return new Map(rows.map((row) => [row.id, toClip(row, auth, tags.get(row.id))]));
+};
+
+/**
+ * Stars or a heart on your clips (§14d "Clips in the library").
+ *
+ * The owner's alone, like the clip's tags: every id must be the caller's or nothing changes, the
+ * rule a bulk tag keeps (`ownSelection`).
+ */
+export const markClips = (input: ClipMarksInput, auth: AuthContext): { changed: number } => {
+    const clipIds = ownSelection(input.clipIds, auth);
+
+    return {
+        changed: clipRepo.setMarks(clipIds, auth.userId, {
+            rating: input.rating,
+            favorite: input.favorite,
+        }),
+    };
+};
+
 /** One item's clips for the strip under the player — this viewer's own, in timeline order. */
 export const listClipsFor = (mediaId: string, auth: AuthContext): Clip[] => {
     readableMedia(mediaId, auth);
@@ -138,33 +165,6 @@ export const listClipsFor = (mediaId: string, auth: AuthContext): Clip[] => {
     const tags = ownTagsFor(rows);
 
     return rows.map((row) => toClip(row, auth, tags.get(row.id)));
-};
-
-export const listClips = (query: ClipQuery, auth: AuthContext): ClipListResponse => {
-    const direction = query.direction ?? clipNaturalDirection(query.sort);
-    const scope = { userId: auth.userId, accessibleRootIds: auth.accessibleRootIds };
-    const rows = clipRepo.search(query, scope, direction);
-    const tags = ownTagsFor(rows);
-    const items = rows.map((row) => toClip(row, auth, tags.get(row.id)));
-
-    return {
-        items,
-        page: query.page,
-        pageSize: query.limit,
-        hasMore: rows.length === query.limit,
-        total: clipRepo.countSearch(query, scope),
-    };
-};
-
-/** Every clip the filter matches, for a selection that spans pages -- at most one reel's worth. */
-export const listClipIds = (query: ClipQuery, auth: AuthContext): ClipIdsResponse => {
-    const direction = query.direction ?? clipNaturalDirection(query.sort);
-    const scope = { userId: auth.userId, accessibleRootIds: auth.accessibleRootIds };
-
-    return {
-        ids: clipRepo.searchIds(query, scope, direction, REEL_ITEM_LIMIT),
-        total: clipRepo.countSearch(query, scope),
-    };
 };
 
 export const listLabels = (auth: AuthContext): string[] => clipRepo.distinctLabels(auth.userId);
@@ -416,20 +416,6 @@ export const bulkUntagClips = (
     });
 
     return { clips: tagIds.length > 0 ? clipTagRepo.unassignMany(clipIds, tagIds) : 0 };
-};
-
-/** The chips for /clips' two tag fields, counted over all of the viewer's clips. */
-export const listClipTagFacets = (auth: AuthContext): ClipTagFacets => {
-    const facets = clipTagRepo.facetsFor(auth.userId, auth.accessibleRootIds);
-    const toValue = (row: clipTagRepo.ClipTagFacetRow) => ({
-        tagId: row.tagId,
-        kind: row.kind,
-        name: row.name,
-        private: row.ownerId !== null,
-        count: row.count,
-    });
-
-    return { clip: facets.clip.map(toValue), video: facets.video.map(toValue) };
 };
 
 /**

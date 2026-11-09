@@ -64,7 +64,11 @@ export interface LibraryView {
      */
     root: string | null;
     search: string;
-    kind: "all" | "video" | "image";
+    /**
+     * Which shelf (§14e "What a kind is"): videos, photos, your clips, your stills, or all four.
+     * The last three are `/api/library`; the address spells a still `capture`, its name in code.
+     */
+    kind: LibraryKind;
     sort: MediaSort;
     /**
      * Which way round the sort reads.
@@ -170,7 +174,20 @@ export interface LibraryView {
      * the first page you were looking at.
      */
     seed: number | null;
+    /**
+     * Whether a clip may also answer the tag picks through its video ("or its video", §14d), and
+     * whether to show only clips in no reel yet. Clip-only, so read only on the Clips tab.
+     */
+    orVideo: boolean;
+    unused: boolean;
 }
+
+/** The shelves the library tabs offer. */
+export type LibraryKind = "video" | "image" | "clip" | "capture" | "all";
+
+/** The tabs served by `/api/library` rather than `/api/media`: anything with clips or stills in. */
+export const isLibraryTab = (kind: LibraryKind): kind is "clip" | "capture" | "all" =>
+    kind === "clip" || kind === "capture" || kind === "all";
 
 /**
  * The measurable axes, named once (§14e).
@@ -305,6 +322,8 @@ export const DEFAULT_VIEW: LibraryView = {
     filterId: null,
     page: 0,
     seed: null,
+    orVideo: false,
+    unused: false,
 };
 
 // Read from the schema rather than listed here: a hand-kept copy fell behind when the
@@ -359,7 +378,10 @@ export const parseView = (params: URLSearchParams): LibraryView => {
     return {
         root,
         search: params.get("search") ?? "",
-        kind: kind === "all" || kind === "image" ? kind : "video",
+        kind:
+            kind === "all" || kind === "image" || kind === "clip" || kind === "capture"
+                ? kind
+                : "video",
         sort: isSort(params.get("sort")) ? (params.get("sort") as MediaSort) : "addedAt",
         direction: direction,
         tags: idList(params.get("tags")),
@@ -412,6 +434,8 @@ export const parseView = (params: URLSearchParams): LibraryView => {
             Number.isFinite(Number(params.get("seed"))) && params.get("seed") !== null
                 ? Number(params.get("seed"))
                 : null,
+        orVideo: params.get("orVideo") === "1",
+        unused: params.get("unused") === "1",
     };
 };
 
@@ -485,6 +509,8 @@ export const viewToParams = (view: LibraryView): URLSearchParams => {
     if (view.filterId) params.set("filter", view.filterId);
     if (view.page > 0) params.set("page", String(view.page));
     if (view.seed !== null) params.set("seed", String(view.seed));
+    if (view.kind === "clip" && view.orVideo) params.set("orVideo", "1");
+    if (view.kind === "clip" && view.unused) params.set("unused", "1");
 
     return params;
 };
@@ -538,6 +564,30 @@ export const viewToRequestParams = (view: LibraryView): URLSearchParams => {
     return params;
 };
 
+/**
+ * Parameters for `/api/library`: the Clips, Stills and All tabs (§14e "What a kind is").
+ *
+ * The media request's own, with the kind said outright -- All is `kind=all` there, where to
+ * `/api/media` no kind is videos and photos -- and the clip-only fields in the query's spelling.
+ */
+export const libraryRequestParams = (view: LibraryView): URLSearchParams => {
+    const params = viewToRequestParams(view);
+
+    params.set("kind", view.kind);
+    params.delete("orVideo");
+    params.delete("unused");
+
+    // Every tag pick, widened: the switch is one for the whole filter.
+    const picks = [...view.tags, ...view.notTags];
+
+    if (view.kind === "clip" && view.orVideo && picks.length > 0) {
+        params.set("orVideo", picks.join(","));
+    }
+    if (view.kind === "clip" && view.unused) params.set("unusedOnly", "true");
+
+    return params;
+};
+
 /** The request parameters minus the filter marker, for comparing queries rather than views. */
 const queryParams = (view: LibraryView): URLSearchParams => {
     // Without the look, which a saved filter cannot keep (§5e): looking within a saved filter
@@ -550,6 +600,10 @@ const queryParams = (view: LibraryView): URLSearchParams => {
     });
 
     params.delete("filter");
+    // A saved query is the library's own (`MediaQuery`): clips and stills are not in it.
+    if (view.kind === "clip" || view.kind === "capture") params.delete("kind");
+    params.delete("orVideo");
+    params.delete("unused");
     // Nor the seed: a saved shuffle is "a shuffle", dealt afresh each time it is opened. Kept,
     // it froze the order the view had when it was saved, and every link to the view replayed
     // it -- Reshuffle changed only the address, so the next visit was the old set again.
@@ -589,6 +643,7 @@ export const isFiltered = (view: LibraryView): boolean =>
     view.maxRating !== null ||
     view.orientation !== null ||
     view.animated !== null ||
+    (view.kind === "clip" && view.unused) ||
     DATE_AXES.some((axis) => isDateSet(view.dates[axis])) ||
     MEASURES.some(
         (measure) => view.measures[measure].min !== null || view.measures[measure].max !== null
@@ -647,6 +702,11 @@ export const fileFilterGroups = (kind: LibraryView["kind"]): FileFilterGroup[] =
     const rowsFor = (applies: "video" | "image" | "any"): FileFilterRow[] =>
         (Object.keys(ROW_KIND) as FileFilterRow[]).filter((row) => ROW_KIND[row] === applies);
 
+    // A clip is a span of a video: its run time, and its video's measures. A still is a picture
+    // of one: what any picture has. Neither moves the way an animated image does.
+    if (kind === "clip") return [{ label: null, rows: [...rowsFor("any"), ...rowsFor("video")] }];
+    if (kind === "capture") return [{ label: null, rows: rowsFor("any") }];
+
     const groups: FileFilterGroup[] = [{ label: mixed ? "Any item" : null, rows: rowsFor("any") }];
 
     if (kind !== "image") {
@@ -684,7 +744,11 @@ export const withMeasure = (
     return {
         ...view,
         measures: { ...view.measures, [measure]: { min, max } },
-        kind: setting && applies !== "any" ? applies : view.kind,
+        // A clip has a run time and its video's measures, so the Clips tab stays put.
+        kind:
+            setting && applies !== "any" && !(view.kind === "clip" && applies === "video")
+                ? applies
+                : view.kind,
         page: 0,
     };
 };
@@ -729,6 +793,8 @@ export const clearFilters = (view: LibraryView): LibraryView => ({
     orientation: null,
     animated: null,
     dates: NO_DATES,
+    orVideo: false,
+    unused: false,
     page: 0,
 });
 

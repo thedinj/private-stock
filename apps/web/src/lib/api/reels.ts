@@ -6,12 +6,10 @@ import type {
     AddReelItemsInput,
     BulkClipUntagInput,
     BulkClipUntagResult,
+    ClipMarksInput,
     Clip,
     ClipDetail,
-    ClipIdsResponse,
-    ClipListResponse,
     ClipQuery,
-    ClipTagFacets,
     CreateClipInput,
     CreateReelInput,
     Reel,
@@ -172,42 +170,12 @@ export const useMoveReelItem = () =>
 
 /* ── Clips ─────────────────────────────────────────────────────────────────────────────── */
 
-export const useClips = (query: Partial<ClipQuery>) => {
-    const params = serialise(query);
-
-    return useQuery({
-        queryKey: queryKeys.clips.list(params, query.page ?? 0),
-        queryFn: () => api<ClipListResponse>(`/api/clips?${params}`),
-        placeholderData: (previous) => previous,
-    });
-};
-
-/**
- * Every clip a filter matches, at most one reel's worth -- "Select all N matching" (§14d).
- *
- * A one-off read on a click rather than a cached query: the answer is a selection, used once,
- * and a cached copy would be a selection of what the filter matched some time ago.
- */
-export const fetchClipIds = (query: Partial<ClipQuery>): Promise<ClipIdsResponse> =>
-    api<ClipIdsResponse>(`/api/clips/ids?${serialise({ ...query, page: undefined })}`);
-
 /** Labels this person has used before, so a clip's name is offered rather than retyped. */
 export const useClipLabels = () =>
     useQuery({
         queryKey: queryKeys.clips.labels(),
         queryFn: () => api<{ labels: string[] }>("/api/clips/labels"),
         staleTime: 60_000,
-    });
-
-/**
- * The chips for the browser's "Video has" and "Clip has" fields (§14d "Tagging clips").
- *
- * Under `clips.all()`, so every clip write refreshes them.
- */
-export const useClipTagFacets = () =>
-    useQuery({
-        queryKey: queryKeys.clips.tagFacets(),
-        queryFn: () => api<ClipTagFacets>("/api/clips/tags"),
     });
 
 /** One clip with the reels holding it named — what a retime or a discard has to say first. */
@@ -242,6 +210,7 @@ const useClipMutation = <TArgs, TResult>(
             }
 
             void queryClient.invalidateQueries({ queryKey: queryKeys.clips.all() });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.libraryAll() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.reels.all() });
             onDone?.(result, args);
         },
@@ -307,6 +276,27 @@ export const useUntagClips = (onDone: (result: BulkClipUntagResult) => void) => 
         onSuccess: (result) => {
             invalidateVocabulary(queryClient);
             onDone(result);
+        },
+    });
+};
+
+/**
+ * Stars or a heart on your clips (§14d "Clips in the library"). The library's tabs draw them, and
+ * the Clips tab's rating filter reads them, so its lists refetch.
+ */
+export const useMarkClips = (onDone?: () => void) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: ClipMarksInput) =>
+            api<{ changed: number }>("/api/clips/bulk/marks", {
+                method: "POST",
+                body: JSON.stringify(input),
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.clips.all() });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.libraryAll() });
+            onDone?.();
         },
     });
 };

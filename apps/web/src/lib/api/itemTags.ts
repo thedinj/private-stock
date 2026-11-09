@@ -257,6 +257,7 @@ export const useClipFacetTags = (
                 current ? { ...current, tags } : current
             );
             void queryClient.invalidateQueries({ queryKey: queryKeys.clips.all() });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.media.libraryAll() });
             void queryClient.invalidateQueries({ queryKey: queryKeys.media.detail(mediaId) });
             refreshSuggestions(queryClient, kind, scope, op);
         },

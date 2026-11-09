@@ -266,7 +266,7 @@ export const FrameLightbox: React.FC<FrameLightboxProps> = ({
                 frame ? (
                     <Group gap="sm">
                         <Text size="sm">
-                            {frame.source === "user" ? "Captured frame" : "Generated frame"}
+                            {frame.source === "user" ? "Your still" : "Generated frame"}
                         </Text>
                         {atLabel(frame.atMs) && (
                             <Text size="sm" c="dimmed">

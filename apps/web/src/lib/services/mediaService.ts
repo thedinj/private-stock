@@ -135,7 +135,7 @@ type TileTag = { name: string; kind: string };
  * The tags are one query for the page rather than one per tile, which is the difference between
  * an indexed lookup and sixty round trips on the hottest screen in the app (§20).
  */
-function* listPage(rows: ListRow[], userId: string): ReadPlan<MediaListItem[]> {
+export function* listPage(rows: ListRow[], userId: string): ReadPlan<MediaListItem[]> {
     const byMedia = new Map<string, TileTag[]>();
     const tagRows = yield* read(
         "tagsForMediaIds",
@@ -212,7 +212,7 @@ const inOneSnapshot = <T>(read: () => T): T => db.transaction(read).deferred();
  * grid, its count, the viewer -- which is what makes keeping an untagged list's order worth its
  * walk (`keepsOrder`); a shuffle's order is kept for every caller.
  */
-function* listMediaReads(
+export function* listMediaReads(
     asked: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,
@@ -335,7 +335,7 @@ export const listMediaIdsPageOffThread = (
  * `overlayUserId` must be whatever the page was listed with, or the count describes a
  * different set from the one on screen.
  */
-function* countMediaReads(
+export function* countMediaReads(
     asked: MediaQuery,
     auth: AuthContext,
     overlayUserId?: string,

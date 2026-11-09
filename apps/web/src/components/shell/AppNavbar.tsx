@@ -46,11 +46,15 @@ import classes from "./AppNavbar.module.scss";
  */
 const navPadding = { paddingInline: "calc(var(--app-shell-padding) - 6px)" };
 
-/** Smallest to largest: a still, a span, a sequence of spans. */
-const STUDIO_PAGES = [
-    { href: "/captures", label: "Captures" },
-    { href: "/clips", label: "Clips" },
-    { href: "/reels", label: "Reels" },
+/**
+ * Smallest to largest: a still, a span, a sequence of spans.
+ *
+ * Stills and clips are the library's own tabs now (§14e "What a kind is"), so their entries open
+ * those tabs; Reels is still a page of its own.
+ */
+const STUDIO_TABS = [
+    { kind: "capture", label: "Stills" },
+    { kind: "clip", label: "Clips" },
 ];
 
 /** A function, because the first three are named by the room (§21). */
@@ -450,13 +454,14 @@ export const AppNavbar: React.FC<{
                 style={navPadding}
                 onClick={onNavigate}
             />
-            {STUDIO_PAGES.map((page) => (
-                <RememberedNavLink
-                    key={page.href}
-                    path={page.href}
-                    label={page.label}
-                    // A reel's own page is still Reels.
-                    active={pathname === page.href || pathname.startsWith(`${page.href}/`)}
+            {STUDIO_TABS.map((tab) => (
+                <NavLink
+                    key={tab.kind}
+                    component={Link}
+                    prefetch={false}
+                    href={`/?view=grid&kind=${tab.kind}`}
+                    label={tab.label}
+                    active={pathname === "/" && params.get("kind") === tab.kind}
                     color="brass"
                     style={{
                         ...navPadding,
@@ -465,6 +470,18 @@ export const AppNavbar: React.FC<{
                     onClick={onNavigate}
                 />
             ))}
+            <RememberedNavLink
+                path="/reels"
+                label="Reels"
+                // A reel's own page is still Reels.
+                active={pathname === "/reels" || pathname.startsWith("/reels/")}
+                color="brass"
+                style={{
+                    ...navPadding,
+                    paddingInlineStart: "calc(var(--app-shell-padding) - 6px + 16px)",
+                }}
+                onClick={onNavigate}
+            />
 
             {/* Deliberately outside the admin block below: everybody has private tags, and a
                 screen where a regular account manages its own vocabulary in full does not

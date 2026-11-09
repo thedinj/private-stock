@@ -1534,6 +1534,8 @@ const pagingStatement = (
     pagingParams: Record<string, unknown>;
     params: Record<string, unknown>;
     order: string;
+    /** Whose ratings the sort reads: the viewer's `um`, or a shared filter's owner's `oum`. */
+    ratingAlias: string;
 } => {
     const { where, params, ratingAlias, source, driven } = buildFilters(
         query,
@@ -1610,6 +1612,7 @@ const pagingStatement = (
         pagingParams,
         params,
         order,
+        ratingAlias,
     };
 };
 
@@ -1714,6 +1717,41 @@ export const listMediaIdsPage = (
         pageSize: query.limit,
         hasMore: ids.length > query.limit,
     };
+};
+
+/**
+ * One window of a query's ordering as ids **with their sort key**, for the library's All tab
+ * (§14e "What a kind is").
+ *
+ * The same paging statement as `pageIds`, so the window is exactly the grid's rows in the grid's
+ * order; the key is the ORDER BY's own expression, which is what lets the caller slot the
+ * viewer's clips and stills between them by the same rule (`libraryMerge`). No hydration.
+ */
+export const pageKeys = (
+    query: MediaQuery,
+    userId: string,
+    rootIds: string[],
+    overlayUserId: string | undefined,
+    limit: number,
+    offset: number
+): { id: string; k: number | string | null }[] => {
+    const { from, where, pagingParams, ratingAlias } = pagingStatement(
+        query,
+        userId,
+        rootIds,
+        overlayUserId,
+        query.sort === "random"
+    );
+    const direction = (query.direction ?? naturalDirection(query.sort)) === "desc" ? "DESC" : "ASC";
+    const key = sortColumn(query, ratingAlias);
+
+    return db
+        .prepare(
+            `SELECT m."id" AS "id", ${key} AS "k" FROM ${from} WHERE ${where}
+              ORDER BY ${key} ${direction}${nullsLast(query)}, m."id" ${direction}
+              LIMIT :limit OFFSET :offset`
+        )
+        .all({ ...pagingParams, limit, offset }) as { id: string; k: number | string | null }[];
 };
 
 /**

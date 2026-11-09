@@ -1999,6 +1999,9 @@ export function initializeDatabase(db: Database): void {
         -- and most are never used, so unlike a capture (§9) it is not library-wide to read:
         -- /clips and the item page list your own, and the only way anybody else sees one is as
         -- a span inside a reel they can open. The reel grants the read, not the library.
+        --
+        -- "rating" and "favorite" are the owner's own judgement of the span (§14d "Clips in the
+        -- library"): on the row, since a clip is nobody else's to rate. 1 or NULL, never 0.
         CREATE TABLE IF NOT EXISTS "Clip" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "mediaId" TEXT NOT NULL,
@@ -2023,6 +2026,8 @@ export function initializeDatabase(db: Database): void {
             "speed" REAL CHECK("speed" IS NULL OR ("speed" >= 0.25 AND "speed" <= 4)),
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL,
+            "rating" INTEGER CHECK("rating" IS NULL OR "rating" BETWEEN 1 AND 5),
+            "favorite" INTEGER CHECK("favorite" IS NULL OR "favorite" = 1),
             FOREIGN KEY ("mediaId") REFERENCES "Media" ("id") ON DELETE CASCADE,
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE SET NULL,
             CHECK("startMs" >= 0),

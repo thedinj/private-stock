@@ -106,7 +106,7 @@ export const shuffleParams = (seed: number, maxRowid: number): ShuffleParams => 
  * switches to floating point and the order stops being a permutation. Both factors are below
  * 2^31, so the product is below 2^62.
  */
-const ROWID_SHUFFLE_PRIME = 2_147_483_647;
+export const ROWID_SHUFFLE_PRIME = 2_147_483_647;
 
 /** A seed's permutation of rowids, the same however large the library grows. */
 export const rowidShuffleParams = (seed: number): ShuffleParams =>

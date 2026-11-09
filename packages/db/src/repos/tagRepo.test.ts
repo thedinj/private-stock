@@ -645,13 +645,21 @@ describe("browsing a facet", () => {
     it("counts one tag's videos and photos apart, and only listable ones", () => {
         const dad = tagRepo.ensureTag("cellar", "performer", "Dad", null);
 
-        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({ videoCount: 0, imageCount: 0 });
+        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({
+            videoCount: 0,
+            imageCount: 0,
+            clipCount: 0,
+        });
 
         tag(dad, MEDIA_A);
         tag(dad, PHOTO);
         tag(dad, TRASHED);
 
-        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({ videoCount: 1, imageCount: 1 });
+        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({
+            videoCount: 1,
+            imageCount: 1,
+            clipCount: 0,
+        });
     });
 
     /**
@@ -674,7 +682,11 @@ describe("browsing a facet", () => {
             .run(USER, MEDIA_A);
         sharedDb.prepare(`UPDATE "Media" SET "listRootId" = 'elsewhere' WHERE "id" = ?`).run(PHOTO);
 
-        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({ videoCount: 1, imageCount: 0 });
+        expect(tagRepo.countByKind(dad, VIEWER)).toEqual({
+            videoCount: 1,
+            imageCount: 0,
+            clipCount: 0,
+        });
         expect(browse(null).rows).toEqual([
             expect.objectContaining({ name: "Dad", videoCount: 1, imageCount: 0 }),
         ]);
@@ -683,15 +695,17 @@ describe("browsing a facet", () => {
         expect(tagRepo.countByKind(dad, { userId: OTHER_USER, rootIds: [ROOT] })).toEqual({
             videoCount: 2,
             imageCount: 0,
+            clipCount: 0,
         });
         expect(
             tagRepo.countByKind(dad, { userId: OTHER_USER, rootIds: [ROOT, "elsewhere"] })
-        ).toEqual({ videoCount: 2, imageCount: 1 });
+        ).toEqual({ videoCount: 2, imageCount: 1, clipCount: 0 });
 
         // No libraries at all: nothing to count, and nothing on the browse page.
         expect(tagRepo.countByKind(dad, { userId: USER, rootIds: [] })).toEqual({
             videoCount: 0,
             imageCount: 0,
+            clipCount: 0,
         });
         expect(browse(null, { rootIds: [] })).toEqual({ rows: [], total: 0 });
     });

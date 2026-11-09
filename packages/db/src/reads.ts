@@ -15,6 +15,7 @@ import * as tagRepo from "./repos/tagRepo.js";
 export const reads = {
     listMedia: mediaRepo.listMedia,
     listMediaIdsPage: mediaRepo.listMediaIdsPage,
+    pageKeys: mediaRepo.pageKeys,
     countMedia: mediaRepo.countMedia,
     listByIds: mediaRepo.listByIds,
     orderedRowids: mediaRepo.orderedRowids,

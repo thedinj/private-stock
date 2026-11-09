@@ -10,10 +10,7 @@ import {
     ValidationError,
     artifactRelPath,
     assertSafeRelativePath,
-    captureNaturalDirection,
     type Capture,
-    type CaptureListResponse,
-    type CaptureQuery,
     type DiscardCapturesResult,
     type MediaFrame,
 } from "@private-stock/core";
@@ -621,55 +618,44 @@ const discardOne = async (
     }
 };
 
+/** A capture as the lists draw it: the still, its item, and its grid rendering. */
+const toCapture = (row: artifactRepo.CaptureSummaryRow, auth: AuthContext): Capture => ({
+    artifactId: row.id,
+    kind: "capture",
+    // The grid-sized rendering when there is one, as the strip draws it.
+    url: frameUrl(
+        row.mediaId,
+        row.renderingRelPath !== null && row.renderingGeneratedAt !== null
+            ? {
+                  kind: "cover",
+                  ordinal: row.ordinal,
+                  relPath: row.renderingRelPath,
+                  generatedAt: row.renderingGeneratedAt,
+              }
+            : row
+    ),
+    fullUrl: frameUrl(row.mediaId, row),
+    atMs: row.atMs,
+    isCover: row.isCover === 1,
+    coverable: row.renderingId !== null,
+    discardable: mayDiscard(row, auth),
+    label: row.label,
+    source: row.source,
+    createdAt: row.generatedAt,
+    mediaId: row.mediaId,
+    mediaTitle: row.mediaTitle ?? "Untitled",
+});
+
 /**
- * This viewer's own captures, a page at a time (§9 "Your captures, in one place").
- *
- * Only their own, although captures are library-wide to read: the page answers "what have I
- * grabbed", and everybody's remain on each item's strip. The user comes from the session and
- * never from the query, so there is no parameter by which to ask for somebody else's.
+ * The viewer's own stills by id, for the library's lists (§14e). Somebody else's draws nothing.
  */
-export const listCaptures = (query: CaptureQuery, auth: AuthContext): CaptureListResponse => {
-    const direction = query.direction ?? captureNaturalDirection(query.sort);
-    const scope = { userId: auth.userId, accessibleRootIds: auth.accessibleRootIds };
-    const rows = artifactRepo.searchCaptures(query, scope, direction);
-    const total = artifactRepo.countCaptures(query, scope);
-
-    const items = rows.map((row): Capture => ({
-        artifactId: row.id,
-        kind: "capture",
-        // The grid-sized rendering when there is one, as the strip draws it.
-        url: frameUrl(
-            row.mediaId,
-            row.renderingRelPath !== null && row.renderingGeneratedAt !== null
-                ? {
-                      kind: "cover",
-                      ordinal: row.ordinal,
-                      relPath: row.renderingRelPath,
-                      generatedAt: row.renderingGeneratedAt,
-                  }
-                : row
-        ),
-        fullUrl: frameUrl(row.mediaId, row),
-        atMs: row.atMs,
-        isCover: row.isCover === 1,
-        coverable: row.renderingId !== null,
-        discardable: mayDiscard(row, auth),
-        label: row.label,
-        source: row.source,
-        createdAt: row.generatedAt,
-        mediaId: row.mediaId,
-        mediaTitle: row.mediaTitle ?? "Untitled",
-    }));
-
-    return {
-        items,
-        page: query.page,
-        pageSize: query.limit,
-        // From the total rather than from a full page, which is wrong at exact multiples.
-        hasMore: (query.page + 1) * query.limit < total,
-        total,
-    };
-};
+export const capturesForLibrary = (ids: string[], auth: AuthContext): Map<string, Capture> =>
+    new Map(
+        artifactRepo
+            .capturesByIds(ids)
+            .filter((row) => row.createdByUserId === auth.userId)
+            .map((row) => [row.id, toCapture(row, auth)])
+    );
 
 /**
  * Write or clear a capture's caption.

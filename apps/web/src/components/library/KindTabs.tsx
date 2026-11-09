@@ -7,6 +7,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { MediaCountResponse } from "@private-stock/core";
 
 import { api } from "@/lib/api/client";
+import { useLibraryCount } from "@/lib/api/libraryTabs";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { effectiveSort, viewToRequestParams, type LibraryView } from "@/lib/libraryQuery";
 
@@ -22,6 +23,10 @@ import classes from "./KindTabs.module.scss";
  * often. Tabs say "which shelf" in the vocabulary everybody already reads, never move, and
  * separate choosing a shelf from narrowing within it, which is the distinction `clearFilters`
  * already draws.
+ *
+ * **Clips and Stills sit between the two and All** (§14e "What a kind is", 2026-11-08): your own
+ * spans and your own stills, counted from the small set the server reads whole for them -- a
+ * person has hundreds -- so their counts cost nothing like a library count.
  *
  * **All comes last and carries no count.** The mixed view is still wanted -- a search across
  * both, a showcase of everything -- but it is not where anybody starts, and giving it equal
@@ -72,6 +77,14 @@ const useKindCount = (view: LibraryView, kind: "video" | "image"): number | null
     return data?.total ?? null;
 };
 
+/** Your clips or stills under the current filter; asked once the filter has settled, like the other kind. */
+const useSmallCount = (view: LibraryView, kind: "clip" | "capture"): number | null => {
+    const [settled] = useDebouncedValue(view, view.kind === kind ? 0 : SETTLE_MS);
+    const { data } = useLibraryCount({ ...settled, kind });
+
+    return data?.total ?? null;
+};
+
 const Count: React.FC<{ value: number | null }> = ({ value }) =>
     value === null ? null : (
         <Text span size="xs" c="dimmed" ml={6}>
@@ -82,6 +95,8 @@ const Count: React.FC<{ value: number | null }> = ({ value }) =>
 export const KindTabs: React.FC<KindTabsProps> = ({ view, onChange, touch, inline = false }) => {
     const videos = useKindCount(view, "video");
     const photos = useKindCount(view, "image");
+    const clips = useSmallCount(view, "clip");
+    const stills = useSmallCount(view, "capture");
 
     return (
         <Tabs
@@ -91,14 +106,23 @@ export const KindTabs: React.FC<KindTabsProps> = ({ view, onChange, touch, inlin
             // A tab switch is a navigation of this page, not a panel swap: there are no
             // `Tabs.Panel`s, and the grid below is what changes.
             activateTabWithKeyboard
-            styles={touch ? { tab: { height: "2.75rem" } } : undefined}
+            // Five shelves do not fit a phone's width with their counts, and wrapping left All
+            // alone on a second row: one row that scrolls sideways instead.
+            styles={
+                touch
+                    ? {
+                          list: { flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" },
+                          tab: { height: "2.75rem", flex: "none" },
+                      }
+                    : undefined
+            }
             classNames={
                 inline
                     ? { root: classes.inlineRoot, list: classes.inlineList, tab: classes.inlineTab }
                     : undefined
             }
         >
-            <Tabs.List grow={touch}>
+            <Tabs.List>
                 <Tabs.Tab value="video">
                     Videos
                     <Count value={videos} />
@@ -106,6 +130,14 @@ export const KindTabs: React.FC<KindTabsProps> = ({ view, onChange, touch, inlin
                 <Tabs.Tab value="image">
                     Photos
                     <Count value={photos} />
+                </Tabs.Tab>
+                <Tabs.Tab value="clip">
+                    Clips
+                    <Count value={clips} />
+                </Tabs.Tab>
+                <Tabs.Tab value="capture">
+                    Stills
+                    <Count value={stills} />
                 </Tabs.Tab>
                 <Tabs.Tab value="all">All</Tabs.Tab>
             </Tabs.List>

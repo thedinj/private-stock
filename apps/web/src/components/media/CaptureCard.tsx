@@ -105,7 +105,7 @@ export const CaptureCard: React.FC<CaptureCardProps> = ({
                                 checked={selected}
                                 onChange={onToggle}
                                 onClick={(event) => event.stopPropagation()}
-                                aria-label={`Select ${capture.label ?? "capture"}`}
+                                aria-label={`Select ${capture.label ?? "still"}`}
                                 size="xs"
                             />
                         </Box>
@@ -147,7 +147,7 @@ export const CaptureCard: React.FC<CaptureCardProps> = ({
                 </Box>
 
                 <Text size="xs" fw={600} lineClamp={1} c={capture.label ? undefined : "dimmed"}>
-                    {capture.label ?? "Untitled capture"}
+                    {capture.label ?? "Untitled still"}
                 </Text>
 
                 {/* One link, tall enough to tap: the item, at the moment. Grouped, the heading

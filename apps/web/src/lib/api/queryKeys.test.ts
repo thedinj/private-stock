@@ -67,15 +67,13 @@ describe("the query key factory", () => {
         expect(startsWith(queryKeys.media.lookup("a,b"), queryKeys.media.list())).toBe(false);
         expect(startsWith(queryKeys.media.facetsFor("f"), queryKeys.media.facets())).toBe(true);
         expect(startsWith(queryKeys.media.detail("m1"), queryKeys.media.all())).toBe(true);
-        // Trash, restore and purge reach the Captures page through `media.all()`. It must stay
-        // out of `media.list()`, whose entries the live feed patches as pages of grid tiles.
-        expect(startsWith(queryKeys.media.capturesPage("f", 0), queryKeys.media.captures())).toBe(
+        // Trash, restore and purge reach the Clips, Stills and All tabs through `media.all()`.
+        // They must stay out of `media.list()`, whose entries the live feed patches as tiles.
+        expect(startsWith(queryKeys.media.libraryPage("f", 0), queryKeys.media.libraryAll())).toBe(
             true
         );
-        expect(startsWith(queryKeys.media.captures(), queryKeys.media.all())).toBe(true);
-        expect(startsWith(queryKeys.media.capturesPage("f", 0), queryKeys.media.list())).toBe(
-            false
-        );
+        expect(startsWith(queryKeys.media.libraryAll(), queryKeys.media.all())).toBe(true);
+        expect(startsWith(queryKeys.media.libraryPage("f", 0), queryKeys.media.list())).toBe(false);
         expect(startsWith(queryKeys.media.transcode("m1"), queryKeys.media.detail("m1"))).toBe(
             true
         );

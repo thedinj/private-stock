@@ -78,7 +78,7 @@ const CoverGlyph: React.FC<{ current: boolean }> = ({ current }) => (
 );
 
 /**
- * "Discard this capture", drawn rather than written.
+ * "Discard this still", drawn rather than written.
  *
  * A minus in a circle: take this one out of the set. Two other obvious glyphs are both
  * wrong here. A bin is where deleted things *go*, and this app has a real one — trashed
@@ -202,13 +202,13 @@ export const FrameStrip: React.FC<FrameStripProps> = ({
                     it back on the next sweep; somebody else's capture is not yours to throw
                     away, and cannot be regenerated if it goes (§6). */}
                 {frame.discardable && (
-                    <Tooltip label="Discard this capture" withinPortal>
+                    <Tooltip label="Discard this still" withinPortal>
                         <ActionIcon
                             size="sm"
                             variant="filled"
                             color="dark"
                             disabled={busy}
-                            aria-label="Discard this capture"
+                            aria-label="Discard this still"
                             onClick={() => removeCapture.mutate({ artifactId: frame.artifactId })}
                         >
                             <DiscardGlyph />

@@ -90,6 +90,7 @@ export const TagTile: React.FC<TagTileProps> = ({ row, scope, curator, seed, onD
                     tagId={tag.id}
                     videoCount={row.videoCount}
                     imageCount={row.imageCount}
+                    clipCount={row.clipCount}
                 />
                 <TagRowActions
                     tag={{ ...tag, mediaCount: row.videoCount + row.imageCount }}

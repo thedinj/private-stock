@@ -92,7 +92,12 @@ export const TagFilmstripRow: React.FC<TagFilmstripRowProps> = ({
                     also {tag.aliases?.join(", ")}
                 </Text>
             )}
-            <KindCounts tagId={tag.id} videoCount={row.videoCount} imageCount={row.imageCount} />
+            <KindCounts
+                tagId={tag.id}
+                videoCount={row.videoCount}
+                imageCount={row.imageCount}
+                clipCount={row.clipCount}
+            />
         </FilmstripRow>
     );
 };

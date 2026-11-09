@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Alert, Anchor, Box, Button, Group, Modal, Text } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Box, Button, Group, Modal, Rating, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import { locateInReel, type Clip } from "@private-stock/core";
 
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { useMarkClips } from "@/lib/api/reels";
 import { rememberReturn } from "@/lib/returnTo";
 import { isTypingTarget } from "@/lib/typingTarget";
 import { fieldForPress, keyPress } from "@/lib/viewerKeys";
@@ -50,6 +51,7 @@ interface ClipViewerProps {
 
 export const ClipViewer: React.FC<ClipViewerProps> = ({ clip, onClose, onPrevious, onNext }) => {
     const phone = useMediaQuery("(max-width: 48em)");
+    const marks = useMarkClips();
 
     /**
      * w, t and Shift+T into the tag boxes, from anywhere in the viewer that is not already a
@@ -106,6 +108,37 @@ export const ClipViewer: React.FC<ClipViewerProps> = ({ clip, onClose, onPreviou
                 </Text>
 
                 <Group gap="xs" wrap="nowrap">
+                    {/* Your judgement of the span, as an item's page has (§14d "Clips in the
+                        library"). The same number again clears it. */}
+                    {clip.mine && (
+                        <>
+                            <Rating
+                                size="sm"
+                                color="brass"
+                                value={clip.rating ?? 0}
+                                onChange={(value) =>
+                                    marks.mutate({
+                                        clipIds: [clip.id],
+                                        rating: value === clip.rating ? null : value,
+                                    })
+                                }
+                                aria-label="Rate this clip"
+                            />
+                            <ActionIcon
+                                variant="subtle"
+                                color={clip.favorite ? "oxblood" : "gray"}
+                                onClick={() =>
+                                    marks.mutate({ clipIds: [clip.id], favorite: !clip.favorite })
+                                }
+                                aria-label={
+                                    clip.favorite ? "Remove from favourites" : "Add to favourites"
+                                }
+                                size="lg"
+                            >
+                                {clip.favorite ? "♥" : "♡"}
+                            </ActionIcon>
+                        </>
+                    )}
                     <Button size="sm" variant="default" disabled={!onPrevious} onClick={onPrevious}>
                         Previous
                     </Button>

@@ -151,8 +151,6 @@ export const returnLabel = (href: string | null): string => {
     if (path === "/review/duplicates") return "duplicates";
     if (path === "/review/ocr") return "OCR review";
     if (path === "/review/faces") return "face review";
-    if (path === "/clips") return "clips";
-    if (path === "/captures") return "captures";
     if (path === "/tags/performers") return "performers";
     if (path === "/tags/sources") return "sources";
     if (path === "/tags/keywords") return "keywords";

@@ -25,6 +25,7 @@ import { useDisclosure, useElementSize, useMediaQuery } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+    LIBRARY_SORTS,
     naturalDirection,
     sortHasDirection,
     sortOverride,
@@ -39,6 +40,8 @@ import { FilterPanel } from "@/components/FilterPanel";
 import { ActiveFilterBar } from "@/components/library/ActiveFilterBar";
 import { BulkTagDialog, type SuggestedTag } from "@/components/library/BulkTagDialog";
 import { KindTabs } from "@/components/library/KindTabs";
+import { LibraryEntries } from "@/components/library/LibraryEntries";
+import { useLibraryCount } from "@/lib/api/libraryTabs";
 import { LayoutSwitch } from "@/components/library/LayoutSwitch";
 import { MoreGlyph } from "@/components/media/Glyph";
 import { PagePlate } from "@/components/shell/PagePlate";
@@ -56,6 +59,7 @@ import { api } from "@/lib/api/client";
 import { useSavedFilters } from "@/lib/api/savedFilters";
 import { SavedViewControl } from "@/components/library/SavedViewControl";
 import {
+    isLibraryTab,
     clearFilters,
     viewToSavedQuery,
     effectiveDirection,
@@ -162,6 +166,8 @@ const sortOptions = (
 const KIND_TITLES: Record<LibraryView["kind"], string> = {
     video: "Videos",
     image: "Photos",
+    clip: "Clips",
+    capture: "Stills",
     all: "All items",
 };
 
@@ -330,12 +336,22 @@ export const LibraryCellar: React.FC = () => {
 
     const fetchPage = (page: number) => fetchLibraryPage(filterParams, page);
 
+    /**
+     * Clips, Stills and All are `/api/library` and draw their own grid (`LibraryEntries`); the
+     * library's page and count queries are for Videos and Photos alone.
+     */
+    const libraryTab = isLibraryTab(view.kind);
+    /** Clips or stills alone: no item in the list, so nothing to play, save or tag by filter. */
+    const smallTab = view.kind === "clip" || view.kind === "capture";
+    const libraryCount = useLibraryCount(view, libraryTab);
+
     const pageQuery = useQuery({
         queryKey: queryKeys.media.page(filterParams.toString(), view.page),
         queryFn: () => fetchPage(view.page),
         // Keeps the previous page on screen while the next loads, so paging does not flash an
         // empty grid on every click.
         placeholderData: (previous) => previous,
+        enabled: !libraryTab,
     });
 
     /**
@@ -350,6 +366,7 @@ export const LibraryCellar: React.FC = () => {
         queryKey: queryKeys.media.count(filterParams.toString()),
         queryFn: () => api<MediaCountResponse>(`/api/media/count?${filterParams.toString()}`),
         staleTime: 60_000,
+        enabled: !libraryTab,
     });
 
     const items = pageQuery.data?.items ?? [];
@@ -495,9 +512,21 @@ export const LibraryCellar: React.FC = () => {
     // Shuffled or not: a shuffle is an ordering of the matching set like any other sort, so it
     // has the same count and the same pages (§20).
     const pageCount = countQuery.data?.pageCount ?? null;
-    const total = countQuery.data?.total ?? null;
+    const total = libraryTab
+        ? (libraryCount.data?.total ?? null)
+        : (countQuery.data?.total ?? null);
 
     const summary = (): string => {
+        if (libraryTab) {
+            if (total === null) return "Loading…";
+
+            if (view.kind === "all") return `${total.toLocaleString()} in all`;
+
+            const noun = view.kind === "clip" ? "clip" : "still";
+
+            return `${total.toLocaleString()} ${noun}${total === 1 ? "" : "s"}`;
+        }
+
         if (pageQuery.isLoading) return "Loading…";
         if (total === null) return `${items.length} shown`;
 
@@ -624,7 +653,11 @@ export const LibraryCellar: React.FC = () => {
                     onChange={(value) =>
                         applyFilter(withSort(view, (value ?? "addedAt") as MediaSort))
                     }
-                    data={sortOptions(Boolean(debouncedSearch), looking)}
+                    data={sortOptions(Boolean(debouncedSearch), looking).filter(
+                        // Clips and stills have a name, a date, a run time and stars, and
+                        // nothing else to sort by (§14e "What a kind is").
+                        (option) => !libraryTab || LIBRARY_SORTS.includes(option.value)
+                    )}
                     allowDeselect={false}
                     disabled={overridden !== null}
                     w={stacked ? "100%" : 170}
@@ -724,7 +757,7 @@ export const LibraryCellar: React.FC = () => {
     // Not while a look is in force: "everything matching" is sent as a saved query, which cannot
     // carry a look yet, so it would reach the whole filter rather than the few hundred on
     // screen (§5e). Selecting tiles sends their ids, and still works.
-    const moreMenu = hasClearableFilters(view) && !looking && (
+    const moreMenu = hasClearableFilters(view) && !looking && !libraryTab && (
         <Menu position="bottom-end" withinPortal>
             <Menu.Target>
                 <Button variant="subtle" color="gray" h={touchHeight} aria-label="More actions">
@@ -767,17 +800,21 @@ export const LibraryCellar: React.FC = () => {
                 // A phone's alone: there the navigation is behind the burger. On a wide screen
                 // Home is in the sidebar beside it, and the link was a second copy of it.
                 back={{ href: "/", label: "Home", phoneOnly: true }}
-                aside={<SavedViewControl view={view} onApply={applyView} />}
+                // A saved view is the library's query, which has no clips or stills in it.
+                aside={smallTab ? undefined : <SavedViewControl view={view} onApply={applyView} />}
                 actions={
                     <Group gap="xs" wrap="nowrap">
-                        <PlayMenu
-                            setParams={viewToParams(view)}
-                            onFromTop={(review) =>
-                                void playFromTop(view, review).catch(() => undefined)
-                            }
-                            empty={total === 0}
-                            height={touchHeight}
-                        />
+                        {/* Plays the items: on All, the videos and photos among the four. */}
+                        {!smallTab && (
+                            <PlayMenu
+                                setParams={viewToParams(view)}
+                                onFromTop={(review) =>
+                                    void playFromTop(view, review).catch(() => undefined)
+                                }
+                                empty={total === 0}
+                                height={touchHeight}
+                            />
+                        )}
 
                         <LayoutSwitch
                             value={gallery ? "gallery" : "grid"}
@@ -870,155 +907,169 @@ export const LibraryCellar: React.FC = () => {
                     </Box>
                 )}
 
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                    {/* Takes the page, and only the page (§14b). The Gmail pattern -- select
+                {libraryTab ? (
+                    <LibraryEntries
+                        view={view}
+                        gallery={gallery}
+                        touch={touch}
+                        wide={wide ?? false}
+                        canDelete={hasScope("delete")}
+                        onPage={(next) => {
+                            applyView({ ...view, page: next });
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                    />
+                ) : (
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                        {/* Takes the page, and only the page (§14b). The Gmail pattern -- select
                         the page, then offer to extend to all 312 matching -- is genuinely more
                         powerful, and the power is pointed at a Trash button. A selection you
                         can see is a selection you can check.
 
                         Above the grid it acts on, not in the status line beside the chips,
                         where it read as one more filter. */}
-                    {items.length > 0 && (
-                        <Checkbox
-                            mb="sm"
-                            size={touch ? "md" : "xs"}
-                            color="brass"
-                            checked={allSelected}
-                            indeterminate={!allSelected && selected.length > 0}
-                            label="Select page"
-                            onChange={() =>
-                                setSelected(
-                                    allSelected
-                                        ? selected.filter((id) => !pageIds.includes(id))
-                                        : [...new Set([...selected, ...pageIds])]
-                                )
-                            }
-                        />
-                    )}
+                        {items.length > 0 && (
+                            <Checkbox
+                                mb="sm"
+                                size={touch ? "md" : "xs"}
+                                color="brass"
+                                checked={allSelected}
+                                indeterminate={!allSelected && selected.length > 0}
+                                label="Select page"
+                                onChange={() =>
+                                    setSelected(
+                                        allSelected
+                                            ? selected.filter((id) => !pageIds.includes(id))
+                                            : [...new Set([...selected, ...pageIds])]
+                                    )
+                                }
+                            />
+                        )}
 
-                    {matching && items.length > 0 && (
-                        <Group gap="xs" mb="sm" wrap="nowrap">
-                            <Loader size="xs" color="brass" />
-                            <Text size="sm" c="dimmed">
-                                Still matching new names against the library — more may appear here
-                                by themselves.
-                            </Text>
-                        </Group>
-                    )}
+                        {matching && items.length > 0 && (
+                            <Group gap="xs" mb="sm" wrap="nowrap">
+                                <Loader size="xs" color="brass" />
+                                <Text size="sm" c="dimmed">
+                                    Still matching new names against the library — more may appear
+                                    here by themselves.
+                                </Text>
+                            </Group>
+                        )}
 
-                    {pageQuery.isLoading ? (
-                        <Center h={200}>
-                            <Loader color="brass" />
-                        </Center>
-                    ) : /* Before the empty state, not after it: a page that did not arrive
+                        {pageQuery.isLoading ? (
+                            <Center h={200}>
+                                <Loader color="brass" />
+                            </Center>
+                        ) : /* Before the empty state, not after it: a page that did not arrive
                           used to be reported as a library with nothing in it, offering to
                           clear filters that were never the problem. */
-                    pageQuery.isError ? (
-                        <LoadFailed
-                            error={pageQuery.error}
-                            what="this page"
-                            onRetry={() => void pageQuery.refetch()}
-                        />
-                    ) : items.length === 0 && matching ? (
-                        // Not the empty state: nothing has been looked for yet.
-                        <Stack align="center" gap="xs" py={60}>
-                            <Loader color="brass" />
-                            <Text size="sm" c="dimmed" ta="center">
-                                Still matching new names against the library. Files that name{" "}
-                                {mentioned?.name ?? "this tag"} will appear here by themselves.
-                            </Text>
-                        </Stack>
-                    ) : items.length === 0 ? (
-                        <LibraryEmptyState
-                            stats={stats}
-                            filtered={filtered}
-                            onClearFilters={() => {
-                                setSearch("");
-                                // The library you are in, the way you are looking at it and
-                                // the order it is in are not filters, so clearing the filters
-                                // must not change any of them. `clearFilters` is the single
-                                // definition of which fields that leaves -- spelling it out
-                                // here is how a filter added later ends up uncleavable.
-                                // It keeps the kind, so when the kind is all that is left --
-                                // Videos in a library without any -- this is the one clear
-                                // that has to let go of it, or the button would do nothing.
-                                applyView(
-                                    hasClearableFilters(view)
-                                        ? clearFilters(view)
-                                        : { ...clearFilters(view), kind: "all" }
-                                );
-                            }}
-                        />
-                    ) : (
-                        <Box
-                            ref={flip.ref}
-                            // The grid settles in place while the next page loads rather than
-                            // being swapped for a spinner, which would make every page turn
-                            // flash.
-                            {...settling(pageQuery.isPlaceholderData)}
-                            style={{
-                                display: "grid",
-                                // The browser does the column arithmetic, so there is nothing
-                                // to measure and nothing to get wrong on the first render.
-                                gridTemplateColumns: gallery ? GALLERY_TRACKS : GRID_TRACKS,
-                                gap: GRID_GAP,
-                            }}
-                        >
-                            {items.map((item, index) => (
-                                // The slot is what moves; the tile inside it is never animated
-                                // on its own.
-                                <div key={item.id} data-flip-key={item.id}>
-                                    <MediaTile
-                                        item={item}
-                                        moment={pageQuery.data?.moments?.[item.id]}
-                                        gallery={gallery}
-                                        selected={selected.includes(item.id)}
-                                        onToggleSelected={toggleSelected}
-                                        priority={index < PRIORITY_TILES}
-                                    />
-                                </div>
-                            ))}
-                        </Box>
-                    )}
+                        pageQuery.isError ? (
+                            <LoadFailed
+                                error={pageQuery.error}
+                                what="this page"
+                                onRetry={() => void pageQuery.refetch()}
+                            />
+                        ) : items.length === 0 && matching ? (
+                            // Not the empty state: nothing has been looked for yet.
+                            <Stack align="center" gap="xs" py={60}>
+                                <Loader color="brass" />
+                                <Text size="sm" c="dimmed" ta="center">
+                                    Still matching new names against the library. Files that name{" "}
+                                    {mentioned?.name ?? "this tag"} will appear here by themselves.
+                                </Text>
+                            </Stack>
+                        ) : items.length === 0 ? (
+                            <LibraryEmptyState
+                                stats={stats}
+                                filtered={filtered}
+                                onClearFilters={() => {
+                                    setSearch("");
+                                    // The library you are in, the way you are looking at it and
+                                    // the order it is in are not filters, so clearing the filters
+                                    // must not change any of them. `clearFilters` is the single
+                                    // definition of which fields that leaves -- spelling it out
+                                    // here is how a filter added later ends up uncleavable.
+                                    // It keeps the kind, so when the kind is all that is left --
+                                    // Videos in a library without any -- this is the one clear
+                                    // that has to let go of it, or the button would do nothing.
+                                    applyView(
+                                        hasClearableFilters(view)
+                                            ? clearFilters(view)
+                                            : { ...clearFilters(view), kind: "all" }
+                                    );
+                                }}
+                            />
+                        ) : (
+                            <Box
+                                ref={flip.ref}
+                                // The grid settles in place while the next page loads rather than
+                                // being swapped for a spinner, which would make every page turn
+                                // flash.
+                                {...settling(pageQuery.isPlaceholderData)}
+                                style={{
+                                    display: "grid",
+                                    // The browser does the column arithmetic, so there is nothing
+                                    // to measure and nothing to get wrong on the first render.
+                                    gridTemplateColumns: gallery ? GALLERY_TRACKS : GRID_TRACKS,
+                                    gap: GRID_GAP,
+                                }}
+                            >
+                                {items.map((item, index) => (
+                                    // The slot is what moves; the tile inside it is never animated
+                                    // on its own.
+                                    <div key={item.id} data-flip-key={item.id}>
+                                        <MediaTile
+                                            item={item}
+                                            moment={pageQuery.data?.moments?.[item.id]}
+                                            gallery={gallery}
+                                            selected={selected.includes(item.id)}
+                                            onToggleSelected={toggleSelected}
+                                            priority={index < PRIORITY_TILES}
+                                        />
+                                    </div>
+                                ))}
+                            </Box>
+                        )}
 
-                    {showPager && (
-                        <Center py="lg">
-                            {pageCount === null ? (
-                                // Until the count arrives -- or if it fails -- plain
-                                // next/previous, rather than a page list it cannot populate
-                                // honestly.
-                                <Group gap="sm">
-                                    <Button
-                                        variant="default"
-                                        disabled={view.page === 0}
-                                        onClick={() => goToPage(view.page)}
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Text size="sm" c="dimmed">
-                                        Page {view.page + 1}
-                                    </Text>
-                                    <Button
-                                        variant="default"
-                                        disabled={!pageQuery.data?.hasMore}
-                                        onClick={() => goToPage(view.page + 2)}
-                                    >
-                                        Next
-                                    </Button>
-                                </Group>
-                            ) : (
-                                <Pagination
-                                    value={view.page + 1}
-                                    onChange={goToPage}
-                                    total={pageCount}
-                                    color="brass"
-                                    siblings={wide ? 2 : 0}
-                                    withEdges
-                                />
-                            )}
-                        </Center>
-                    )}
-                </Box>
+                        {showPager && (
+                            <Center py="lg">
+                                {pageCount === null ? (
+                                    // Until the count arrives -- or if it fails -- plain
+                                    // next/previous, rather than a page list it cannot populate
+                                    // honestly.
+                                    <Group gap="sm">
+                                        <Button
+                                            variant="default"
+                                            disabled={view.page === 0}
+                                            onClick={() => goToPage(view.page)}
+                                        >
+                                            Previous
+                                        </Button>
+                                        <Text size="sm" c="dimmed">
+                                            Page {view.page + 1}
+                                        </Text>
+                                        <Button
+                                            variant="default"
+                                            disabled={!pageQuery.data?.hasMore}
+                                            onClick={() => goToPage(view.page + 2)}
+                                        >
+                                            Next
+                                        </Button>
+                                    </Group>
+                                ) : (
+                                    <Pagination
+                                        value={view.page + 1}
+                                        onChange={goToPage}
+                                        total={pageCount}
+                                        color="brass"
+                                        siblings={wide ? 2 : 0}
+                                        withEdges
+                                    />
+                                )}
+                            </Center>
+                        )}
+                    </Box>
+                )}
             </Group>
 
             <Drawer

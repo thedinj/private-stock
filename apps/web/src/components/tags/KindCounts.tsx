@@ -16,6 +16,8 @@ interface KindCountsProps {
     tagId: string;
     videoCount: number;
     imageCount: number;
+    /** Your clips carrying it (§14e): a way into the Clips tab, after the items. */
+    clipCount?: number;
     size?: "sm" | "lg";
 }
 
@@ -26,9 +28,10 @@ export const KindCounts: React.FC<KindCountsProps> = ({
     tagId,
     videoCount,
     imageCount,
+    clipCount = 0,
     size = "sm",
 }) => {
-    const href = (kind: "video" | "image") =>
+    const href = (kind: "video" | "image" | "clip") =>
         `/?view=grid&tags=${encodeURIComponent(tagId)}&kind=${kind}`;
 
     const parts = [
@@ -40,6 +43,11 @@ export const KindCounts: React.FC<KindCountsProps> = ({
         imageCount > 0 && (
             <Link key="image" href={href("image")} className={classes.count} data-size={size}>
                 {plural(imageCount, "photo", "photos")}
+            </Link>
+        ),
+        clipCount > 0 && (
+            <Link key="clip" href={href("clip")} className={classes.count} data-size={size}>
+                {plural(clipCount, "clip", "clips")}
             </Link>
         ),
     ].filter(Boolean);

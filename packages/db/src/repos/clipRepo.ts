@@ -31,6 +31,9 @@ export interface ClipRow {
     label: string | null;
     /** Null means 1.0, and is not the same statement as a stored 1.0. */
     speed: number | null;
+    /** The owner's stars, or null; 1 or null for the heart (§14d "Clips in the library"). */
+    rating: number | null;
+    favorite: 1 | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -348,6 +351,43 @@ export const countSearch = (query: ClipQuery, scope: SearchScope): number => {
             )
             .get(params) as { n: number }
     ).n;
+};
+
+/**
+ * Rates or favourites some of one person's clips (§14d "Clips in the library").
+ *
+ * `userId` is in the statement rather than checked by the caller alone, so a clip somebody else
+ * marked is simply not changed. Returns how many rows were.
+ */
+export const setMarks = (
+    clipIds: string[],
+    userId: string,
+    marks: { rating?: number | null; favorite?: boolean }
+): number => {
+    const sets: string[] = [];
+    const params: Record<string, unknown> = { ids: JSON.stringify(clipIds), userId };
+
+    if (marks.rating !== undefined) {
+        sets.push(`"rating" = :rating`);
+        params.rating = marks.rating;
+    }
+
+    if (marks.favorite !== undefined) {
+        // 1 or NULL, never 0: the schema's boolean.
+        sets.push(`"favorite" = :favorite`);
+        params.favorite = marks.favorite ? 1 : null;
+    }
+
+    if (sets.length === 0) {
+        return 0;
+    }
+
+    return db
+        .prepare(
+            `UPDATE "Clip" SET ${sets.join(", ")}
+              WHERE "id" IN (SELECT value FROM json_each(:ids)) AND "userId" = :userId`
+        )
+        .run(params).changes;
 };
 
 export const update = (id: string, input: UpdateClipInput): void => {

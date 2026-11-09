@@ -227,7 +227,7 @@ const { createReel, updateReel, deleteReel, getReel, addReelItems, createClipInR
     await import("./reelService");
 const {
     listClipsFor,
-    listClips,
+    clipsForLibrary,
     createClip,
     updateClip,
     deleteClip,
@@ -389,13 +389,10 @@ describe("who may see a clip", () => {
             speed: null,
         });
 
-        const found = listClips(
-            { sort: "created", direction: undefined, limit: 50, page: 0 } as never,
-            auth(OWNER)
-        );
+        const found = [...clipsForLibrary(["c1", "c2"], auth(OWNER)).values()];
 
-        expect(found.items).toHaveLength(1);
-        expect(found.items[0].mine).toBe(true);
+        expect(found).toHaveLength(1);
+        expect(found[0].mine).toBe(true);
     });
 
     it("reports an item this account cannot reach as missing", () => {
@@ -545,12 +542,9 @@ describe("a clip's tags", () => {
         ownClip();
         clipTags.push({ clipId: "c1", name: "jumping" });
 
-        const found = listClips(
-            { sort: "created", direction: undefined, limit: 50, page: 0 } as never,
-            auth(OWNER)
-        );
+        const found = clipsForLibrary(["c1"], auth(OWNER)).get("c1");
 
-        expect(found.items[0].tags.map((tag) => tag.name)).toEqual(["jumping"]);
+        expect(found?.tags.map((tag) => tag.name)).toEqual(["jumping"]);
     });
 
     it("leaves them off a clip read through a reel, which grants the span and not its filing", () => {

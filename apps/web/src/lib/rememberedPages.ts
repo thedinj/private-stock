@@ -73,9 +73,7 @@ export const REMEMBERED_PAGES: RememberedPage[] = [
             return view.mode !== "room" && summarizeSearch(view, NO_SUMMARY_NAMES) !== null;
         },
     },
-    page("/captures"),
     page("/collections"),
-    page("/clips"),
     page("/reels"),
     page("/review/duplicates", "ps:page:/duplicates"),
     page("/review/ocr", "ps:page:/ocr"),
@@ -117,7 +115,8 @@ const REMEMBERED_SECTIONS: RememberedSection[] = [
             "/review/trash",
         ],
     },
-    { name: "studio", key: "ps:section:studio", pages: ["/captures", "/clips", "/reels"] },
+    // Stills and clips are library tabs now (§14e); the section's own page is Reels.
+    { name: "studio", key: "ps:section:studio", pages: ["/reels"] },
 ];
 
 export type RememberedSectionName = "review" | "studio";

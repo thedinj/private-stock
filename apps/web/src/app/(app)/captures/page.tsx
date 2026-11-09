@@ -1,24 +1,23 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Suspense } from "react";
-
-import { CapturesBrowser } from "@/components/captures/CapturesBrowser";
-import { useReturnCorrection } from "@/lib/useReturnCorrection";
+import type { SearchParams } from "@/lib/legacyRedirect";
 
 /**
- * Your captures (§9 "Your captures, in one place").
- *
- * The browser reads its view from the address, and a static route that calls
- * `useSearchParams` needs a Suspense boundary or the build refuses to prerender it.
+ * Captures are the library's Stills tab now (§14e "What a kind is", 2026-11-08). The old page's
+ * search carries over; its other fields were a sort and a layout the tab has its own of.
  */
-const CapturesPage: React.FC = () => {
-    useReturnCorrection();
+const OldCapturesPage = async ({
+    searchParams,
+}: {
+    searchParams: SearchParams;
+}): Promise<never> => {
+    const params = await searchParams;
+    const query = new URLSearchParams({ view: "grid", kind: "capture" });
+    const search = Array.isArray(params.q) ? params.q[0] : params.q;
 
-    return (
-        <Suspense fallback={null}>
-            <CapturesBrowser />
-        </Suspense>
-    );
+    if (search) query.set("search", search);
+
+    redirect(`/?${query.toString()}`);
 };
 
-export default CapturesPage;
+export default OldCapturesPage;
