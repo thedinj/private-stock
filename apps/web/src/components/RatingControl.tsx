@@ -133,7 +133,7 @@ export const RatingControl: React.FC<RatingControlProps> = ({
                 <Rating
                     value={rating ?? 0}
                     color="brass"
-                    size={large ? "xl" : "sm"}
+                    size={large ? "lg" : "sm"}
                     emptySymbol={(value) => <Glass full={false} value={value} />}
                     fullSymbol={(value) => (
                         <Glass

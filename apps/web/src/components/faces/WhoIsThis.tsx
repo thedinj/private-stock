@@ -768,13 +768,14 @@ export const WhoIsThis: React.FC<{
         <>
             {iconOnly ? (
                 <ActionIcon
-                    variant="default"
+                    variant="subtle"
+                    color="gray"
                     size={TOUCH_TARGET}
                     onClick={open}
                     aria-label="Who is this?"
                     title="Who is this? Find this face across the library"
                 >
-                    <SomebodyGlyph size={16} />
+                    <SomebodyGlyph size={20} />
                 </ActionIcon>
             ) : (
                 <Button

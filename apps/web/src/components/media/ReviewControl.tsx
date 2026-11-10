@@ -52,8 +52,13 @@ export const ReviewControl: React.FC<{
         <Menu withinPortal position="bottom-end">
             <Menu.Target>
                 {narrow ? (
-                    <ActionIcon variant="default" size={TOUCH_TARGET} aria-label="Review">
-                        <CheckGlyph size={16} />
+                    <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size={TOUCH_TARGET}
+                        aria-label="Review"
+                    >
+                        <CheckGlyph size={20} />
                     </ActionIcon>
                 ) : (
                     <Button

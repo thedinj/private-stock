@@ -106,10 +106,10 @@ import classes from "@/components/media/PlayerStage.module.scss";
  * details drawer, where it can be thorough without talking over the thing you came to watch.
  */
 
-const InfoIcon = () => (
+const InfoIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
     <svg
-        width="16"
-        height="16"
+        width={size}
+        height={size}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -1392,13 +1392,13 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 </h1>
 
                 {/* One height for every action on the row. On a phone it becomes two rows: the
-                    glasses and the heart on their own, thumb-sized, then the actions as square
-                    icons spread across the width. In one row, icon-only, they still overflowed
+                    glasses and the heart on their own, thumb-sized, then the actions as bare icons
+                    with the bin pushed to the far end -- laid out like the player's bar above
+                    them, not a keypad of tiles. In one row, icon-only, they still overflowed
                     a 360px screen by half again. */}
                 <Group
                     gap={narrow ? "xs" : "md"}
                     wrap={narrow ? "wrap" : "nowrap"}
-                    justify={narrow ? "space-between" : undefined}
                     w={narrow ? "100%" : undefined}
                 >
                     {/* The most frequent act on this page after playing it. */}
@@ -1442,13 +1442,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {roomRuns("embed") &&
                         (narrow ? (
                             <ActionIcon
-                                variant="default"
+                                variant="subtle"
+                                color="gray"
                                 size={TOUCH_TARGET}
                                 onClick={moreLikeThis}
                                 aria-label="More like this"
                                 title="More like this moment"
                             >
-                                <LookAlikeGlyph size={16} />
+                                <LookAlikeGlyph size={20} />
                             </ActionIcon>
                         ) : (
                             <Button
@@ -1479,13 +1480,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
 
                     {narrow ? (
                         <ActionIcon
-                            variant="default"
+                            variant="subtle"
+                            color="gray"
                             size={TOUCH_TARGET}
                             onClick={details.open}
                             aria-label="Details"
                             title="Details"
                         >
-                            <InfoIcon />
+                            <InfoIcon size={20} />
                         </ActionIcon>
                     ) : (
                         <Button variant="default" onClick={details.open} leftSection={<InfoIcon />}>
@@ -1506,10 +1508,11 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                                 variant="subtle"
                                 color="oxblood"
                                 size={narrow ? TOUCH_TARGET : "input-sm"}
+                                ml={narrow ? "auto" : undefined}
                                 aria-label="Move to trash"
                                 onClick={trashDialog.open}
                             >
-                                <TrashGlyph size={18} />
+                                <TrashGlyph size={narrow ? 20 : 18} />
                             </ActionIcon>
                         </ViewerKeyTip>
                     )}

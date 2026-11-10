@@ -57,8 +57,10 @@ export const AddToPlaylist: React.FC<{ mediaId: string; iconOnly?: boolean }> = 
                         button beside a 36px one, reading as a different system. */}
                     {iconOnly ? (
                         <ActionIcon
-                            variant="default"
+                            variant="subtle"
+                            color="gray"
                             size={TOUCH_TARGET}
+                            fz={24}
                             loading={add.isPending}
                             aria-label="Add to a playlist"
                             title="Add to a playlist"
