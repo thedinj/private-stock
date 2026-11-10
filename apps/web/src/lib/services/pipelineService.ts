@@ -25,6 +25,8 @@ import {
     stageRepo,
 } from "@private-stock/db";
 
+import type { AuthContext } from "../auth/withAuth";
+
 /**
  * How long a busy answer is reused: a little under the client's poll, so a viewer polling it
  * always gets a fresh one and the cache only saves the second tab, the second admin, and the
@@ -91,7 +93,7 @@ const workStarted = (): boolean => scanRepo.isAnyRunning() || jobRepo.anyLive();
  * the clock are worked out per request from the cached settings, because they move with the
  * time rather than the database.
  */
-export const getProcessingStatus = (): ProcessingStatus => {
+export const getProcessingStatus = (auth: AuthContext): ProcessingStatus => {
     const now = Date.now();
     const fresh =
         cache !== null &&
@@ -107,6 +109,7 @@ export const getProcessingStatus = (): ProcessingStatus => {
 
     return {
         ...snapshot.status,
+        scan: scanFor(snapshot.status.scan, auth),
         throttle: describeThrottle(snapshot.settings, hour),
         serverClock: {
             hour,
@@ -189,6 +192,16 @@ const describeThrottle = (
 
     return { active: isThrottled(settings, hour), changesAtHour };
 };
+
+/**
+ * The running scan as this room may see it (§21). The answer is cached for every admin in every
+ * room, so the name is taken off here, per request: another room's scan shows how far it has got
+ * -- totals, which every room's page shares -- and not which library it is.
+ */
+const scanFor = (scan: ProcessingStatus["scan"], auth: AuthContext): ProcessingStatus["scan"] =>
+    scan && scan.rootId !== null && !auth.accessibleRootIds.includes(scan.rootId)
+        ? { ...scan, rootId: null, rootLabel: "a library in another room" }
+        : scan;
 
 const describeScan = (run: NonNullable<ReturnType<typeof scanRepo.currentRun>>) => {
     const root = mediaRootRepo.findById(run.rootId);

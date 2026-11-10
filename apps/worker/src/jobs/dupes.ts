@@ -272,7 +272,7 @@ const tilePairs = async (
             continue;
         }
 
-        const { durationMs } = videos[at];
+        const { durationMs, room } = videos[at];
 
         // Outwards from the seed in both directions until the lengths stop being comparable;
         // the list is sorted, so nothing further out can be.
@@ -287,7 +287,8 @@ const tilePairs = async (
                 const key =
                     seed < other.mediaId ? `${seed}|${other.mediaId}` : `${other.mediaId}|${seed}`;
 
-                if (found.has(key)) {
+                // Another room's video is never its duplicate (§21), so its prints are not read.
+                if (found.has(key) || other.room !== room) {
                     continue;
                 }
 
@@ -316,6 +317,35 @@ const tilePairs = async (
  * that holds a claim for an hour and blocks every later hash from being clustered at all.
  */
 const SEED_LIMIT = 500;
+
+/**
+ * Edges joining each room's members of a set into one component, and nothing across rooms (§21).
+ *
+ * A star per room rather than a clique, as a group becomes in the merge below: union-find needs
+ * only connectivity. One star around the set's first member would not do -- dropping its
+ * cross-room spokes would leave the other room's members joined to nothing. A member with no room
+ * joins nothing.
+ */
+const starsByRoom = (members: string[], rooms: Map<string, string>): Pair[] => {
+    const hubs = new Map<string, string>();
+    const edges: Pair[] = [];
+
+    for (const member of members) {
+        const room = rooms.get(member);
+
+        if (room === undefined) continue;
+
+        const hub = hubs.get(room);
+
+        if (hub === undefined) {
+            hubs.set(room, member);
+        } else {
+            edges.push({ a: hub, b: member, distance: 0 });
+        }
+    }
+
+    return edges;
+};
 
 /**
  * Merge new links into whatever groups already exist (§10b).
@@ -348,18 +378,31 @@ const mergeIntoGroups = async (kind: "near" | "exact", pairs: Pair[]): Promise<v
     }
 
     /**
+     * **A group is of one room** (§21). The same video in the Cellar and the Game Room is two
+     * rooms' business, not one decision: a group spanning them would put one room's titles in
+     * the other's queue, and deleting one copy would hand its tags and playlist places to the
+     * other. So a pair joins only items of the same room, and an item with no room joins
+     * nothing.
+     */
+    const rooms = dupeRepo.roomsOf([...new Set([...touched, ...[...byGroup.values()].flat()])]);
+    const sameRoom = (a: string, b: string): boolean => {
+        const room = rooms.get(a);
+
+        return room !== undefined && room === rooms.get(b);
+    };
+
+    /**
      * An existing group becomes a star of edges rather than a clique.
      *
      * n-1 edges instead of n(n-1)/2, and union-find only needs connectivity -- the members
      * end up in one component either way. A clique would make a fifty-file exact-duplicate
-     * group cost twelve hundred edges to say what forty-nine say.
+     * group cost twelve hundred edges to say what forty-nine say. One star per room, so a group
+     * written before rooms existed comes apart into one per room rather than losing members.
      */
-    const edges: Pair[] = [...pairs];
+    const edges: Pair[] = pairs.filter((pair) => sameRoom(pair.a, pair.b));
 
     for (const members of byGroup.values()) {
-        for (let i = 1; i < members.length; i += 1) {
-            edges.push({ a: members[0], b: members[i], distance: 0 });
-        }
+        edges.push(...starsByRoom(members, rooms));
     }
 
     /**
@@ -374,7 +417,7 @@ const mergeIntoGroups = async (kind: "near" | "exact", pairs: Pair[]): Promise<v
             : [];
 
     for (const verdict of verdicts) {
-        if (verdict.verdict === "same") {
+        if (verdict.verdict === "same" && sameRoom(verdict.aId, verdict.bId)) {
             edges.unshift({ a: verdict.aId, b: verdict.bId, distance: 0 });
         }
     }
@@ -476,13 +519,10 @@ export const runDupes = async (_job: JobRow): Promise<void> => {
      * for review: with a byte-identical pair there is nothing to compare, only a choice of
      * which path to keep, and mixing them into near-duplicate groups would hide that.
      */
-    const exactPairs: Pair[] = [];
-
-    for (const members of dupeRepo.exactDuplicateSetsFor(seeds)) {
-        for (let i = 1; i < members.length; i += 1) {
-            exactPairs.push({ a: members[0], b: members[i], distance: 0 });
-        }
-    }
+    const exactSets = dupeRepo.exactDuplicateSetsFor(seeds);
+    const exactRooms = dupeRepo.roomsOf([...new Set(exactSets.flat())]);
+    // The same bytes in two rooms are two rooms' duplicates (§21): a star per room.
+    const exactPairs = exactSets.flatMap((members) => starsByRoom(members, exactRooms));
 
     await mergeIntoGroups("exact", exactPairs);
 

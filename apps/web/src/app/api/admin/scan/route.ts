@@ -8,7 +8,7 @@ import { db, mediaFileRepo, mediaRootRepo, scanRepo, settingRepo } from "@privat
 
 import { requireAuth, requireScope } from "@/lib/auth/withAuth";
 import { toErrorResponse } from "@/lib/errors/handleRouteError";
-import { availability, listCandidates } from "@/lib/services/libraryService";
+import { availability, listCandidates, requireLibraryInRoom } from "@/lib/services/libraryService";
 import { clearProcessingCache } from "@/lib/services/pipelineService";
 
 // Declared literally — Next ignores a re-export. See lib/routeConfig.ts.
@@ -77,6 +77,10 @@ export async function POST(request: Request) {
         requireScope(auth, "admin");
 
         const body = triggerSchema.parse(await request.json().catch(() => ({})));
+
+        // One library: this room's (§21). Without one, every library is walked -- a scan reads
+        // the disk and shows nothing, so "scan now" stays one button for the house.
+        if (body.rootId) requireLibraryInRoom(body.rootId, auth);
 
         const payload =
             body.rootId || body.force

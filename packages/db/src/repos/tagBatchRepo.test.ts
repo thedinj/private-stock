@@ -201,7 +201,7 @@ describe("undo", () => {
 
         tagBatchRepo.undo(batchId);
 
-        const batch = tagBatchRepo.findById(batchId, USER);
+        const batch = tagBatchRepo.findById(batchId, USER, "cellar");
 
         expect(batch?.summary).toBe("Tagged 1 item performer: Jane Doe");
         expect(batch?.mediaCount).toBe(1);
@@ -246,7 +246,7 @@ describe("undo", () => {
 
         tagRepo.removeTag(tagId);
 
-        expect(tagBatchRepo.findById(batchId, USER)).toBeDefined();
+        expect(tagBatchRepo.findById(batchId, USER, "cellar")).toBeDefined();
         expect(tagBatchRepo.undo(batchId)).toBe(0);
     });
 });
@@ -263,7 +263,36 @@ describe("ownership", () => {
             tagIds: [tagId],
         });
 
-        expect(tagBatchRepo.findById(batchId, "someone-else")).toBeUndefined();
-        expect(tagBatchRepo.listForUser("someone-else", 10)).toEqual([]);
+        expect(tagBatchRepo.findById(batchId, "someone-else", "cellar")).toBeUndefined();
+        expect(tagBatchRepo.listForUser("someone-else", "cellar", 10)).toEqual([]);
+    });
+});
+
+/** A batch is of the room its tags are in (§21), and only that room's undo list offers it. */
+describe("rooms", () => {
+    it("files a batch in its tags' room, even one that wrote nothing", () => {
+        addMedia("a");
+        const games = tagRepo.ensureTag("games", "performer", "Player One", null, USER);
+
+        const { batchId } = tagBatchRepo.apply({
+            userId: USER,
+            scope: null,
+            summary: "Tagged 1 item",
+            mediaIds: ["a"],
+            tagIds: [games],
+        });
+        const { batchId: empty } = tagBatchRepo.apply({
+            userId: USER,
+            scope: null,
+            summary: "Tagged 0 items",
+            mediaIds: [],
+            tagIds: [games],
+        });
+
+        expect(tagBatchRepo.findById(batchId, USER, "games")?.domain).toBe("games");
+        expect(tagBatchRepo.findById(empty, USER, "games")?.domain).toBe("games");
+        expect(tagBatchRepo.findById(batchId, USER, "cellar")).toBeUndefined();
+        expect(tagBatchRepo.listForUser(USER, "cellar", 10)).toEqual([]);
+        expect(tagBatchRepo.listForUser(USER, "games", 10)).toHaveLength(2);
     });
 });

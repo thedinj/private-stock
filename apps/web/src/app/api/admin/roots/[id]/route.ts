@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { NotFoundError } from "@private-stock/core";
 import { mediaRootRepo } from "@private-stock/db";
 
 import { forgetAuth } from "@/lib/auth/authCache";
@@ -11,6 +10,7 @@ import {
     clearLibraryCaches,
     removeLibrary,
     repointLibrary,
+    requireLibraryInRoom,
     setLibraryWritable,
 } from "@/lib/services/libraryService";
 
@@ -40,11 +40,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         requireScope(auth, "admin");
 
         const { id } = await context.params;
-        const root = mediaRootRepo.findById(id);
 
-        if (!root) {
-            throw new NotFoundError("Media root not found");
-        }
+        // Another room's library is not found from here (§21).
+        requireLibraryInRoom(id, auth);
 
         const body = updateSchema.parse(await request.json());
 
@@ -84,6 +82,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         requireScope(auth, "admin");
 
         const { id } = await context.params;
+
+        requireLibraryInRoom(id, auth);
         removeLibrary(id);
 
         return NextResponse.json({ ok: true });

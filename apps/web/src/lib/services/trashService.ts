@@ -213,10 +213,20 @@ export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<Tr
  * its bytes are back is not: the grid would carry a tile whose file does not exist, and
  * whoever clicked restore would conclude the restore worked.
  */
+/**
+ * An entry in the bin of the request's room (§21). Another room's reads as not found, as the
+ * bin's own list never shows it.
+ */
+const entryInRoom = (entryId: string, auth: AuthContext): trashRepo.TrashEntryRow | undefined => {
+    const entry = trashRepo.findById(entryId);
+
+    return entry && auth.accessibleRootIds.includes(entry.rootId) ? entry : undefined;
+};
+
 export const restoreEntry = (entryId: string, auth: AuthContext): void => {
     requireAdmin(auth, "restore a deleted item");
 
-    const entry = trashRepo.findById(entryId);
+    const entry = entryInRoom(entryId, auth);
 
     // An identical copy's entry is not the bin's (§10e): it is deleted outright, and there is
     // nothing to restore it from but the copy that stayed.
@@ -236,7 +246,7 @@ export const restoreEntry = (entryId: string, auth: AuthContext): void => {
 export const purgeEntry = (entryId: string, auth: AuthContext): void => {
     requireAdmin(auth, "purge a deleted item");
 
-    const entry = trashRepo.findById(entryId);
+    const entry = entryInRoom(entryId, auth);
 
     // Its own trash job purges an identical copy's entry (§10e).
     if (!entry || entry.restoredAt || entry.purgedAt || entry.twinFileId) {
@@ -269,7 +279,7 @@ export const emptyTrash = (auth: AuthContext): EmptyTrashResponse => {
     let waiting = 0;
     let freedBytes = 0;
 
-    for (const entry of trashRepo.listOpen()) {
+    for (const entry of trashRepo.listOpen(auth.accessibleRootIds)) {
         if (!entry.movedAt) {
             waiting += 1;
             continue;
@@ -287,22 +297,30 @@ export const emptyTrash = (auth: AuthContext): EmptyTrashResponse => {
 export const listTrash = (auth: AuthContext, limit: number, offset: number): TrashListResponse => {
     requireAdmin(auth, "view the trash");
 
-    const entries: TrashEntry[] = trashRepo.listPending(limit, offset).map((row) => ({
-        id: row.id,
-        mediaId: row.mediaId,
-        title: row.title,
-        kind: row.kind,
-        rootLabel: row.rootLabel,
-        relPath: row.relPath,
-        bytes: row.bytes,
-        deletedBy: row.deletedBy,
-        deletedAt: row.deletedAt,
-        purgeAfter: row.purgeAfter,
-        pending: row.movedAt === null,
-        // Served from the item's own art route, which still resolves: the artifact rows live
-        // until purge precisely so the bin can be looked at rather than guessed at.
-        coverUrl: row.mediaId ? coverUrl(row.mediaId, row.coverPath, row.coverGeneratedAt) : null,
-    }));
+    const entries: TrashEntry[] = trashRepo
+        .listPending(auth.accessibleRootIds, limit, offset)
+        .map((row) => ({
+            id: row.id,
+            mediaId: row.mediaId,
+            title: row.title,
+            kind: row.kind,
+            rootLabel: row.rootLabel,
+            relPath: row.relPath,
+            bytes: row.bytes,
+            deletedBy: row.deletedBy,
+            deletedAt: row.deletedAt,
+            purgeAfter: row.purgeAfter,
+            pending: row.movedAt === null,
+            // Served from the item's own art route, which still resolves: the artifact rows live
+            // until purge precisely so the bin can be looked at rather than guessed at.
+            coverUrl: row.mediaId
+                ? coverUrl(row.mediaId, row.coverPath, row.coverGeneratedAt)
+                : null,
+        }));
 
-    return { entries, total: trashRepo.countPending(), heldBytes: trashRepo.heldBytes() };
+    return {
+        entries,
+        total: trashRepo.countPending(auth.accessibleRootIds),
+        heldBytes: trashRepo.heldBytes(auth.accessibleRootIds),
+    };
 };

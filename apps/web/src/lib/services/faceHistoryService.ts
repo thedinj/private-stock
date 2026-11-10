@@ -22,6 +22,7 @@ import {
 import type { AuthContext } from "../auth/withAuth";
 import { reviewFace } from "./faceService";
 import { notThem } from "./notThem";
+import { roomOf } from "./room";
 import { batchUndone } from "./ocrMatchHooks";
 
 /**
@@ -64,6 +65,12 @@ const facesOf = (row: DecisionRow): FaceReviewFace[] => {
     return shown(matched);
 };
 
+/** History is the room's own (§21): its performers' decisions, and those on its items. */
+const roomOfDecisions = (auth: AuthContext): faceDecisionRepo.DecisionRoom => ({
+    domain: roomOf(auth),
+    rootIds: auth.accessibleRootIds,
+});
+
 const cursor = (row: { createdAt: string; id: string }): string => `${row.createdAt}|${row.id}`;
 
 const parseCursor = (raw: string | undefined): { createdAt: string; id: string } | null => {
@@ -78,6 +85,7 @@ export const faceHistory = (query: FaceHistoryQuery, auth: AuthContext): FaceHis
     requireAdmin(auth);
 
     const rows = faceDecisionRepo.page({
+        room: roomOfDecisions(auth),
         actor: query.actor === "all" ? null : query.actor,
         tagId: query.tagId ?? null,
         before: parseCursor(query.before),
@@ -119,7 +127,7 @@ export const undoFaceDecision = (
 ): { undone: true } => {
     requireAdmin(auth);
 
-    const decision = faceDecisionRepo.find(id);
+    const decision = faceDecisionRepo.find(id, roomOfDecisions(auth));
 
     if (!decision) {
         throw new NotFoundError("That decision is not there any more");
@@ -130,7 +138,7 @@ export const undoFaceDecision = (
     }
 
     const batch = decision.tagBatchId
-        ? tagBatchRepo.findById(decision.tagBatchId, auth.userId, true)
+        ? tagBatchRepo.findById(decision.tagBatchId, auth.userId, roomOf(auth), true)
         : undefined;
     const live = batch && !batch.undoneAt ? batch.id : null;
     // Read before the batch goes: afterwards nothing says which items it held.

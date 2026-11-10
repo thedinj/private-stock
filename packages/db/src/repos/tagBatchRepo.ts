@@ -22,6 +22,8 @@ export interface TagBatchRow {
     clipCount: number | null;
     createdAt: string;
     undoneAt: string | null;
+    /** The room it was applied in (§21), from its tags; null when nothing is left to say. */
+    domain: string | null;
 }
 
 export interface ApplyBatchInput {
@@ -57,14 +59,17 @@ export interface ApplyBatchResult {
  * batch, and withdrawing the batch cannot take it away.
  */
 export const apply = (input: ApplyBatchInput): ApplyBatchResult =>
-    applyAssignments({
-        userId: input.userId,
-        scope: input.scope,
-        summary: input.summary,
-        assignments: input.mediaIds.flatMap((mediaId) =>
-            input.tagIds.map((tagId) => ({ mediaId, tagId }))
-        ),
-    });
+    writeAssignments(
+        {
+            userId: input.userId,
+            scope: input.scope,
+            summary: input.summary,
+            assignments: input.mediaIds.flatMap((mediaId) =>
+                input.tagIds.map((tagId) => ({ mediaId, tagId }))
+            ),
+        },
+        input.tagIds[0] ?? null
+    );
 
 export interface ApplyAssignmentsInput extends Omit<ApplyBatchInput, "mediaIds" | "tagIds"> {
     assignments: { mediaId: string; tagId: string }[];
@@ -81,14 +86,25 @@ export interface ApplyAssignmentsInput extends Omit<ApplyBatchInput, "mediaIds" 
  * left out of it. One batch, so one undo, all the same.
  */
 export const applyAssignments = (input: ApplyAssignmentsInput): ApplyBatchResult =>
+    writeAssignments(input, input.assignments[0]?.tagId ?? null);
+
+/**
+ * The write behind both. `roomTagId` names a tag whose room is the batch's (§21) -- one room's
+ * names, paired with that room's items -- so a batch that ends up writing nothing is still filed
+ * in the room it was asked for in.
+ */
+const writeAssignments = (
+    input: ApplyAssignmentsInput,
+    roomTagId: string | null
+): ApplyBatchResult =>
     db.transaction((): ApplyBatchResult => {
         const batchId = randomUUID();
         const mediaCount = new Set(input.assignments.map(({ mediaId }) => mediaId)).size;
 
         db.prepare(
-            `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount")
-             VALUES (?, ?, ?, ?)`
-        ).run(batchId, input.userId, input.summary, mediaCount);
+            `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount", "domain")
+             VALUES (?, ?, ?, ?, (SELECT "domain" FROM "Tag" WHERE "id" = ?))`
+        ).run(batchId, input.userId, input.summary, mediaCount, roomTagId);
 
         // A face decision being recorded made this batch: undoing it withdraws the batch.
         attachBatch(batchId);
@@ -155,9 +171,9 @@ export const applyToClips = (input: ApplyClipBatchInput): ApplyBatchResult =>
         const batchId = randomUUID();
 
         db.prepare(
-            `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount", "clipCount")
-             VALUES (?, ?, ?, 0, ?)`
-        ).run(batchId, input.userId, input.summary, input.clipIds.length);
+            `INSERT INTO "TagBatch" ("id", "userId", "summary", "mediaCount", "clipCount", "domain")
+             VALUES (?, ?, ?, 0, ?, (SELECT "domain" FROM "Tag" WHERE "id" = ?))`
+        ).run(batchId, input.userId, input.summary, input.clipIds.length, input.tagIds[0] ?? null);
 
         const insert = db.prepare(
             `INSERT OR IGNORE INTO "ClipTag" ("id", "clipId", "tagId", "batchId")
@@ -187,17 +203,22 @@ export const applyToClips = (input: ApplyClipBatchInput): ApplyBatchResult =>
  * sufficient; once anyone can publish ten thousand rows, an administrator who cannot withdraw
  * them is the one accident with no remedy.
  */
-export const findById = (id: string, userId: string, asAdmin = false): TagBatchRow | undefined =>
+export const findById = (
+    id: string,
+    userId: string,
+    domain: string,
+    asAdmin = false
+): TagBatchRow | undefined =>
     db
         .prepare(
             `SELECT b.* FROM "TagBatch" b
-              WHERE b."id" = ?
+              WHERE b."id" = ? AND b."domain" = ?
                 AND (b."userId" = ?
                      OR (? = 1 AND EXISTS (SELECT 1 FROM "MediaTag" mt
                                             WHERE mt."batchId" = b."id"
                                               AND mt."userId" IS NULL)))`
         )
-        .get(id, userId, asAdmin ? 1 : 0) as TagBatchRow | undefined;
+        .get(id, domain, userId, asAdmin ? 1 : 0) as TagBatchRow | undefined;
 
 /**
  * Recent **public** batches from anybody, newest first — the administrator's list (§6).
@@ -210,27 +231,28 @@ export const findById = (id: string, userId: string, asAdmin = false): TagBatchR
  * Private batches are absent whoever is asking. Withdrawing one is its owner's alone, and a
  * summary naming what somebody tagged privately is itself the disclosure.
  */
-export const listPublic = (limit: number): TagBatchRow[] =>
+export const listPublic = (domain: string, limit: number): TagBatchRow[] =>
     db
         .prepare(
             `SELECT b.* FROM "TagBatch" b
-              WHERE EXISTS (SELECT 1 FROM "MediaTag" mt
+              WHERE b."domain" = ?
+                AND EXISTS (SELECT 1 FROM "MediaTag" mt
                              WHERE mt."batchId" = b."id" AND mt."userId" IS NULL)
               ORDER BY b."createdAt" DESC
               LIMIT ?`
         )
-        .all(limit) as TagBatchRow[];
+        .all(domain, limit) as TagBatchRow[];
 
-/** Recent batches, newest first — the list an undo is chosen from. */
-export const listForUser = (userId: string, limit: number): TagBatchRow[] =>
+/** Recent batches in one room (§21), newest first — the list an undo is chosen from. */
+export const listForUser = (userId: string, domain: string, limit: number): TagBatchRow[] =>
     db
         .prepare(
             `SELECT * FROM "TagBatch"
-              WHERE "userId" = ?
+              WHERE "userId" = ? AND "domain" = ?
               ORDER BY "createdAt" DESC
               LIMIT ?`
         )
-        .all(userId, limit) as TagBatchRow[];
+        .all(userId, domain, limit) as TagBatchRow[];
 
 /** The items a batch touched, needed to reindex them after it is withdrawn. */
 export const affectedMediaIds = (batchId: string): string[] =>

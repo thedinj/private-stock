@@ -147,19 +147,45 @@ const COLUMNS = `d."id", d."actor", d."userId", d."verdict", d."tagId", t."name"
                  d."surface", d."tagBatchId", d."faceCount", d."itemCount", d."createdAt",
                  d."undoneAt"`;
 
-export const find = (id: string): DecisionRow | undefined =>
+/**
+ * One room's decisions (§21): those about a performer of the room's vocabulary (`@domain`), and
+ * those with no performer -- not one person, can't tell, or one whose tag has since gone --
+ * about faces on the room's items (`@roots`, a JSON array of library ids).
+ */
+const IN_ROOM = `(t."domain" = @domain
+     OR (t."id" IS NULL AND EXISTS (
+         SELECT 1 FROM (
+             SELECT "mediaId" FROM "Face" WHERE "decisionId" = d."id"
+             UNION ALL
+             SELECT rf."mediaId" FROM "FaceRefusal" r JOIN "Face" rf ON rf."id" = r."faceId"
+              WHERE r."decisionId" = d."id"
+             UNION ALL
+             SELECT "mediaId" FROM "ItemRefusal" WHERE "decisionId" = d."id"
+         ) x
+         JOIN "Media" xm ON xm."id" = x."mediaId"
+        WHERE xm."listRootId" IN (SELECT value FROM json_each(@roots)))))`;
+
+export interface DecisionRoom {
+    domain: string;
+    rootIds: string[];
+}
+
+/** A decision of this room, or nothing: another room's reads as not there. */
+export const find = (id: string, room: DecisionRoom): DecisionRow | undefined =>
     db
         .prepare(
             `SELECT ${COLUMNS} FROM "FaceDecision" d LEFT JOIN "Tag" t ON t."id" = d."tagId"
-              WHERE d."id" = ?`
+              WHERE d."id" = @id AND ${IN_ROOM}`
         )
-        .get(id) as DecisionRow | undefined;
+        .get({ id, domain: room.domain, roots: JSON.stringify(room.rootIds) }) as
+        DecisionRow | undefined;
 
 /**
  * Decisions newest first, a page at a time after `before` (a decision's `createdAt` and id),
  * by the people or by the app, and of one performer if given.
  */
 export const page = (query: {
+    room: DecisionRoom;
     actor: "user" | "app" | null;
     tagId: string | null;
     before: { createdAt: string; id: string } | null;
@@ -172,10 +198,13 @@ export const page = (query: {
                 AND (:tagId IS NULL OR d."tagId" = :tagId)
                 AND (:beforeAt IS NULL OR d."createdAt" < :beforeAt
                      OR (d."createdAt" = :beforeAt AND d."id" < :beforeId))
+                AND ${IN_ROOM}
               ORDER BY d."createdAt" DESC, d."id" DESC
               LIMIT :limit`
         )
         .all({
+            domain: query.room.domain,
+            roots: JSON.stringify(query.room.rootIds),
             actor: query.actor,
             tagId: query.tagId,
             beforeAt: query.before?.createdAt ?? null,

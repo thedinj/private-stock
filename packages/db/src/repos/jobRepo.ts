@@ -239,6 +239,24 @@ export interface FailedJobRow {
     failedAt: string;
 }
 
+/**
+ * The library a job is about: its file's, else its item's original's, else the one its payload
+ * names (a scan). Null for household work -- a duplicate pass -- which belongs to no room.
+ */
+const JOB_ROOT = `COALESCE(f."rootId", jo."rootId",
+        CASE WHEN json_valid(j."payloadJson") THEN json_extract(j."payloadJson", '$.rootId') END)`;
+
+/**
+ * Failures in these libraries (§21), and household ones, which are every room's: a room's
+ * Processing page lists its own items' failures, never another room's titles and paths.
+ */
+const FAILED_IN_ROOTS = `(${JOB_ROOT} IS NULL OR ${JOB_ROOT} IN (SELECT value FROM json_each(@roots)))`;
+
+const FAILED_JOINS = `LEFT JOIN "Media" m ON m."id" = j."mediaId"
+               LEFT JOIN "MediaFile" f ON f."id" = j."fileId"
+               LEFT JOIN "MediaFileLink" jl ON jl."mediaId" = j."mediaId" AND jl."role" = 'original'
+               LEFT JOIN "MediaFile" jo ON jo."id" = jl."fileId"`;
+
 const FAILED_COLUMNS = `j."id", j."rowid" AS "cursor", j."kind", j."mediaId", j."fileId",
         m."title", f."relPath", j."lastError", j."attempts",
         COALESCE(j."finishedAt", j."updatedAt") AS "failedAt"`;
@@ -254,6 +272,7 @@ const FAILED_COLUMNS = `j."id", j."rowid" AS "cursor", j."kind", j."mediaId", j.
  * the failures it finds through `idx_Job_failed` touches a fraction of the pages.
  */
 export const listFailed = (options: {
+    rootIds: string[];
     kind?: string;
     after?: number;
     limit: number;
@@ -262,46 +281,54 @@ export const listFailed = (options: {
         .prepare(
             `SELECT ${FAILED_COLUMNS}
                FROM "Job" j
-               LEFT JOIN "Media" m ON m."id" = j."mediaId"
-               LEFT JOIN "MediaFile" f ON f."id" = j."fileId"
+               ${FAILED_JOINS}
               WHERE ${STANDING_FAILURE}
+                AND ${FAILED_IN_ROOTS}
                 AND (@kind IS NULL OR j."kind" = @kind)
                 AND (@after IS NULL OR j."rowid" < @after)
               ORDER BY +j."rowid" DESC
               LIMIT @limit`
         )
         .all({
+            roots: JSON.stringify(options.rootIds),
             kind: options.kind ?? null,
             after: options.after ?? null,
             limit: options.limit,
         }) as FailedJobRow[];
 
 /** These failures, where they still stand -- what a retry acts on. */
-export const findFailed = (ids: string[]): FailedJobRow[] =>
+export const findFailed = (ids: string[], rootIds: string[]): FailedJobRow[] =>
     ids.length === 0
         ? []
         : (db
               .prepare(
                   `SELECT ${FAILED_COLUMNS}
                      FROM "Job" j
-                     LEFT JOIN "Media" m ON m."id" = j."mediaId"
-                     LEFT JOIN "MediaFile" f ON f."id" = j."fileId"
+                     ${FAILED_JOINS}
                     WHERE ${STANDING_FAILURE}
-                      AND j."id" IN (${ids.map(() => "?").join(", ")})`
+                      AND ${FAILED_IN_ROOTS}
+                      AND j."id" IN (SELECT value FROM json_each(@ids))`
               )
-              .all(...ids) as FailedJobRow[]);
+              .all({
+                  ids: JSON.stringify(ids),
+                  roots: JSON.stringify(rootIds),
+              }) as FailedJobRow[]);
 
 /** Standing failures per kind, most first. */
-export const failedKinds = (): { kind: string; count: number }[] =>
+export const failedKinds = (rootIds: string[]): { kind: string; count: number }[] =>
     db
         .prepare(
             `SELECT j."kind", count(*) AS "count"
                FROM "Job" j
+               LEFT JOIN "MediaFile" f ON f."id" = j."fileId"
+               LEFT JOIN "MediaFileLink" jl ON jl."mediaId" = j."mediaId" AND jl."role" = 'original'
+               LEFT JOIN "MediaFile" jo ON jo."id" = jl."fileId"
               WHERE ${STANDING_FAILURE}
+                AND ${FAILED_IN_ROOTS}
               GROUP BY j."kind"
               ORDER BY "count" DESC, j."kind"`
         )
-        .all() as { kind: string; count: number }[];
+        .all({ roots: JSON.stringify(rootIds) }) as { kind: string; count: number }[];
 
 /**
  * Whether anything is queued or running: one descent of the index that holds only live jobs.

@@ -27,6 +27,9 @@ vi.mock("../db", async () => {
 const dupeRepo = await import("./dupeRepo.js");
 const { db: sharedDb } = await import("../db.js");
 
+/** The libraries a reader of the queue may see: the one every item here is in. */
+const R = ["r1"];
+
 beforeEach(() => {
     db = sharedDb as unknown as Database.Database;
     initializeDatabase(db);
@@ -483,12 +486,14 @@ describe("counting the queue", () => {
         db.prepare(`UPDATE "MediaFile" SET "state" = 'trashed' WHERE "id" = 'f-d'`).run();
         dupeRepo.markReviewedMany([live, emptied], true);
 
-        expect(dupeRepo.countGroups({ reviewed: true })).toBe(1);
-        expect(dupeRepo.listGroups({ reviewed: true }).map((group) => group.id)).toEqual([live]);
+        expect(dupeRepo.countGroups({ reviewed: true, rootIds: R })).toBe(1);
+        expect(
+            dupeRepo.listGroups({ reviewed: true, rootIds: R }).map((group) => group.id)
+        ).toEqual([live]);
 
         dupeRepo.markReviewedMany([live, emptied], false);
 
-        expect(dupeRepo.countPending()).toEqual({
+        expect(dupeRepo.countPending(R)).toEqual({
             exact: { video: 0, image: 1 },
             near: { video: 0, image: 0 },
         });
@@ -514,16 +519,20 @@ describe("counting the queue", () => {
             ],
         });
 
-        expect(dupeRepo.listGroups({ media: "video" }).map((group) => group.id)).toEqual([videos]);
-        expect(dupeRepo.listGroups({ media: "image" }).map((group) => group.id)).toEqual([photos]);
-        expect(dupeRepo.countGroups({ media: "video" })).toBe(1);
-        expect(dupeRepo.countGroups({})).toBe(2);
-        expect(dupeRepo.countPending()).toEqual({
+        expect(
+            dupeRepo.listGroups({ media: "video", rootIds: R }).map((group) => group.id)
+        ).toEqual([videos]);
+        expect(
+            dupeRepo.listGroups({ media: "image", rootIds: R }).map((group) => group.id)
+        ).toEqual([photos]);
+        expect(dupeRepo.countGroups({ media: "video", rootIds: R })).toBe(1);
+        expect(dupeRepo.countGroups({ rootIds: R })).toBe(2);
+        expect(dupeRepo.countPending(R)).toEqual({
             exact: { video: 0, image: 1 },
             near: { video: 1, image: 0 },
         });
-        expect(dupeRepo.pendingIdenticalCopies("video")).toEqual([]);
-        expect(dupeRepo.pendingIdenticalCopies("image")).toHaveLength(2);
+        expect(dupeRepo.pendingIdenticalCopies(R, "video")).toEqual([]);
+        expect(dupeRepo.pendingIdenticalCopies(R, "image")).toHaveLength(2);
     });
 });
 
@@ -560,8 +569,8 @@ describe("tilePrintedVideos", () => {
         givenVideo("gone", { durationMs: 50_000, fileState: "missing" });
 
         expect(dupeRepo.tilePrintedVideos()).toEqual([
-            { mediaId: "short", durationMs: 30_000 },
-            { mediaId: "long", durationMs: 90_000 },
+            { mediaId: "short", durationMs: 30_000, room: "cellar" },
+            { mediaId: "long", durationMs: 90_000, room: "cellar" },
         ]);
     });
 });
@@ -650,7 +659,7 @@ describe("recordSorting", () => {
         sortFive();
         dupeRepo.markClustered(["A", "B", "C", "D", "E"]);
 
-        expect(dupeRepo.listApartDecisions(10, 0)).toEqual([
+        expect(dupeRepo.listApartDecisions(R, 10, 0)).toEqual([
             expect.objectContaining({ decisionId: "d1", decidedBy: "Admin", pairs: 10 }),
         ]);
 
@@ -658,7 +667,7 @@ describe("recordSorting", () => {
         expect(dupeRepo.verdictsAmong(["A", "B", "C", "D", "E"])).toEqual([]);
         // Compared again on the next pass, which is what regroups them.
         expect(dupeRepo.seedsNeedingClustering().sort()).toEqual(["A", "B", "C", "D", "E"]);
-        expect(dupeRepo.countApartDecisions()).toBe(0);
+        expect(dupeRepo.countApartDecisions(R)).toBe(0);
     });
 
     it("gives a pair said again to the later decision", () => {
@@ -676,5 +685,100 @@ describe("recordSorting", () => {
 
         expect(dupeRepo.verdictsOf("d2")).toEqual([{ aId: "A", bId: "B", verdict: "different" }]);
         expect(dupeRepo.verdictsOf("d1")).toHaveLength(9);
+    });
+});
+
+/**
+ * A group is of one room (§21). Clustering keeps it so; these are the reads that hold to it even
+ * for a group that does not -- one written before rooms, or by a route nobody predicted.
+ */
+describe("rooms", () => {
+    beforeEach(() => {
+        db.prepare(
+            `INSERT INTO "MediaRoot" ("id", "path", "label", "enabled", "domain", "updatedAt")
+             VALUES ('r2', '/media/g', 'Games', 1, 'games', CURRENT_TIMESTAMP)`
+        ).run();
+    });
+
+    const inGames = (id: string): void => {
+        db.prepare(`UPDATE "MediaFile" SET "rootId" = 'r2' WHERE "id" = ?`).run(`f-${id}`);
+    };
+
+    it("says which room each item is in, by its original's library", () => {
+        givenMedia("a");
+        givenMedia("b");
+        inGames("b");
+
+        expect([...dupeRepo.roomsOf(["a", "b", "nothing"])].sort()).toEqual([
+            ["a", "cellar"],
+            ["b", "games"],
+        ]);
+    });
+
+    it("lists and counts a group only for the room its copies are in", () => {
+        for (const id of ["a", "b", "c", "d"]) givenMedia(id);
+        inGames("c");
+        inGames("d");
+
+        const cellar = dupeRepo.upsertGroup({
+            kind: "exact",
+            members: [
+                { mediaId: "a", distance: 0 },
+                { mediaId: "b", distance: 0 },
+            ],
+        });
+        const games = dupeRepo.upsertGroup({
+            kind: "exact",
+            members: [
+                { mediaId: "c", distance: 0 },
+                { mediaId: "d", distance: 0 },
+            ],
+        });
+
+        expect(dupeRepo.listGroups({ rootIds: ["r1"] }).map((group) => group.id)).toEqual([cellar]);
+        expect(dupeRepo.listGroups({ rootIds: ["r2"] }).map((group) => group.id)).toEqual([games]);
+        expect(dupeRepo.countPending(["r2"]).exact.image).toBe(1);
+        expect([...dupeRepo.groupIdsIn([cellar, games], ["r1"])]).toEqual([cellar]);
+        expect(
+            dupeRepo
+                .pendingIdenticalCopies(["r1"])
+                .map((row) => row.mediaId)
+                .sort()
+        ).toEqual(["a", "b"]);
+    });
+
+    it("shows neither room a group that spans two, since each holds one copy of it", () => {
+        givenMedia("a");
+        givenMedia("b");
+        inGames("b");
+
+        dupeRepo.upsertGroup({
+            kind: "exact",
+            members: [
+                { mediaId: "a", distance: 0 },
+                { mediaId: "b", distance: 0 },
+            ],
+        });
+
+        expect(dupeRepo.countGroups({ rootIds: ["r1"] })).toBe(0);
+        expect(dupeRepo.countGroups({ rootIds: ["r2"] })).toBe(0);
+    });
+
+    it("never offers another room's copy as the one that inherits", () => {
+        for (const id of ["a", "b", "c"]) givenMedia(id);
+        inGames("c");
+
+        dupeRepo.upsertGroup({
+            kind: "exact",
+            members: ["a", "b", "c"].map((mediaId) => ({ mediaId, distance: 0 })),
+        });
+
+        expect(
+            dupeRepo
+                .activeCopies("a")
+                .map((row) => row.mediaId)
+                .sort()
+        ).toEqual(["a", "b"]);
+        expect(dupeRepo.activeSiblings("c")).toEqual([]);
     });
 });

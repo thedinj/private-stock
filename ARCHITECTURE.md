@@ -12330,7 +12330,8 @@ faces references. No `Tag_stale_*` trigger watches it, since nothing updates it.
 - **OCR strings are matched against every room's names**, since one caption can be read in two
   rooms; what a pair counts, offers and tags is narrowed to items of its tag's room, and the
   Rules list shows the room's pairs only.
-- **Duplicates:** a trashed copy's tags are copied only onto a survivor in the same room (§10c).
+- **Duplicates:** a group is of one room, and a trashed copy's tags are copied only onto a
+  survivor in the same room (§10c, "Duplicates stay in their room" below).
 
 Left unscoped on purpose: an item's own tags (`listForMedia`, `listForMediaIds`,
 `listForSelection`), which are read through an item the room already let through, and counts by
@@ -12350,6 +12351,48 @@ cannot open, each still carrying its Cellar title.
 constraint and rebuilding two tables to relax it bought nothing for one person: a second
 "Christmas" in another room is refused, and the refusal tells its owner only what they already
 know. Saved views had no constraint, so their names are per room.
+
+### Duplicates stay in their room, and so does the rest of Review
+
+Decided 2026-11-09, after the Cellar's Review queue was found showing the Game Room's. Clustering
+knew nothing of rooms, and the admin queues read whole tables rather than the room's roots, so
+`inDomain` never reached them. The rule since: **nothing of one room's content -- a title, a
+path, a cover, a name -- is shown in another, and nothing done in one room acts on another's
+items.** Plain totals are exempt; the Processing page's counts are the household's.
+
+- **A duplicate group is of one room.** The same file in two rooms is two rooms' business: grouped
+  together, deleting one copy would hand its tags and playlist places to the other. The worker
+  joins a pair only when both items' originals are in libraries of the same room (`roomsOf`), an
+  identical set becomes a star per room, and a group written before this comes apart into one
+  per room. The migration `dupe_groups_per_room` deleted the groups that spanned two and forgot
+  their members' clustering marks, so the next pass rebuilt them by the ordinary path; those came
+  back unreviewed.
+- **The reads hold to it anyway.** The queue, its counts, the identical plan, the Reviewed tab and
+  every write to a group or decision by id read only copies in the request's roots
+  (`groupIdsIn`, `decisionIn`); another room's group is one that no longer exists. `activeCopies`
+  returns only copies in the item's own room, which is what decides who inherits on deletion.
+- **A twin in another room does not vouch for a file** (`findIdenticalActiveFile`, §10e). Without
+  one of its own in the room, a deleted file goes to the bin and can be restored.
+- **The trash is per room**: its list, totals, Empty trash, restore and purge.
+- **Failed work is per room** (Processing › Failed and its retry): a job is in the room of its
+  file, its item's original or the library its payload names; household work -- a duplicate pass
+  -- is every room's.
+- **A running scan of another room's library** shows its progress and not its name.
+- **A library is changed only from its room**: edit, repoint, forget and "scan this library"
+  answer 404 for another room's id (`requireLibraryInRoom`). "Scan now" without a library still
+  walks every one; a scan reads the disk and shows nothing.
+- **Face History** lists the room's decisions: about its performers, or for one with no performer,
+  about faces on its items.
+- **Tag batches carry `domain`**, their tags' room, set when written; the undo list and undo are
+  the room's. A batch with no row left to say (withdrawn before the column existed) is in none.
+- **The OCR test bench stays one list**, since the settings it tunes are one setting, but each
+  room shows and edits only its own videos on it.
+- **The household default home layout** is one for every room, so a shelf of it that cannot be
+  shown in this room is left out rather than listed as unavailable under its title.
+
+Left global on purpose: face auto-tag's switch and its right/wrong tally (one rule, §21 "Stages a
+room does not use"), and the change feed's rows with no library, which carry ids and nothing
+else.
 
 ### Stages a room does not use
 

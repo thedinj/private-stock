@@ -62,6 +62,10 @@ import { trashMedia } from "./trashService";
  * library by construction, so a user restricted to one root would otherwise see that items
  * exist in roots they were never granted — a group is a cross-root object and cannot be
  * filtered into safety without becoming meaningless.
+ *
+ * **Per room** (§21 "Duplicates stay in their room"). A group is of one room, and every read and
+ * write here takes only copies in the request's roots: another room's group is not one that
+ * exists from here.
  */
 
 const requireAdmin = (auth: AuthContext): void => {
@@ -126,16 +130,21 @@ const MEMBER_JOINS = `JOIN "Media" m ON m."id" = dm."mediaId"
  * One query per group rather than per member. A group of four rendered from the ordinary
  * detail endpoint would be four requests that each join artifacts, variants and the per-user
  * overlay, to display six numbers.
+ *
+ * Only copies in the reader's libraries (§21). A group is of one room, so for a group in the
+ * reader's room that is every copy, and for one in another room it is none -- which every caller
+ * already reads as "no longer a group".
  */
-const loadMembers = (groupId: string): MemberRow[] =>
+const loadMembers = (groupId: string, rootIds: string[]): MemberRow[] =>
     db
         .prepare(
             `SELECT ${MEMBER_SELECT}
                FROM "DupeMember" dm
                ${MEMBER_JOINS}
-              WHERE dm."groupId" = ? AND f."state" = 'active'`
+              WHERE dm."groupId" = ? AND f."state" = 'active'
+                AND f."rootId" IN (SELECT value FROM json_each(?))`
         )
-        .all(groupId) as MemberRow[];
+        .all(groupId, JSON.stringify(rootIds)) as MemberRow[];
 
 /**
  * Every copy of an item that still has a file, the item included, in every root.
@@ -230,8 +239,8 @@ const toMember = (row: MemberRow, ranked: KeepCandidate[]): DupeMember => {
     };
 };
 
-const toGroup = (summary: dupeRepo.DupeGroupSummary): DupeGroup | null => {
-    const rows = loadMembers(summary.id);
+const toGroup = (summary: dupeRepo.DupeGroupSummary, rootIds: string[]): DupeGroup | null => {
+    const rows = loadMembers(summary.id, rootIds);
 
     // A group whose extra copies have been deleted is not a duplicate any more. Filtered
     // here as well as pruned by the worker, so the page never shows a group of one between
@@ -333,18 +342,27 @@ const identicalCopyOf = (row: MemberRow): IdenticalCopy => ({
 export const listDupes = (query: DupeQuery, auth: AuthContext): DupeListResponse => {
     requireAdmin(auth);
 
-    const filter = { reviewed: query.status === "reviewed", kind: query.kind, media: query.media };
+    // The room's libraries (§21): a group is of one room, and this is the room's queue.
+    const rootIds = auth.accessibleRootIds;
+    const filter = {
+        reviewed: query.status === "reviewed",
+        kind: query.kind,
+        media: query.media,
+        rootIds,
+    };
     const summaries = dupeRepo.listGroups({ ...filter, limit: query.limit, offset: query.offset });
-    const pending = dupeRepo.countPending();
+    const pending = dupeRepo.countPending(rootIds);
     // The tab counts follow the kind control, so a tab says what it holds under it.
     const of = (counts: MediaKindCounts): number =>
         query.media ? counts[query.media] : counts.video + counts.image;
 
     return {
-        groups: summaries.map(toGroup).filter((group): group is DupeGroup => group !== null),
+        groups: summaries
+            .map((summary) => toGroup(summary, rootIds))
+            .filter((group): group is DupeGroup => group !== null),
         total: dupeRepo.countGroups(filter),
         pending: { exact: of(pending.exact), near: of(pending.near) },
-        reviewed: dupeRepo.countGroups({ reviewed: true, media: query.media }),
+        reviewed: dupeRepo.countGroups({ reviewed: true, media: query.media, rootIds }),
         pendingByMedia: {
             video: pending.exact.video + pending.near.video,
             image: pending.exact.image + pending.near.image,
@@ -358,10 +376,13 @@ export const listDupes = (query: DupeQuery, auth: AuthContext): DupeListResponse
  * Planned afresh on every call, from one query over the whole queue, so the summary, the pages
  * and each batch of the run all apply the rule to the catalogue as it is now.
  */
-const identicalPlans = (media: MediaKind | undefined): Map<string, IdenticalPlan> => {
+const identicalPlans = (
+    rootIds: string[],
+    media: MediaKind | undefined
+): Map<string, IdenticalPlan> => {
     const byGroup = new Map<string, IdenticalCopy[]>();
 
-    for (const row of dupeRepo.pendingIdenticalCopies(media)) {
+    for (const row of dupeRepo.pendingIdenticalCopies(rootIds, media)) {
         const copies = byGroup.get(row.groupId) ?? [];
 
         copies.push({
@@ -407,7 +428,7 @@ const summarize = (plans: Map<string, IdenticalPlan>): IdenticalSummary => {
 export const listIdentical = (query: IdenticalQuery, auth: AuthContext): IdenticalListResponse => {
     requireAdmin(auth);
 
-    const plans = identicalPlans(query.media);
+    const plans = identicalPlans(auth.accessibleRootIds, query.media);
 
     const ids =
         query.view === "routine"
@@ -424,13 +445,16 @@ export const listIdentical = (query: IdenticalQuery, auth: AuthContext): Identic
             const row = dupeRepo.findGroup(groupId);
 
             return row
-                ? toGroup({
-                      id: row.id,
-                      kind: row.kind,
-                      reviewed: row.reviewed === 1,
-                      memberCount: 0,
-                      createdAt: row.createdAt,
-                  })
+                ? toGroup(
+                      {
+                          id: row.id,
+                          kind: row.kind,
+                          reviewed: row.reviewed === 1,
+                          memberCount: 0,
+                          createdAt: row.createdAt,
+                      },
+                      auth.accessibleRootIds
+                  )
                 : null;
         })
         .filter((group): group is DupeGroup => group !== null);
@@ -526,7 +550,7 @@ export const trashIdentical = async (
         throw new AuthorizationError("You do not have permission to delete files");
     }
 
-    const ahead = routineOf(identicalPlans(request.media))
+    const ahead = routineOf(identicalPlans(auth.accessibleRootIds, request.media))
         .filter(([groupId]) => request.after === null || groupId > request.after)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
@@ -560,12 +584,18 @@ export const trashIdentical = async (
  *
  * Ids that no longer exist are skipped rather than refused: a group pruned between the page
  * loading and the press was resolved by somebody, which is what marking it wanted anyway, and
- * one stale row must not fail the rest of the page.
+ * one stale row must not fail the rest of the page. A group in another room is skipped the same
+ * way (§21): from here it is not a group at all.
  */
 export const setReviewed = (groupIds: string[], reviewed: boolean, auth: AuthContext): number => {
     requireAdmin(auth);
 
-    return dupeRepo.markReviewedMany(groupIds, reviewed);
+    const visible = dupeRepo.groupIdsIn(groupIds, auth.accessibleRootIds);
+
+    return dupeRepo.markReviewedMany(
+        groupIds.filter((id) => visible.has(id)),
+        reviewed
+    );
 };
 
 /**
@@ -606,7 +636,8 @@ const resolveOne = async (item: DupeResolveItem, auth: AuthContext): Promise<Dup
         ...fields,
     });
 
-    if (!dupeRepo.findGroup(item.groupId)) {
+    // Another room's group is one that does not exist, from here (§21).
+    if (!dupeRepo.groupIdsIn([item.groupId], auth.accessibleRootIds).has(item.groupId)) {
         return outcome({ refused: "This group no longer exists" });
     }
 
@@ -614,7 +645,9 @@ const resolveOne = async (item: DupeResolveItem, auth: AuthContext): Promise<Dup
      * The members with a file still attached, not `DupeMember` rows — the same read the page
      * renders from, so "in the group" means a card that could have been on screen.
      */
-    const byId = new Map(loadMembers(item.groupId).map((row) => [row.id, row]));
+    const byId = new Map(
+        loadMembers(item.groupId, auth.accessibleRootIds).map((row) => [row.id, row])
+    );
 
     if (!byId.has(item.keepId)) {
         return outcome({ refused: "The copy to keep is no longer one of this group's copies" });
@@ -838,7 +871,8 @@ export const sortGroup = async (
 
     const group = dupeRepo.findGroup(input.groupId);
 
-    if (!group) {
+    // Another room's group reads as one that has gone (§21).
+    if (!group || !dupeRepo.groupIdsIn([group.id], auth.accessibleRootIds).has(group.id)) {
         throw new ConflictError("This group has changed since the page loaded");
     }
 
@@ -852,7 +886,7 @@ export const sortGroup = async (
         throw new ValidationError("A copy can be in only one set");
     }
 
-    const live = new Set(loadMembers(input.groupId).map((row) => row.id));
+    const live = new Set(loadMembers(input.groupId, auth.accessibleRootIds).map((row) => row.id));
 
     if (named.length !== live.size || named.some((id) => !live.has(id))) {
         throw new ConflictError(
@@ -914,18 +948,22 @@ export const sortGroup = async (
 };
 
 /** What the Reviewed tab draws of a copy in a decision: its name, its cover, and whether it is still here. */
-const apartCopies = (mediaIds: string[]): Map<string, DupeApartCopy> => {
+const apartCopies = (mediaIds: string[], rootIds: string[]): Map<string, DupeApartCopy> => {
     if (mediaIds.length === 0) {
         return new Map();
     }
 
+    // The reader's libraries only (§21), for a decision written before groups kept to a room.
     const rows = db
         .prepare(
             `SELECT ${MEMBER_SELECT}, f."state"
                FROM (SELECT value AS "mediaId" FROM json_each(?)) dm
-               ${MEMBER_JOINS}`
+               ${MEMBER_JOINS}
+              WHERE f."rootId" IN (SELECT value FROM json_each(?))`
         )
-        .all(JSON.stringify(mediaIds)) as (MemberRow & { state: string })[];
+        .all(JSON.stringify(mediaIds), JSON.stringify(rootIds)) as (MemberRow & {
+        state: string;
+    })[];
 
     return new Map(
         rows.map((row) => [
@@ -949,32 +987,35 @@ const apartCopies = (mediaIds: string[]): Map<string, DupeApartCopy> => {
 export const listApart = (query: DupeApartQuery, auth: AuthContext): DupeApartListResponse => {
     requireAdmin(auth);
 
-    const decisions = dupeRepo.listApartDecisions(query.limit, query.offset).map((decision) => {
-        const pairs = dupeRepo.verdictsOf(decision.decisionId);
-        const items = [...new Set(pairs.flatMap((pair) => [pair.aId, pair.bId]))].sort();
-        const setOf = new Map(items.map((id) => [id, id]));
-        const root = (id: string): string => {
-            let at = id;
+    const rootIds = auth.accessibleRootIds;
+    const decisions = dupeRepo
+        .listApartDecisions(rootIds, query.limit, query.offset)
+        .map((decision) => {
+            const pairs = dupeRepo.verdictsOf(decision.decisionId);
+            const items = [...new Set(pairs.flatMap((pair) => [pair.aId, pair.bId]))].sort();
+            const setOf = new Map(items.map((id) => [id, id]));
+            const root = (id: string): string => {
+                let at = id;
 
-            while (setOf.get(at) !== at) at = setOf.get(at)!;
+                while (setOf.get(at) !== at) at = setOf.get(at)!;
 
-            return at;
-        };
+                return at;
+            };
 
-        for (const pair of pairs) {
-            if (pair.verdict === "same") setOf.set(root(pair.aId), root(pair.bId));
-        }
+            for (const pair of pairs) {
+                if (pair.verdict === "same") setOf.set(root(pair.aId), root(pair.bId));
+            }
 
-        const sets = new Map<string, string[]>();
+            const sets = new Map<string, string[]>();
 
-        for (const id of items) {
-            sets.set(root(id), [...(sets.get(root(id)) ?? []), id]);
-        }
+            for (const id of items) {
+                sets.set(root(id), [...(sets.get(root(id)) ?? []), id]);
+            }
 
-        return { decision, sets: [...sets.values()] };
-    });
+            return { decision, sets: [...sets.values()] };
+        });
 
-    const copies = apartCopies([...new Set(decisions.flatMap(({ sets }) => sets.flat()))]);
+    const copies = apartCopies([...new Set(decisions.flatMap(({ sets }) => sets.flat()))], rootIds);
 
     return {
         decisions: decisions.map(({ decision, sets }) => ({
@@ -989,7 +1030,7 @@ export const listApart = (query: DupeApartQuery, auth: AuthContext): DupeApartLi
                 )
                 .filter((set) => set.length > 0),
         })),
-        total: dupeRepo.countApartDecisions(),
+        total: dupeRepo.countApartDecisions(rootIds),
     };
 };
 
@@ -999,6 +1040,11 @@ export const listApart = (query: DupeApartQuery, auth: AuthContext): DupeApartLi
  */
 export const undoApart = (decisionId: string, auth: AuthContext): { items: number } => {
     requireAdmin(auth);
+
+    // Another room's decision is not found from here (§21).
+    if (!dupeRepo.decisionIn(decisionId, auth.accessibleRootIds)) {
+        throw new NotFoundError("That decision has already been taken back");
+    }
 
     const items = dupeRepo.undoDecision(decisionId);
 

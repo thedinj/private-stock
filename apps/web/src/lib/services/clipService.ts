@@ -350,7 +350,7 @@ export const bulkTagClips = (input: BulkClipTagInput, auth: AuthContext): BulkTa
         vocabularyChanged(input.kind, scope);
     }
 
-    const batch = tagBatchRepo.findById(batchId, auth.userId);
+    const batch = tagBatchRepo.findById(batchId, auth.userId, roomOf(auth));
 
     if (!batch) {
         throw new NotFoundError("Batch not found");

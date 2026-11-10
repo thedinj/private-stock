@@ -188,13 +188,14 @@ export interface TrashListRow extends TrashEntryRow {
 }
 
 /**
- * What is currently in the bin, newest first.
+ * What is currently in the bin, newest first -- of these libraries only, so each room's bin is
+ * its own (§21). The counts and `listOpen` below take the same list.
  *
  * Joined rather than fetched per row: these are items that no longer exist in the library, so
  * the ordinary detail path cannot serve them and one request per entry would be the only
  * alternative.
  */
-export const listPending = (limit: number, offset: number): TrashListRow[] =>
+export const listPending = (rootIds: string[], limit: number, offset: number): TrashListRow[] =>
     db
         .prepare(
             `SELECT t.*, m."title", m."kind", r."label" AS "rootLabel",
@@ -208,10 +209,11 @@ export const listPending = (limit: number, offset: number): TrashListRow[] =>
                LEFT JOIN "Artifact" a
                       ON a."mediaId" = t."mediaId" AND a."kind" = 'cover'
               WHERE t."restoredAt" IS NULL AND t."purgedAt" IS NULL AND t."twinFileId" IS NULL
+                AND t."rootId" IN (SELECT value FROM json_each(?))
               ORDER BY t."deletedAt" DESC, t."id"
               LIMIT ? OFFSET ?`
         )
-        .all(limit, offset) as TrashListRow[];
+        .all(JSON.stringify(rootIds), limit, offset) as TrashListRow[];
 
 /**
  * Bytes the bin is holding on /data, which is what decides whether to purge early.
@@ -219,14 +221,15 @@ export const listPending = (limit: number, offset: number): TrashListRow[] =>
  * Not an entry with a twin (§10e): its bytes are deleted outright, never copied into the bin,
  * so counting them would put a figure on the trash page that emptying it could not free.
  */
-export const heldBytes = (): number =>
+export const heldBytes = (rootIds: string[]): number =>
     (
         db
             .prepare(
                 `SELECT COALESCE(sum("bytes"), 0) AS n FROM "TrashEntry"
-                  WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL`
+                  WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL
+                    AND "rootId" IN (SELECT value FROM json_each(?))`
             )
-            .get() as { n: number }
+            .get(JSON.stringify(rootIds)) as { n: number }
     ).n;
 
 /**
@@ -251,14 +254,15 @@ export const unmovedBytes = (): number =>
             .get() as { n: number }
     ).n;
 
-export const countPending = (): number =>
+export const countPending = (rootIds: string[]): number =>
     (
         db
             .prepare(
                 `SELECT count(*) AS n FROM "TrashEntry"
-                  WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL`
+                  WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL
+                    AND "rootId" IN (SELECT value FROM json_each(?))`
             )
-            .get() as {
+            .get(JSON.stringify(rootIds)) as {
             n: number;
         }
     ).n;
@@ -517,6 +521,10 @@ export const fileStateOf = (fileId: string): string | null => {
  * `preferMediaId` comes first when it qualifies -- the copy the merge hands everything to
  * (§10c). When a whole group is being deleted best-last (§10d), that is the copy still waiting
  * its turn, whose own bytes go to the bin, so the content survives there.
+ *
+ * **Only a twin in the same room** (§21). A copy kept in another room is that room's, and the
+ * file being deleted is gone from this one: without its own twin here it goes to the bin like
+ * any other file, where it can still be restored.
  */
 export const findIdenticalActiveFile = (
     fileId: string,
@@ -526,8 +534,11 @@ export const findIdenticalActiveFile = (
         .prepare(
             `SELECT other."id"
                FROM "MediaFile" f
+               JOIN "MediaRoot" fr ON fr."id" = f."rootId"
                JOIN "MediaFile" other
                  ON other."contentHash" = f."contentHash" AND other."id" <> f."id"
+               JOIN "MediaRoot" otherRoot
+                 ON otherRoot."id" = other."rootId" AND otherRoot."domain" = fr."domain"
                LEFT JOIN "MediaFileLink" fl
                  ON fl."fileId" = other."id" AND fl."role" = 'original'
               WHERE f."id" = ? AND f."contentHash" IS NOT NULL AND other."state" = 'active'
@@ -564,12 +575,13 @@ export type OpenEntryRow = Pick<
  * purged: that would delete the catalogue row and leave the file for the next scan to adopt as
  * something new. The caller leaves those for their move to finish.
  */
-export const listOpen = (): OpenEntryRow[] =>
+export const listOpen = (rootIds: string[]): OpenEntryRow[] =>
     db
         .prepare(
             `SELECT "id", "mediaId", "fileId", "movedAt", "bytes", "twinFileId"
                FROM "TrashEntry"
               WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL
+                AND "rootId" IN (SELECT value FROM json_each(?))
               ORDER BY "deletedAt", "id"`
         )
-        .all() as OpenEntryRow[];
+        .all(JSON.stringify(rootIds)) as OpenEntryRow[];

@@ -1039,7 +1039,8 @@ const stageProgressSchema = z.object({
 export const processingStatusSchema = z.object({
     scan: z
         .object({
-            rootId: z.string(),
+            /** Null when the library being scanned is another room's (§21): only its progress shows. */
+            rootId: z.string().nullable(),
             rootLabel: z.string(),
             filesSeen: z.number(),
             filesAdded: z.number(),

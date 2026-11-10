@@ -1036,6 +1036,7 @@ CREATE TABLE "TagBatch" (
             "clipCount" INTEGER,
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "undoneAt" DATETIME,
+            "domain" TEXT CHECK("domain" IS NULL OR length("domain") BETWEEN 1 AND 32),
             FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE
         );
 

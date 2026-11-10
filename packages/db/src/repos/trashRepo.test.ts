@@ -206,7 +206,7 @@ describe("restoring", () => {
 
         trashRepo.markRestored(entry.id);
 
-        expect(trashRepo.listPending(50, 0)).toEqual([]);
+        expect(trashRepo.listPending([ROOT], 50, 0)).toEqual([]);
         expect(trashRepo.findOpenForFile(fileId)).toBeUndefined();
     });
 
@@ -234,7 +234,7 @@ describe("restoring", () => {
 
         expect(result.revivedFromTrash).toBe(true);
         expect(trashRepo.markRestoredByFile(fileId)).toBe(true);
-        expect(trashRepo.listPending(50, 0)).toEqual([]);
+        expect(trashRepo.listPending([ROOT], 50, 0)).toEqual([]);
     });
 
     /**
@@ -546,6 +546,26 @@ describe("identical copies (§10e)", () => {
     });
 
     /**
+     * A copy kept in another room is that room's (§21). Without one of its own here the file goes
+     * to the bin and can be restored, rather than being deleted on the strength of a twin this room
+     * cannot see.
+     */
+    it("never offers a twin in another room", () => {
+        const { fileId: a } = addMedia("a");
+        const { fileId: b } = addMedia("b");
+
+        db.prepare(
+            `INSERT INTO "MediaRoot" ("id", "path", "label", "enabled", "domain", "updatedAt")
+             VALUES ('games', '/media/games', 'Games', 1, 'games', CURRENT_TIMESTAMP)`
+        ).run();
+        db.prepare(`UPDATE "MediaFile" SET "rootId" = 'games' WHERE "id" = ?`).run(b);
+        hash(a, "same");
+        hash(b, "same");
+
+        expect(trashRepo.findIdenticalActiveFile(a, null)).toBeNull();
+    });
+
+    /**
      * The point of the feature: the bin holds no bytes for a copy it can restore from its twin,
      * so neither the space the trash page reports nor the free-space check counts them.
      */
@@ -557,7 +577,7 @@ describe("identical copies (§10e)", () => {
         trash("a", a, 7, b);
         trash("c", c);
 
-        expect(trashRepo.heldBytes()).toBe(1024);
+        expect(trashRepo.heldBytes([ROOT])).toBe(1024);
         expect(trashRepo.unmovedBytes()).toBe(1024);
     });
 
@@ -568,7 +588,7 @@ describe("identical copies (§10e)", () => {
 
         trashRepo.clearTwin(entry.id);
 
-        expect(trashRepo.heldBytes()).toBe(1024);
+        expect(trashRepo.heldBytes([ROOT])).toBe(1024);
     });
 });
 
@@ -584,7 +604,7 @@ describe("emptying the bin", () => {
         trashRepo.markMoved(moved.id);
         trashRepo.markRestored(restored.id);
 
-        const open = trashRepo.listOpen();
+        const open = trashRepo.listOpen([ROOT]);
 
         expect(open.map((row) => row.id).sort()).toEqual([moved.id, waiting.id].sort());
         expect(open.find((row) => row.id === waiting.id)?.movedAt).toBeNull();
@@ -600,9 +620,9 @@ describe("an identical copy is not the bin's (§10e)", () => {
         trash("a", a, 0, b);
         const ordinary = trash("c", c, 0);
 
-        expect(trashRepo.listPending(50, 0).map((row) => row.id)).toEqual([ordinary.id]);
-        expect(trashRepo.countPending()).toBe(1);
-        expect(trashRepo.listOpen().map((row) => row.id)).toEqual([ordinary.id]);
+        expect(trashRepo.listPending([ROOT], 50, 0).map((row) => row.id)).toEqual([ordinary.id]);
+        expect(trashRepo.countPending([ROOT])).toBe(1);
+        expect(trashRepo.listOpen([ROOT]).map((row) => row.id)).toEqual([ordinary.id]);
         expect(trashRepo.listPurgeable(50).map((row) => row.id)).toEqual([ordinary.id]);
     });
 
@@ -613,7 +633,7 @@ describe("an identical copy is not the bin's (§10e)", () => {
 
         trashRepo.clearTwin(entry.id);
 
-        expect(trashRepo.listPending(50, 0).map((row) => row.id)).toEqual([entry.id]);
+        expect(trashRepo.listPending([ROOT], 50, 0).map((row) => row.id)).toEqual([entry.id]);
     });
 });
 

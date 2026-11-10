@@ -23,6 +23,9 @@ const mentionRepo = await import("./mentionRepo.js");
 const tagBatchRepo = await import("./tagBatchRepo.js");
 const { db: sharedDb } = await import("../db.js");
 
+/** The room these decisions are read in: their performers are the cellar's, as tags default to. */
+const CELLAR = { domain: "cellar", rootIds: [] as string[] };
+
 let db: Database.Database;
 
 const face = (vectorIndex: number) => ({
@@ -123,7 +126,7 @@ describe("recording a press", () => {
         expect(decisionId).not.toBeNull();
         expect(facesOf("a").map((row) => row.decisionId)).toEqual([decisionId, decisionId]);
         expect(refusals().map((row) => row.decisionId)).toEqual([decisionId, decisionId]);
-        expect(faceDecisionRepo.find(decisionId!)).toMatchObject({
+        expect(faceDecisionRepo.find(decisionId!, CELLAR)).toMatchObject({
             verdict: "is",
             tagName: "jane",
             faceCount: 4,
@@ -160,7 +163,7 @@ describe("recording a press", () => {
             });
         });
 
-        expect(faceDecisionRepo.find(decisionId!)?.tagBatchId).not.toBeNull();
+        expect(faceDecisionRepo.find(decisionId!, CELLAR)?.tagBatchId).not.toBeNull();
 
         faceRepo.replaceForMedia("a", [face(0), face(1)]);
 
@@ -180,7 +183,7 @@ describe("undoing a press", () => {
         expect(faceDecisionRepo.undo(first, "someone")).toMatchObject({ refusals: 4 });
         expect(refusals()).toEqual([]);
         expect(facesOf("b").map((row) => row.tagId)).toEqual(["kim", "kim"]);
-        expect(faceDecisionRepo.find(first)?.undoneAt).not.toBeNull();
+        expect(faceDecisionRepo.find(first, CELLAR)?.undoneAt).not.toBeNull();
 
         faceDecisionRepo.undo(second, "someone");
 
@@ -237,8 +240,15 @@ describe("History", () => {
             ).run(decisionId);
         }
 
-        const first = faceDecisionRepo.page({ actor: "user", tagId: null, before: null, limit: 2 });
+        const first = faceDecisionRepo.page({
+            room: CELLAR,
+            actor: "user",
+            tagId: null,
+            before: null,
+            limit: 2,
+        });
         const rest = faceDecisionRepo.page({
+            room: CELLAR,
             actor: "user",
             tagId: null,
             before: { createdAt: first[1].createdAt, id: first[1].id },
@@ -248,10 +258,22 @@ describe("History", () => {
         expect(first).toHaveLength(2);
         expect(rest).toHaveLength(1);
         expect(
-            faceDecisionRepo.page({ actor: "app", tagId: null, before: null, limit: 5 })
+            faceDecisionRepo.page({
+                room: CELLAR,
+                actor: "app",
+                tagId: null,
+                before: null,
+                limit: 5,
+            })
         ).toEqual([]);
         expect(
-            faceDecisionRepo.page({ actor: null, tagId: "kim", before: null, limit: 5 })
+            faceDecisionRepo.page({
+                room: CELLAR,
+                actor: null,
+                tagId: "kim",
+                before: null,
+                limit: 5,
+            })
         ).toHaveLength(1);
     });
 });

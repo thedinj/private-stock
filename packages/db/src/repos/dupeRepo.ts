@@ -193,6 +193,11 @@ export interface DupeGroupFilter {
     kind?: DupeKind;
     /** Only groups of videos, or of photos; both when absent. A group never mixes them. */
     media?: MediaKind;
+    /**
+     * The libraries the reader may see -- one room's (§21). Only members whose original is in
+     * one of them are counted, so a group is in the list when two of its copies are.
+     */
+    rootIds: string[];
 }
 
 /**
@@ -203,11 +208,49 @@ export interface DupeGroupFilter {
  * then showed nothing, and it made pages short: the page was cut before the empty groups were
  * dropped. So the rule is applied here, once, for the list and every count alike -- they cannot
  * disagree about what a group is. Pruned by the worker too; this covers the time in between.
+ *
+ * **And only members in the reader's libraries** (`@roots`, a JSON array). Clustering keeps a
+ * group inside one room (§21), so this is the room's queue; it is applied here as well so a
+ * group that somehow spans two still shows neither room the other's copies.
  */
 const LIVE_MEMBERS = `JOIN "DupeMember" m ON m."groupId" = g."id"
                    JOIN "Media" mk ON mk."id" = m."mediaId"
                    JOIN "MediaFileLink" fl ON fl."mediaId" = m."mediaId" AND fl."role" = 'original'
-                   JOIN "MediaFile" f ON f."id" = fl."fileId" AND f."state" = 'active'`;
+                   JOIN "MediaFile" f ON f."id" = fl."fileId" AND f."state" = 'active'
+                                     AND f."rootId" IN (SELECT value FROM json_each(@roots))`;
+
+const filterParams = (
+    filter: DupeGroupFilter
+): { reviewed: number; kind: string | null; media: string | null; roots: string } => ({
+    reviewed: filter.reviewed ? 1 : 0,
+    kind: filter.kind ?? null,
+    media: filter.media ?? null,
+    roots: JSON.stringify(filter.rootIds),
+});
+
+/**
+ * Which of these groups the reader can see: two or more live copies in their libraries, as the
+ * list counts them. What every write to a group by id is checked against (§21), so a group id
+ * from another room is treated as one that no longer exists.
+ */
+export const groupIdsIn = (groupIds: string[], rootIds: string[]): Set<string> => {
+    if (groupIds.length === 0) {
+        return new Set();
+    }
+
+    return new Set(
+        db
+            .prepare(
+                `SELECT g."id" FROM "DupeGroup" g
+                   ${LIVE_MEMBERS}
+                  WHERE g."id" IN (SELECT value FROM json_each(@ids))
+                  GROUP BY g."id"
+                 HAVING count(DISTINCT m."mediaId") >= 2`
+            )
+            .pluck()
+            .all({ ids: JSON.stringify(groupIds), roots: JSON.stringify(rootIds) }) as string[]
+    );
+};
 
 /**
  * Groups awaiting review, worst first.
@@ -225,24 +268,20 @@ export const listGroups = (
                         count(DISTINCT m."mediaId") AS "memberCount"
                    FROM "DupeGroup" g
                    ${LIVE_MEMBERS}
-                  WHERE (CASE WHEN ? = 1 THEN g."reviewed" = 1 ELSE g."reviewed" IS NULL END)
-                    AND (? IS NULL OR g."kind" = ?)
-                    AND (? IS NULL OR mk."kind" = ?)
+                  WHERE (CASE WHEN @reviewed = 1 THEN g."reviewed" = 1 ELSE g."reviewed" IS NULL END)
+                    AND (@kind IS NULL OR g."kind" = @kind)
+                    AND (@media IS NULL OR mk."kind" = @media)
                   GROUP BY g."id"
                  HAVING count(DISTINCT m."mediaId") >= 2
                   ORDER BY CASE g."kind" WHEN 'exact' THEN 0 ELSE 1 END,
                            "memberCount" DESC, g."createdAt"
-                  LIMIT ? OFFSET ?`
+                  LIMIT @limit OFFSET @offset`
             )
-            .all(
-                options.reviewed ? 1 : 0,
-                options.kind ?? null,
-                options.kind ?? null,
-                options.media ?? null,
-                options.media ?? null,
-                options.limit ?? 50,
-                options.offset ?? 0
-            ) as (Omit<DupeGroupSummary, "reviewed"> & { reviewed: number | null })[]
+            .all({
+                ...filterParams(options),
+                limit: options.limit ?? 50,
+                offset: options.offset ?? 0,
+            }) as (Omit<DupeGroupSummary, "reviewed"> & { reviewed: number | null })[]
     ).map((row) => ({ ...row, reviewed: row.reviewed === 1 }));
 
 export const countGroups = (filter: DupeGroupFilter): number =>
@@ -252,20 +291,14 @@ export const countGroups = (filter: DupeGroupFilter): number =>
                 `SELECT count(*) AS n FROM (
                      SELECT g."id" FROM "DupeGroup" g
                        ${LIVE_MEMBERS}
-                      WHERE (CASE WHEN ? = 1 THEN g."reviewed" = 1 ELSE g."reviewed" IS NULL END)
-                        AND (? IS NULL OR g."kind" = ?)
-                        AND (? IS NULL OR mk."kind" = ?)
+                      WHERE (CASE WHEN @reviewed = 1 THEN g."reviewed" = 1 ELSE g."reviewed" IS NULL END)
+                        AND (@kind IS NULL OR g."kind" = @kind)
+                        AND (@media IS NULL OR mk."kind" = @media)
                       GROUP BY g."id"
                      HAVING count(DISTINCT m."mediaId") >= 2
                  )`
             )
-            .get(
-                filter.reviewed ? 1 : 0,
-                filter.kind ?? null,
-                filter.kind ?? null,
-                filter.media ?? null,
-                filter.media ?? null
-            ) as {
+            .get(filterParams(filter)) as {
             n: number;
         }
     ).n;
@@ -274,7 +307,7 @@ export const countGroups = (filter: DupeGroupFilter): number =>
  * Unreviewed groups by kind and by what they are groups of, in one pass rather than one count
  * per pair. `max` picks the media kind a group's members share; they never differ.
  */
-export const countPending = (): Record<DupeKind, MediaKindCounts> => {
+export const countPending = (rootIds: string[]): Record<DupeKind, MediaKindCounts> => {
     const rows = db
         .prepare(
             `SELECT "kind", "media", count(*) AS n FROM (
@@ -286,7 +319,11 @@ export const countPending = (): Record<DupeKind, MediaKindCounts> => {
              )
              GROUP BY "kind", "media"`
         )
-        .all() as { kind: DupeKind; media: MediaKind; n: number }[];
+        .all({ roots: JSON.stringify(rootIds) }) as {
+        kind: DupeKind;
+        media: MediaKind;
+        n: number;
+    }[];
 
     const counts: Record<DupeKind, MediaKindCounts> = {
         exact: { video: 0, image: 0 },
@@ -432,20 +469,46 @@ export const forgetClustered = (mediaId: string): void => {
  * and every seed's candidates are then a binary search into it. Only items whose original is
  * still active, as for the seeds themselves.
  */
-export const tilePrintedVideos = (): { mediaId: string; durationMs: number }[] =>
+export const tilePrintedVideos = (): { mediaId: string; durationMs: number; room: string }[] =>
     db
         .prepare(
-            `SELECT m."id" AS "mediaId", m."durationMs"
+            `SELECT m."id" AS "mediaId", m."durationMs", r."domain" AS "room"
                FROM "MediaStage" s
                JOIN "Media" m ON m."id" = s."mediaId"
                JOIN "MediaFileLink" fl ON fl."mediaId" = m."id" AND fl."role" = 'original'
                JOIN "MediaFile" f ON f."id" = fl."fileId"
+               JOIN "MediaRoot" r ON r."id" = f."rootId"
               WHERE s."stage" = 'tileprint' AND s."state" = 'done'
                 AND m."kind" = 'video' AND m."durationMs" > 0
                 AND f."state" = 'active'
               ORDER BY m."durationMs"`
         )
-        .all() as { mediaId: string; durationMs: number }[];
+        .all() as { mediaId: string; durationMs: number; room: string }[];
+
+/**
+ * Each item's room (§21): the domain of the library its original is in.
+ *
+ * What keeps a duplicate group inside one room. An item with no original on record has no room
+ * and is left out of the map, which clustering reads as "pairs with nothing".
+ */
+export const roomsOf = (mediaIds: string[]): Map<string, string> => {
+    if (mediaIds.length === 0) {
+        return new Map();
+    }
+
+    const rows = db
+        .prepare(
+            `SELECT fl."mediaId", r."domain"
+               FROM "MediaFileLink" fl
+               JOIN "MediaFile" f ON f."id" = fl."fileId"
+               JOIN "MediaRoot" r ON r."id" = f."rootId"
+              WHERE fl."role" = 'original'
+                AND fl."mediaId" IN (SELECT value FROM json_each(?))`
+        )
+        .all(JSON.stringify(mediaIds)) as { mediaId: string; domain: string }[];
+
+    return new Map(rows.map((row) => [row.mediaId, row.domain]));
+};
 
 /** Records that these items have been compared, so no later pass repeats the work. */
 export const markClustered = (mediaIds: string[]): void => {
@@ -703,6 +766,10 @@ export const mergeOverlapping = (maxMerges = 1_000): number => {
  *
  * `state = 'active'` excludes anything already trashed, including the item itself when this
  * is called after its own state has flipped. A trashed copy is not a copy anybody can keep.
+ *
+ * **Only copies in the item's own room** (§21). Clustering keeps groups inside one room; this
+ * holds even for a group that somehow does not, because what reads it decides where an item's
+ * tags and playlist places go when it is deleted, and they must not cross into another room.
  */
 export const activeCopies = (mediaId: string): KeepCandidate[] =>
     db
@@ -710,10 +777,14 @@ export const activeCopies = (mediaId: string): KeepCandidate[] =>
             `SELECT DISTINCT m."id" AS "mediaId", m."width", m."height", m."bitrate",
                     f."size" AS "sizeBytes", m."durationMs", m."addedAt"
                FROM "DupeMember" mine
+               JOIN "MediaFileLink" mfl ON mfl."mediaId" = mine."mediaId" AND mfl."role" = 'original'
+               JOIN "MediaFile" mf ON mf."id" = mfl."fileId"
+               JOIN "MediaRoot" mr ON mr."id" = mf."rootId"
                JOIN "DupeMember" other ON other."groupId" = mine."groupId"
                JOIN "Media" m ON m."id" = other."mediaId"
                JOIN "MediaFileLink" fl ON fl."mediaId" = m."id" AND fl."role" = 'original'
                JOIN "MediaFile" f ON f."id" = fl."fileId"
+               JOIN "MediaRoot" r ON r."id" = f."rootId" AND r."domain" = mr."domain"
               WHERE mine."mediaId" = ? AND f."state" = 'active'`
         )
         .all(mediaId) as KeepCandidate[];
@@ -748,7 +819,7 @@ export interface IdenticalCopyRow {
  * than one per group, because the plan has to count all of it -- the summary is the reason
  * nobody pages through the groups -- and only the columns the plan reads.
  */
-export const pendingIdenticalCopies = (media?: MediaKind): IdenticalCopyRow[] =>
+export const pendingIdenticalCopies = (rootIds: string[], media?: MediaKind): IdenticalCopyRow[] =>
     db
         .prepare(
             `SELECT dm."groupId", m."id" AS "mediaId", m."width", m."height", m."bitrate",
@@ -762,10 +833,11 @@ export const pendingIdenticalCopies = (media?: MediaKind): IdenticalCopyRow[] =>
                JOIN "MediaFile" f ON f."id" = fl."fileId"
                JOIN "MediaRoot" r ON r."id" = f."rootId"
               WHERE g."kind" = 'exact' AND g."reviewed" IS NULL AND f."state" = 'active'
+                AND f."rootId" IN (SELECT value FROM json_each(?))
                 AND (? IS NULL OR m."kind" = ?)
               ORDER BY dm."groupId"`
         )
-        .all(media ?? null, media ?? null) as IdenticalCopyRow[];
+        .all(JSON.stringify(rootIds), media ?? null, media ?? null) as IdenticalCopyRow[];
 
 /**
  * Puts an item's groups back in the queue, because one of their copies has come back (§10e).
@@ -885,31 +957,58 @@ export interface DupeDecisionSummary {
  * stops nothing from happening and has nothing to undo; and a pair said again later belongs to
  * the later decision, so an older one can empty out.
  */
-export const listApartDecisions = (limit: number, offset: number): DupeDecisionSummary[] =>
+/**
+ * Decisions about copies in these libraries (§21): those with an item whose original is in one
+ * of them. A sorting is of one group, and a group is of one room, so this is the room's.
+ */
+const DECISION_IN_ROOTS = `v."decisionId" IN (
+                 SELECT dv."decisionId" FROM "DupeVerdict" dv
+                   JOIN "MediaFileLink" dfl ON dfl."mediaId" = dv."aId" AND dfl."role" = 'original'
+                   JOIN "MediaFile" df ON df."id" = dfl."fileId"
+                  WHERE df."rootId" IN (SELECT value FROM json_each(@roots)))`;
+
+export const listApartDecisions = (
+    rootIds: string[],
+    limit: number,
+    offset: number
+): DupeDecisionSummary[] =>
     db
         .prepare(
             `SELECT v."decisionId", max(v."decidedAt") AS "decidedAt",
                     max(u."displayName") AS "decidedBy", count(*) AS "pairs"
                FROM "DupeVerdict" v
                LEFT JOIN "User" u ON u."id" = v."decidedByUserId"
+              WHERE ${DECISION_IN_ROOTS}
               GROUP BY v."decisionId"
              HAVING sum(v."verdict" = 'different') > 0
               ORDER BY max(v."decidedAt") DESC, v."decisionId"
-              LIMIT ? OFFSET ?`
+              LIMIT @limit OFFSET @offset`
         )
-        .all(limit, offset) as DupeDecisionSummary[];
+        .all({ roots: JSON.stringify(rootIds), limit, offset }) as DupeDecisionSummary[];
 
-export const countApartDecisions = (): number =>
+export const countApartDecisions = (rootIds: string[]): number =>
     (
         db
             .prepare(
                 `SELECT count(*) AS n FROM (
-                     SELECT 1 FROM "DupeVerdict" GROUP BY "decisionId"
-                     HAVING sum("verdict" = 'different') > 0
+                     SELECT 1 FROM "DupeVerdict" v
+                      WHERE ${DECISION_IN_ROOTS}
+                      GROUP BY v."decisionId"
+                     HAVING sum(v."verdict" = 'different') > 0
                  )`
             )
-            .get() as { n: number }
+            .get({ roots: JSON.stringify(rootIds) }) as { n: number }
     ).n;
+
+/** Whether a decision is about copies in these libraries -- the check before taking it back. */
+export const decisionIn = (decisionId: string, rootIds: string[]): boolean =>
+    db
+        .prepare(
+            `SELECT 1 FROM "DupeVerdict" v
+              WHERE v."decisionId" = @decisionId AND ${DECISION_IN_ROOTS}
+              LIMIT 1`
+        )
+        .get({ decisionId, roots: JSON.stringify(rootIds) }) !== undefined;
 
 /** The pairs one decision wrote, as it stands. */
 export const verdictsOf = (decisionId: string): DupeVerdictRow[] =>

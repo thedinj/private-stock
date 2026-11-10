@@ -310,7 +310,10 @@ describe("a clip batch", () => {
         });
 
         expect(assigned).toBe(1);
-        expect(tagBatchRepo.findById(batchId, USER)).toMatchObject({ mediaCount: 0, clipCount: 2 });
+        expect(tagBatchRepo.findById(batchId, USER, "cellar")).toMatchObject({
+            mediaCount: 0,
+            clipCount: 2,
+        });
 
         tagBatchRepo.undo(batchId);
 
@@ -327,8 +330,8 @@ describe("a clip batch", () => {
             tagIds: [publicTag("jumping")],
         });
 
-        expect(tagBatchRepo.findById(batchId, USER, true)).toBeUndefined();
-        expect(tagBatchRepo.listPublic(10)).toEqual([]);
+        expect(tagBatchRepo.findById(batchId, USER, "cellar", true)).toBeUndefined();
+        expect(tagBatchRepo.listPublic("cellar", 10)).toEqual([]);
     });
 });
 

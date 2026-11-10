@@ -509,6 +509,8 @@ export interface ItemHead {
     title: string | null;
     listRelPath: string | null;
     durationMs: number | null;
+    /** The library it is listed from, which says its room (§21); null when it is not listed. */
+    listRootId: string | null;
 }
 
 export const listItemHeads = (mediaIds: string[]): ItemHead[] => {
@@ -518,7 +520,7 @@ export const listItemHeads = (mediaIds: string[]): ItemHead[] => {
 
     return db
         .prepare(
-            `SELECT "id", "kind", "title", "listRelPath", "durationMs" FROM "Media"
+            `SELECT "id", "kind", "title", "listRelPath", "durationMs", "listRootId" FROM "Media"
               WHERE "id" IN (${mediaIds.map(() => "?").join(", ")})`
         )
         .all(...mediaIds) as ItemHead[];

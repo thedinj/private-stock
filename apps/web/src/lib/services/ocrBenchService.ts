@@ -89,7 +89,30 @@ const toSide = (row: ocrTrialRepo.OcrTrialRow | undefined): OcrTrialSide | null 
     };
 };
 
-const benchFor = (entries: OcrTestEntry[]): OcrBench => {
+/**
+ * The nominated videos this room can see (§21).
+ *
+ * The bench is one list for the household, because the OCR settings it tunes are one setting;
+ * but each room's page shows, and edits, only its own videos on it. Another room's stay on the
+ * bench untouched and unseen, and still count towards its limit.
+ */
+const visibleIds = (mediaIds: string[], auth: AuthContext): Set<string> => {
+    const roots = new Set(auth.accessibleRootIds);
+
+    return new Set(
+        mediaTextRepo
+            .listItemHeads(mediaIds)
+            .filter((head) => head.listRootId !== null && roots.has(head.listRootId))
+            .map((head) => head.id)
+    );
+};
+
+const benchFor = (all: OcrTestEntry[], auth: AuthContext): OcrBench => {
+    const visible = visibleIds(
+        all.map((entry) => entry.mediaId),
+        auth
+    );
+    const entries = all.filter((entry) => visible.has(entry.mediaId));
     const mediaIds = entries.map((entry) => entry.mediaId);
     const truth = new Map(entries.map((entry) => [entry.mediaId, entry]));
     const heads = new Map(mediaTextRepo.listItemHeads(mediaIds).map((head) => [head.id, head]));
@@ -128,7 +151,7 @@ const benchFor = (entries: OcrTestEntry[]): OcrBench => {
 export const getBench = (auth: AuthContext): OcrBench => {
     requireAdmin(auth);
 
-    return benchFor(loadTestSet());
+    return benchFor(loadTestSet(), auth);
 };
 
 /** Replace the nominated videos. Trials of any taken off go with them. */
@@ -137,33 +160,42 @@ export const setTestSet = (input: OcrTestSetInput, auth: AuthContext): OcrBench 
 
     const before = loadTestSet();
     const existing = new Map(before.map((entry) => [entry.mediaId, entry]));
-    // Only items that exist, in the order given, once each — keeping what was expected of
-    // those already there.
-    const known = new Set(mediaTextRepo.listItemHeads(input.mediaIds).map((head) => head.id));
-    const next = [...new Set(input.mediaIds)]
+    // Only items this room can see, in the order given, once each — keeping what was expected
+    // of those already there.
+    const known = visibleIds(input.mediaIds, auth);
+    const mine = [...new Set(input.mediaIds)]
         .filter((id) => known.has(id))
         .map(
             (mediaId): OcrTestEntry =>
                 existing.get(mediaId) ?? { mediaId, expected: [], complete: false }
         );
-
-    saveTestSet(before, next);
-
-    return benchFor(next);
-};
-
-/** Nominate more videos, refusing rather than silently dropping any past the limit. */
-export const addToTestSet = (input: OcrTestSetAddInput, auth: AuthContext): OcrBench => {
-    requireAdmin(auth);
-
-    const current = loadTestSet().map((entry) => entry.mediaId);
-    const next = [...new Set([...current, ...input.mediaIds])];
+    // The list given is this room's part of the bench (§21); other rooms' videos stay on it.
+    const ours = visibleIds(
+        before.map((entry) => entry.mediaId),
+        auth
+    );
+    const next = [...before.filter((entry) => !ours.has(entry.mediaId)), ...mine];
 
     if (next.length > OCR_TEST_SET_LIMIT) {
         throw new ValidationError(
             `The test bench holds ${OCR_TEST_SET_LIMIT} videos; remove some before adding more`
         );
     }
+
+    saveTestSet(before, next);
+
+    return benchFor(next, auth);
+};
+
+/** Nominate more videos, refusing rather than silently dropping any past the limit. */
+export const addToTestSet = (input: OcrTestSetAddInput, auth: AuthContext): OcrBench => {
+    requireAdmin(auth);
+
+    // This room's part of the bench, with the new ones after it; `setTestSet` keeps the rest
+    // and holds the limit over the whole of it.
+    const all = loadTestSet().map((entry) => entry.mediaId);
+    const ours = visibleIds(all, auth);
+    const next = [...new Set([...all.filter((id) => ours.has(id)), ...input.mediaIds])];
 
     return setTestSet({ mediaIds: next }, auth);
 };
@@ -199,7 +231,7 @@ export const runTrials = (input: OcrTrialRunInput, auth: AuthContext): OcrBench 
         );
     }
 
-    return benchFor(testSet);
+    return benchFor(testSet, auth);
 };
 
 /**
@@ -213,7 +245,10 @@ export const setExpected = (input: OcrExpectedInput, auth: AuthContext): OcrBenc
 
     const before = loadTestSet();
 
-    if (!before.some((entry) => entry.mediaId === input.mediaId)) {
+    if (
+        !before.some((entry) => entry.mediaId === input.mediaId) ||
+        !visibleIds([input.mediaId], auth).has(input.mediaId)
+    ) {
         throw new ValidationError("Put the video on the bench before saying what it should read");
     }
 
@@ -224,5 +259,5 @@ export const setExpected = (input: OcrExpectedInput, auth: AuthContext): OcrBenc
 
     saveTestSet(before, next);
 
-    return benchFor(next);
+    return benchFor(next, auth);
 };

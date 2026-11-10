@@ -18,6 +18,7 @@ import type { AuthContext } from "../auth/withAuth";
 import { countMedia, listMedia } from "./mediaService";
 import { forgetKeptOrders } from "./keptOrders";
 import { clearProcessingCache } from "./pipelineService";
+import { inRoom } from "./room";
 import { playbackCheckEnabled } from "./settingsService";
 
 /**
@@ -210,6 +211,24 @@ export const addLibrary = async (
     forgetAuth();
 
     return mediaRootRepo.findById(root.id)!;
+};
+
+/**
+ * A library of the request's room, for an administrator changing it by id (§21).
+ *
+ * The admin table lists only the room's own libraries, so an id from another room is one this
+ * room cannot see: reported as not found, never edited, repointed, scanned or forgotten. Read
+ * from the row rather than `accessibleRootIds`, which holds enabled libraries only -- a disabled
+ * one still has to be switched back on from its room.
+ */
+export const requireLibraryInRoom = (id: string, auth: AuthContext): mediaRootRepo.MediaRootRow => {
+    const root = mediaRootRepo.findById(id);
+
+    if (!root || !inRoom(root, auth)) {
+        throw new NotFoundError("Library not found");
+    }
+
+    return root;
 };
 
 /**

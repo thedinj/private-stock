@@ -18,6 +18,8 @@ interface MemberRow {
     id: string;
     relPath: string;
     writable: number | null;
+    /** The copy's library, which says its room (§21). */
+    rootId: string;
 }
 
 let groups: Record<string, MemberRow[]> = {};
@@ -27,37 +29,42 @@ let reviewed: string[] = [];
 /** Clips per copy, for the identical plan. */
 let clips: Record<string, number> = {};
 
+/** A group's copies still here, in these libraries -- as `loadMembers` and the repo read them. */
+const live = (groupId: string, rootIds: string[]): MemberRow[] =>
+    (groups[groupId] ?? []).filter(
+        (row) => !trashed.includes(row.id) && rootIds.includes(row.rootId)
+    );
+
 vi.mock("@private-stock/db", () => ({
     db: {
         prepare: () => ({
-            all: (groupId: string) =>
-                (groups[groupId] ?? []).filter((row) => !trashed.includes(row.id)),
+            all: (groupId: string, roots: string) => live(groupId, JSON.parse(roots) as string[]),
         }),
     },
     dupeRepo: {
         findGroup: (groupId: string) => (groups[groupId] ? { id: groupId } : undefined),
+        groupIdsIn: (groupIds: string[], rootIds: string[]) =>
+            new Set(groupIds.filter((groupId) => live(groupId, rootIds).length >= 2)),
         markReviewed: (groupId: string) => reviewed.push(groupId),
         // Every group here is identical: one hash per group, in group-id order like the query.
-        pendingIdenticalCopies: () =>
+        pendingIdenticalCopies: (rootIds: string[]) =>
             Object.keys(groups)
                 .sort()
                 .filter((groupId) => !reviewed.includes(groupId))
                 .flatMap((groupId) =>
-                    (groups[groupId] ?? [])
-                        .filter((row) => !trashed.includes(row.id))
-                        .map((row) => ({
-                            groupId,
-                            mediaId: row.id,
-                            width: 1920,
-                            height: 1080,
-                            bitrate: 1,
-                            sizeBytes: 100,
-                            durationMs: 1,
-                            addedAt: `2026-01-01T00:00:0${row.id.length % 10}Z`,
-                            writable: row.writable,
-                            contentHash: `h-${groupId}`,
-                            clipCount: clips[row.id] ?? 0,
-                        }))
+                    live(groupId, rootIds).map((row) => ({
+                        groupId,
+                        mediaId: row.id,
+                        width: 1920,
+                        height: 1080,
+                        bitrate: 1,
+                        sizeBytes: 100,
+                        durationMs: 1,
+                        addedAt: `2026-01-01T00:00:0${row.id.length % 10}Z`,
+                        writable: row.writable,
+                        contentHash: `h-${groupId}`,
+                        clipCount: clips[row.id] ?? 0,
+                    }))
                 ),
     },
 }));
@@ -91,10 +98,11 @@ const auth = (scopes: AuthContext["scopes"]): AuthContext => ({
 
 const admin = auth(["admin", "delete"]);
 
-const copy = (id: string, writable: number | null = 1): MemberRow => ({
+const copy = (id: string, writable: number | null = 1, rootId = "r1"): MemberRow => ({
     id,
     relPath: `${id}.mp4`,
     writable,
+    rootId,
 });
 
 beforeEach(() => {
@@ -170,6 +178,29 @@ describe("resolving a page of duplicate groups", () => {
         );
 
         expect(result.groups[0]?.refused).toBe("This group no longer exists");
+    });
+
+    /** A group is of one room (§21): from another, its id names nothing that can be decided. */
+    it("refuses another room's group, and touches none of its copies", async () => {
+        groups.g3 = [copy("theirs1", 1, "r2"), copy("theirs2", 1, "r2")];
+
+        const result = await resolveGroups(
+            [{ groupId: "g3", keepId: "theirs1", trashIds: ["theirs2"] }],
+            admin
+        );
+
+        expect(result.groups[0]?.refused).toBe("This group no longer exists");
+        expect(trashed).toEqual([]);
+        expect(reviewed).toEqual([]);
+    });
+
+    it("leaves another room's identical copies out of trashing every identical copy", async () => {
+        groups = { g3: [copy("theirs1", 1, "r2"), copy("theirs2", 1, "r2")] };
+
+        const result = await trashIdentical({ after: null, limit: 10 }, admin);
+
+        expect(result.groups).toBe(0);
+        expect(trashed).toEqual([]);
     });
 
     it("reports a named copy that is no longer in the group rather than dropping it", async () => {

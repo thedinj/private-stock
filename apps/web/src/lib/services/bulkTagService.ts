@@ -159,7 +159,7 @@ export const applyBulkTag = (input: BulkTagApplyInput, auth: AuthContext): BulkT
         vocabularyChanged(input.kind, scope);
     }
 
-    const batch = tagBatchRepo.findById(batchId, auth.userId);
+    const batch = tagBatchRepo.findById(batchId, auth.userId, roomOf(auth));
 
     if (!batch) {
         throw new NotFoundError("Batch not found");
@@ -192,8 +192,9 @@ const dedupeById = (batches: tagBatchRepo.TagBatchRow[]): tagBatchRepo.TagBatchR
 
 export const listTagBatches = (auth: AuthContext, limit = 20): TagBatch[] =>
     dedupeById([
-        ...tagBatchRepo.listForUser(auth.userId, limit),
-        ...(auth.scopes.includes("admin") ? tagBatchRepo.listPublic(limit) : []),
+        // The room's own (§21): a batch is of the room its tags are in.
+        ...tagBatchRepo.listForUser(auth.userId, roomOf(auth), limit),
+        ...(auth.scopes.includes("admin") ? tagBatchRepo.listPublic(roomOf(auth), limit) : []),
     ]).map(toTagBatch);
 
 /**
@@ -208,7 +209,12 @@ export const listTagBatches = (auth: AuthContext, limit = 20): TagBatch[] =>
  * cannot withdraw them is the one accident in the app with no remedy at all.
  */
 export const undoBulkTag = (batchId: string, auth: AuthContext): { removed: number } => {
-    const batch = tagBatchRepo.findById(batchId, auth.userId, auth.scopes.includes("admin"));
+    const batch = tagBatchRepo.findById(
+        batchId,
+        auth.userId,
+        roomOf(auth),
+        auth.scopes.includes("admin")
+    );
 
     if (!batch) {
         throw new NotFoundError("Batch not found");

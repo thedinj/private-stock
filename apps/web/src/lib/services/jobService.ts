@@ -56,6 +56,7 @@ export const listFailedJobs = (query: FailedJobQuery, auth: AuthContext): Failed
     requireAdmin(auth);
 
     const rows = jobRepo.listFailed({
+        rootIds: auth.accessibleRootIds,
         kind: query.kind,
         after: query.after ? Number(query.after) : undefined,
         limit: query.limit + 1,
@@ -65,7 +66,7 @@ export const listFailedJobs = (query: FailedJobQuery, auth: AuthContext): Failed
     return {
         jobs: page.map(toFailedJob),
         next: rows.length > query.limit ? String(page[page.length - 1]!.cursor) : null,
-        kinds: jobRepo.failedKinds(),
+        kinds: jobRepo.failedKinds(auth.accessibleRootIds),
         unreadable: unreadableInLibrary(auth),
     };
 };
@@ -96,8 +97,9 @@ export const retryFailedJobs = (
 
     const rows =
         "jobIds" in input
-            ? jobRepo.findFailed(input.jobIds)
+            ? jobRepo.findFailed(input.jobIds, auth.accessibleRootIds)
             : jobRepo.listFailed({
+                  rootIds: auth.accessibleRootIds,
                   kind: "kind" in input ? input.kind : undefined,
                   limit: RETRY_BATCH,
               });
@@ -134,7 +136,10 @@ export const retryFailedJobs = (
         "kind" in input
             ? (kinds.find((entry) => entry.kind === input.kind)?.count ?? 0)
             : kinds.reduce((sum, entry) => sum + entry.count, 0);
-    const remaining = "jobIds" in input ? 0 : standing(jobRepo.failedKinds()) - skipped.length;
+    const remaining =
+        "jobIds" in input
+            ? 0
+            : standing(jobRepo.failedKinds(auth.accessibleRootIds)) - skipped.length;
 
     clearProcessingCache();
 

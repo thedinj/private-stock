@@ -401,8 +401,21 @@ export const getHome = (auth: AuthContext, seed?: number): HomeResponse =>
             const { layout, isDefault } = layoutFor(auth);
             const shelves = [...layout, ...pinnedFilterShelves(layout, auth)].slice(0, MAX_SHELVES);
 
+            const resolved = shelves.map((shelf, index) => resolveShelf(shelf, index, auth, seed));
+
             return {
-                shelves: shelves.map((shelf, index) => resolveShelf(shelf, index, auth, seed)),
+                /**
+                 * The household default is one layout for every room, so a shelf in it can name
+                 * another room's playlist, view or tag (§21). Inherited rather than arranged, it
+                 * is left out where it cannot be shown -- an "unavailable" row would still carry
+                 * the title it was given -- while a shelf somebody placed themselves stays, so
+                 * they can see it and take it off.
+                 */
+                shelves: isDefault
+                    ? resolved.filter(
+                          (row) => row.unavailable === null || row.shelf.source === "builtin"
+                      )
+                    : resolved,
                 isDefault,
             };
         })

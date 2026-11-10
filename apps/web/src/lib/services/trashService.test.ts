@@ -162,10 +162,19 @@ describe("purging one entry", () => {
         id: "e1",
         mediaId: "m1",
         fileId: "f1",
+        rootId: "r1",
         restoredAt: null,
         purgedAt: null,
         twinFileId: null,
     };
+
+    /** The bin is the room's own (§21): an entry from another room's library is not found. */
+    it("does not find an entry in another room's library", () => {
+        entry = { ...open, rootId: "elsewhere", movedAt: "2026-10-01 00:00:00" };
+
+        expect(() => purgeEntry("e1", auth)).toThrow(/not found/);
+        expect(jobs).toEqual([]);
+    });
 
     it("queues the purge of an entry that is in the bin", () => {
         entry = { ...open, movedAt: "2026-10-01 00:00:00" };

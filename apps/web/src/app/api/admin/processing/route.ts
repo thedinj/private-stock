@@ -28,7 +28,7 @@ export async function GET(request: Request) {
         const auth = await requireAuth(request);
         requireScope(auth, "admin");
 
-        return NextResponse.json(getProcessingStatus());
+        return NextResponse.json(getProcessingStatus(auth));
     } catch (error) {
         return toErrorResponse(error, request);
     }

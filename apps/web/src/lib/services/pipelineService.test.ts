@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROCESSING_POLL_MS } from "@private-stock/core";
 
+import type { AuthContext } from "../auth/withAuth";
+
 /**
  * The processing view's cache (§13c, §20).
  *
@@ -49,6 +51,16 @@ vi.mock("@private-stock/db", () => ({
 
 const { clearProcessingCache, getProcessingStatus } = await import("./pipelineService");
 
+const admin: AuthContext = {
+    userId: "u1",
+    email: "a@example.test",
+    displayName: "Admin",
+    scopes: ["admin"],
+    accessibleRootIds: ["r1"],
+    domain: "cellar",
+    tokenEpoch: 0,
+};
+
 beforeEach(() => {
     vi.useFakeTimers();
     reads = 0;
@@ -65,38 +77,38 @@ afterEach(() => {
 
 describe("getProcessingStatus", () => {
     it("reads under one deferred transaction, never the web default IMMEDIATE", () => {
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(deferredTransactions).toBe(1);
     });
 
     it("reuses an idle answer for a minute", () => {
-        getProcessingStatus();
+        getProcessingStatus(admin);
         vi.advanceTimersByTime(59_000);
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(reads).toBe(1);
 
         vi.advanceTimersByTime(2_000);
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(reads).toBe(2);
     });
 
     it("recomputes an idle answer as soon as work has started", () => {
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         liveJobs = 3;
         pending = 3;
 
-        expect(getProcessingStatus().queue.pending).toBe(3);
+        expect(getProcessingStatus(admin).queue.pending).toBe(3);
         expect(reads).toBe(2);
     });
 
     it("notices a scan starting on an idle library", () => {
-        getProcessingStatus();
+        getProcessingStatus(admin);
         scanning = true;
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(reads).toBe(2);
     });
@@ -104,21 +116,21 @@ describe("getProcessingStatus", () => {
     it("never hides a busy answer for longer than one poll", () => {
         liveJobs = 1;
         pending = 1;
-        getProcessingStatus();
-        getProcessingStatus();
+        getProcessingStatus(admin);
+        getProcessingStatus(admin);
 
         expect(reads).toBe(1);
 
         vi.advanceTimersByTime(PROCESSING_POLL_MS);
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(reads).toBe(2);
     });
 
     it("is cleared by anything this process changes", () => {
-        getProcessingStatus();
+        getProcessingStatus(admin);
         clearProcessingCache();
-        getProcessingStatus();
+        getProcessingStatus(admin);
 
         expect(reads).toBe(2);
     });
