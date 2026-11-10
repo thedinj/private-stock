@@ -201,15 +201,13 @@ export const theme = createTheme({
          * paper. Set here only: the rack is the cellar's wherever it appears, so the other rooms'
          * themes inherit it rather than restyle it.
          */
-        rackWood: "linear-gradient(#4a311c, #2c1d10)",
-        rackCubby: "#120b06",
-        rackCubbyEdge: "#7d5532",
-        rackGlass: "#1d3a28",
-        rackGlassDeep: "#0b1710",
-        rackCapsule: "#7a1420",
-        rackTag: "#e8dcc2",
+        // The rack and its bottles are pictures (`public/cellar/`); what is left here is the
+        // ink on their paper tags, the string they hang from, and the seal's wax.
         rackTagInk: "#3a2a1a",
-        rackCork: "#b08454",
+        rackString: "rgba(214, 196, 160, 0.45)",
+        rackWax: "#8e0f1c",
+        rackWaxLight: "#b5202f",
+        rackWaxDeep: "#4d0610",
         // The lever's brass, fixed: `brass` is the accent, and another room's accent is not brass.
         rackBrass: "#e4b955",
         rackBrassLight: "#efd9a3",

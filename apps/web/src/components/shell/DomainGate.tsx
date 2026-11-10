@@ -17,13 +17,16 @@ import { usePinEntry } from "@/lib/usePinEntry";
 
 type Phase = "rack" | "leaving" | "arriving" | "in";
 
+/** How long the opened seal is left to split before the lights go: long enough to see it go. */
+const SPLIT_MS = 600;
+
 /**
  * The way down into a guarded room (§21 "Getting into the cellar").
  *
  * A tab that opens in the cellar, by taking the stair from the room switcher or by reopening a
  * browser that was last there, finds a wine rack first: the account's PIN is pulled from it,
- * bottle by bottle, and the lever under it tries it. A right PIN puts the lights out to one
- * candle, and the room comes up out of the dark. A wrong one pushes the bottles back and says
+ * bottle by bottle, and pressing the seal under it tries it. A right PIN splits the seal, puts
+ * the lights out to one candle, and the room comes up out of the dark. A wrong one pushes the bottles back and says
  * nothing -- a rack that announced "wrong" would be a lock -- until the last try before this
  * device is signed out, which is worth one quiet line.
  *
@@ -53,7 +56,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
     // candle, and the candle's dark lifts off it.
     useEffect(() => {
         if (phase === "leaving") {
-            const timer = window.setTimeout(() => setPhase("arriving"), DURATION.leave);
+            const timer = window.setTimeout(() => setPhase("arriving"), SPLIT_MS + DURATION.leave);
             return () => window.clearTimeout(timer);
         }
 
@@ -104,7 +107,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
             style={{
                 zIndex: 10_000,
                 background: leaving ? SNUFF_BLACK : "var(--ps-ground)",
-                transition: `background-color ${DURATION.leave}ms`,
+                transition: `background-color ${DURATION.leave}ms ${SPLIT_MS}ms`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -118,7 +121,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
                 maw={340}
                 style={{
                     opacity: leaving ? 0 : 1,
-                    transition: `opacity ${DURATION.leave}ms`,
+                    transition: `opacity ${DURATION.leave}ms ${SPLIT_MS}ms`,
                 }}
             >
                 <WineRack
@@ -128,6 +131,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
                     onBack={entry.back}
                     onClear={entry.clear}
                     onTry={() => void entry.submit()}
+                    opened={leaving}
                     disabled={entry.busy || leaving}
                     note={note}
                     captureKeys

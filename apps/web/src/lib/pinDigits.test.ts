@@ -2,14 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { pinSchema } from "@private-stock/core";
 
-import {
-    canTry,
-    PIN_MAX_DIGITS,
-    PIN_MIN_DIGITS,
-    RACK_DIGITS,
-    vintageOf,
-    withDigit,
-} from "./pinDigits";
+import { canTry, PIN_MAX_DIGITS, PIN_MIN_DIGITS, vintageOf, withDigit } from "./pinDigits";
+import { BOTTLES, TAGS } from "@/components/shell/wineRackLayout";
 
 describe("pinDigits", () => {
     it("agrees with the schema about how long a PIN is", () => {
@@ -33,8 +27,25 @@ describe("pinDigits", () => {
         expect(canTry("1234")).toBe(true);
     });
 
-    it("has every digit once, each on a vintage ending in it", () => {
-        expect([...RACK_DIGITS].sort()).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-        RACK_DIGITS.forEach((digit) => expect(vintageOf(digit).endsWith(digit)).toBe(true));
+    it("has every digit once on the rack, each tagged with a vintage ending in it", () => {
+        const digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+        expect(BOTTLES.map((bottle) => bottle.digit).sort()).toEqual(digits);
+        expect(TAGS.map((tag) => tag.digit).sort()).toEqual(digits);
+        digits.forEach((digit) => expect(vintageOf(digit).endsWith(digit)).toBe(true));
+    });
+
+    it("lays the bottles out as a keypad: rows of three, the nought alone below", () => {
+        const rows = [0, 3, 6].map((start) => BOTTLES.slice(start, start + 3));
+
+        rows.forEach((row) => {
+            expect(
+                Math.max(...row.map((b) => b.top)) - Math.min(...row.map((b) => b.top))
+            ).toBeLessThan(2);
+            expect(row[0].left).toBeLessThan(row[1].left);
+            expect(row[1].left).toBeLessThan(row[2].left);
+        });
+        expect(BOTTLES[9]).toMatchObject({ digit: "0" });
+        expect(BOTTLES[9].top).toBeGreaterThan(rows[2][0].top);
     });
 });

@@ -12229,9 +12229,22 @@ by someone looking on, on a desktop and on a phone. Other accounts were not the 
   vintage whose last figure is its digit. **A tugged bottle springs back**, because a PIN can
   repeat a digit; a cork on the ledge records each digit, and the corks are alike, so a look
   over the shoulder learns how many and not which. Tap the ledge to take one back; swipe across
-  the rack (or Escape) to push them all back. A lever under the rack tries the PIN -- four to
-  eight digits means the rack cannot tell by itself when you have finished -- and Enter turns
-  it.
+  the rack (or Escape) to push them all back. **A wax seal under the rack tries the PIN** -- four
+  to eight digits means the rack cannot tell by itself when you have finished. Hold the signet
+  ring and it comes down into the wax; let go early and it lifts away, so a stray tap tries
+  nothing. Pressed home, the seal keeps its impression until the answer: a right PIN splits it
+  along a crack before the lights go, anything else smooths the wax back. Enter presses it.
+- **The rack is drawn, not styled** (2026-11-09). It was CSS gradients -- square cubbies, a glossy
+  dome per bottle -- and read as a diagram of a rack. Now the bottles lie neck out, as they do in
+  a cellar, at a bottle's true scale (the capsule two fifths of its width, the dark shoulder
+  filling the opening), with crimped foil or dipped wax, rough oak with real grain, dust on what
+  faces up, and paper tags on strings. Chosen from two rounds of plates
+  (<https://claude.ai/artifact/QnxXANbFqWXWkvdmCGHTHz>, <https://claude.ai/artifact/5n5hfN5CWh3TJyY1CPsYys>,
+  "Necks in the oak") with round one's spring and seal. The pictures are drawn from noise by
+  `apps/web/scripts/wineRackArt.html` once and committed (`public/cellar/`, about 100 KB), with
+  the bottle and tag positions in `wineRackLayout.ts`: drawing them per pixel in the gate took
+  seconds on a phone. A pressed bottle springs out and back on a damped spring sampled into the
+  Web Animations API.
 - **A wrong PIN says nothing.** The corks go and the rack is as it was. The one exception is the
   try before the device is signed out, which gets a single dim line, since a sign-out with no
   warning at all would be worse than a hint. The attempt limit is the screen lock's

@@ -14,11 +14,5 @@ export const withDigit = (digits: string, digit: string): string =>
 /** Whether there is enough to be worth asking the server about. */
 export const canTry = (digits: string): boolean => digits.length >= PIN_MIN_DIGITS;
 
-/**
- * The rack's bottles in the keypad's order: three rows of three, then the nought alone on the
- * bottom row.
- */
-export const RACK_DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] as const;
-
 /** The vintage on a bottle's tag. Its last figure is the digit it enters. */
 export const vintageOf = (digit: string): string => `201${digit}`;

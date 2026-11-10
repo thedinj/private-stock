@@ -1,0 +1,285 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Wine rack art</title>
+<!--
+  The cellar's wine rack, drawn (ARCHITECTURE.md §21 "Getting into the cellar"). Generates the
+  images in apps/web/public/cellar/ and the numbers in src/components/shell/wineRackLayout.ts.
+
+  Drawn from noise rather than painted, so nothing is a flat fill and no two bottles match; drawn
+  once, here, rather than in the gate, because the per-pixel passes take seconds on a phone.
+  To regenerate: serve this folder (`npx serve apps/web/scripts`), open this page, and read
+  `window.__art` (data URLs and layout) -- by hand from the console, or from a browser
+  automation session. The drawing is seeded, so the same code draws the same rack.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&display=swap">
+<body style="background:#0f0d0b;color:#f4efe8;font:14px system-ui">
+<pre id="out">Drawing...</pre>
+<script>
+(() => {
+    const DPR = 2;
+    /* ---------- noise ---------- */
+    const hash = (x, y, s) => {
+        let h = (x * 374761393 + y * 668265263 + s * 1442695041) | 0;
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967295;
+    };
+    const smooth = (t) => t * t * (3 - 2 * t);
+    const noise = (x, y, s = 0) => {
+        const ix = Math.floor(x), iy = Math.floor(y), fx = smooth(x - ix), fy = smooth(y - iy);
+        const a = hash(ix, iy, s), b = hash(ix + 1, iy, s), c = hash(ix, iy + 1, s), d = hash(ix + 1, iy + 1, s);
+        return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+    };
+    const fbm = (x, y, s = 0, oct = 4) => {
+        let v = 0, amp = 0.5, f = 1;
+        for (let i = 0; i < oct; i++) { v += amp * noise(x * f, y * f, s + i * 17); f *= 2; amp *= 0.5; }
+        return v;
+    };
+    let seed = 11;
+    const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    const mix = (a, b, t) => a + (b - a) * t;
+    const rgb = (c) => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+
+    const canvas = (w, h) => {
+        const el = document.createElement("canvas");
+        el.width = Math.round(w * DPR); el.height = Math.round(h * DPR);
+        const ctx = el.getContext("2d");
+        ctx.scale(DPR, DPR);
+        return [el, ctx];
+    };
+
+    /** Paint every pixel of a canvas from a function: matte surfaces want noise, not gradients. */
+    const shade = (ctx, w, h, fn) => {
+        const W = Math.round(w * DPR), H = Math.round(h * DPR);
+        const img = ctx.getImageData(0, 0, W, H);
+        const d = img.data;
+        for (let py = 0; py < H; py++) {
+            for (let px = 0; px < W; px++) {
+                const [r, g, b, a] = fn(px / DPR, py / DPR);
+                const i = (py * W + px) * 4;
+                d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a ?? 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+    };
+
+    /** Oak: long grain along x, rings bent by noise, open pores, darker where the light falls off. */
+    const oakAt = (x, y, s, light = 1) => {
+        const warp = fbm(x * 0.006, y * 0.045, s, 4) * 7;
+        const ring = 0.5 + 0.5 * Math.sin((y * 0.11 + warp) * 2.4);
+        const fibre = noise(x * 0.35, y * 2.2, s + 5);
+        const pore = noise(x * 0.9, y * 4.5, s + 9) > 0.86 ? 0.55 : 1;
+        let t = (0.35 + 0.4 * ring * ring + 0.25 * fibre) * pore;
+        t *= light;
+        const dark = rgb("#1f130a"), mid = rgb("#4a2f19"), lite = rgb("#7a5532");
+        const c = t < 0.5 ? dark.map((v, i) => mix(v, mid[i], t * 2)) : mid.map((v, i) => mix(v, lite[i], (t - 0.5) * 2));
+        return c;
+    };
+
+    const paperTexture = (() => {
+        const [el, ctx] = canvas(60, 24);
+        shade(ctx, 60, 24, (x, y) => {
+            const n = fbm(x * 0.15, y * 0.15, 4, 3);
+            const fox = fbm(x * 0.05, y * 0.08, 8, 2) > 0.62 ? 0.82 : 1;
+            const v = (0.8 + 0.2 * n) * fox;
+            return [232 * v, 214 * v, 178 * v];
+        });
+        return el.toDataURL();
+    })();
+
+    const corkTexture = (() => {
+        const [el, ctx] = canvas(20, 14);
+        shade(ctx, 20, 14, (x, y) => {
+            const n = noise(x * 0.9, y * 0.9, 31);
+            const pit = noise(x * 2.1, y * 2.1, 33) > 0.8 ? 0.6 : 1;
+            const edge = 1 - Math.pow(Math.abs(y - 7) / 7, 3) * 0.4;
+            const v = (0.7 + 0.3 * n) * pit * edge;
+            return [176 * v, 130 * v, 84 * v];
+        });
+        return el.toDataURL();
+    })();
+
+
+    const W = 300, H = 384;
+    {
+        const CW = 80, CH = 78, GX = 14, GY = 12, M = 16;
+        const [frame, ctx] = canvas(W, H);
+
+        const cells = [];
+        for (let i = 0; i < 10; i++) {
+            const row = i < 9 ? Math.floor(i / 3) : 3;
+            const col = i < 9 ? i % 3 : 1;
+            cells.push({ digit: String((i + 1) % 10), x: M + col * (CW + GX), y: M + row * (CH + GY) });
+        }
+        // Each opening is a slightly different hole: hand-cut, not stamped.
+        const holes = cells.map((c, i) => {
+            const j = (k) => (hash(i, k, 5) - 0.5) * 3;
+            return { x: c.x + j(1), y: c.y + j(2), w: CW + j(3), h: CH + j(4), r: 5 + hash(i, 9, 5) * 4 };
+        });
+        const inHole = (x, y) => holes.find((h) => x > h.x && x < h.x + h.w && y > h.y && y < h.y + h.h);
+
+        shade(ctx, W, H, (x, y) => {
+            const hole = inHole(x, y);
+            if (hole) {
+                // Deep in the opening: near-black, a little warmth at the lip.
+                const dx = Math.min(x - hole.x, hole.x + hole.w - x), dy = Math.min(y - hole.y, hole.y + hole.h - y);
+                const lip = Math.min(dx, dy);
+                const v = 6 + Math.max(0, 14 - lip) * 0.9 + noise(x * 0.2, y * 0.2, 3) * 4;
+                return [v * 1.3, v * 0.95, v * 0.7];
+            }
+            // Light from above: the rack darkens toward the floor and at its edges.
+            const light = 1.05 - (y / H) * 0.35 - Math.pow(Math.abs(x - W / 2) / (W / 2), 3) * 0.25;
+            // Stiles run vertically between the openings: grain turns with them.
+            const stile = holes.some((h) => y > h.y - 6 && y < h.y + h.h + 6 && ((x > h.x + h.w && x < h.x + h.w + GX) || (x < h.x && x > h.x - GX)));
+            return stile ? oakAt(y * 0.9 + 40, x * 0.9, 21, light * 0.92) : oakAt(x, y, 12, light);
+        });
+        // Bevel: the lip of each opening catches light along its bottom edge and shadows its top.
+        holes.forEach((h) => {
+            ctx.save();
+            ctx.beginPath(); ctx.roundRect(h.x, h.y, h.w, h.h, h.r);
+            ctx.lineWidth = 2;
+            const g = ctx.createLinearGradient(0, h.y, 0, h.y + h.h);
+            g.addColorStop(0, "rgba(0,0,0,.65)"); g.addColorStop(1, "rgba(255,214,160,.14)");
+            ctx.strokeStyle = g; ctx.stroke();
+            ctx.restore();
+        });
+        // Wear: scuffs and a few nail holes, so it has been used.
+        for (let i = 0; i < 40; i++) {
+            const x = hash(i, 1, 77) * W, y = hash(i, 2, 77) * H;
+            if (inHole(x, y)) continue;
+            ctx.fillStyle = `rgba(0,0,0,${0.15 + hash(i, 3, 77) * 0.25})`;
+            ctx.beginPath(); ctx.ellipse(x, y, 0.6 + hash(i, 4, 77) * 1.6, 0.4 + hash(i, 5, 77), 0, 0, Math.PI * 2); ctx.fill();
+        }
+
+        /**
+         * A bottle lying neck out, seen nearly end-on and a little from above.
+         *
+         * True to scale: the capsule is about 30 mm on a 75 mm bottle, so the neck is two fifths of
+         * the bottle's width, and the shoulder -- dark glass curving away -- fills most of the
+         * opening. Seen slightly from above, the capsule shows its skirt below its top.
+         */
+        const capsule = (size, i) => {
+            const [el, c] = canvas(size, size);
+            const cx = size / 2, cy = size / 2;
+            const body = size * 0.49;
+
+            // The shoulder: a dome of near-black glass, lit along its upper curve, darkest where it
+            // turns in to the neck and at its edge where it meets the shadow of the opening.
+            const W2 = Math.ceil(size * DPR);
+            const img = c.getImageData(0, 0, W2, W2), d = img.data;
+            for (let py = 0; py < W2; py++) for (let px = 0; px < W2; px++) {
+                const x = px / DPR - cx, y = py / DPR - cy, r = Math.hypot(x, y) / body;
+                if (r > 1) continue;
+                const slope = Math.sin(Math.min(1, r) * Math.PI);           // the curve of the shoulder
+                const fromAbove = Math.max(0, -y / (r * body + 0.001));      // faces the lamp
+                let v = 0.1 + 0.22 * slope * (0.35 + 0.65 * fromAbove) + 0.05 * noise(px * 0.15, py * 0.15, i + 60);
+                v *= 1 - Math.pow(r, 6) * 0.7;
+                let col = [26 * v * 3.2, 44 * v * 3.2, 33 * v * 3.2];
+                // Dust on whatever faces up.
+                const drift = fbm(x * 0.12 + i * 3, y * 0.12, 140 + i, 3);
+                const dust = Math.max(0, fromAbove * slope * 0.55 + (drift - 0.55) * 0.8) * 0.45;
+                col = col.map((cv, k) => mix(cv, [150, 144, 130][k], Math.min(0.5, dust)));
+                const o = (py * W2 + px) * 4;
+                d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255 * Math.min(1, (1 - r) * 14);
+            }
+            c.putImageData(img, 0, 0);
+
+            const kind = ["foil-ox", "foil-gilt", "wax", "foil-black", "foil-ox", "foil-verd", "foil-gilt", "wax-green", "foil-ox", "foil-black"][i];
+            const R = size * 0.2;           // the capsule's radius: 30 mm on a 75 mm bottle
+            const lift = size * 0.07;       // how much of the skirt shows below the top
+            const topY = cy - lift / 2;
+
+            // The neck's own shadow on the shoulder, below and right of the lamp.
+            const sh = c.createRadialGradient(cx + 2, cy + lift, R * 0.6, cx + 2, cy + lift, R * 1.9);
+            sh.addColorStop(0, "rgba(0,0,0,.6)"); sh.addColorStop(1, "rgba(0,0,0,0)");
+            c.fillStyle = sh; c.beginPath(); c.arc(cx + 2, cy + lift, R * 1.9, 0, Math.PI * 2); c.fill();
+
+            if (kind.startsWith("wax")) {
+                // Dipped: the wax ran down the neck, so the blob is longer below than above.
+                const base = kind === "wax" ? [122, 18, 26] : [36, 70, 52];
+                c.beginPath();
+                for (let a = 0; a <= 72; a++) {
+                    const t = (a / 72) * Math.PI * 2;
+                    const run = Math.sin(t) > 0 ? Math.pow(Math.sin(t), 3) * (0.25 + 0.35 * noise(t * 2.5, 2, i)) : 0;
+                    const r = R * (1.12 + 0.1 * (noise(Math.cos(t) * 2 + 5, Math.sin(t) * 2 + 5, i) - 0.5) + run);
+                    const px = cx + Math.cos(t) * r, py = topY + Math.sin(t) * r;
+                    a ? c.lineTo(px, py) : c.moveTo(px, py);
+                }
+                c.closePath();
+                const g = c.createRadialGradient(cx - R * 0.35, topY - R * 0.45, R * 0.1, cx, topY, R * 1.4);
+                g.addColorStop(0, `rgb(${base.map((v) => Math.min(255, v * 1.55)).join(",")})`);
+                g.addColorStop(1, `rgb(${base.map((v) => v * 0.4).join(",")})`);
+                c.fillStyle = g; c.fill();
+                c.strokeStyle = "rgba(0,0,0,.45)"; c.lineWidth = 0.8; c.stroke();
+                c.strokeStyle = "rgba(0,0,0,.3)"; c.lineWidth = 1;
+                c.beginPath(); c.arc(cx + 0.5, topY + 0.6, R * 0.55, 0, Math.PI * 2); c.stroke();
+            } else {
+                const base = { "foil-ox": [104, 22, 32], "foil-gilt": [142, 108, 46], "foil-black": [62, 56, 50], "foil-verd": [44, 78, 66] }[kind];
+                const tint = (v) => `rgb(${base[0] * v | 0},${base[1] * v | 0},${base[2] * v | 0})`;
+                // The skirt: the capsule's side, a short cylinder seen from a little above, with
+                // the foil's vertical wrinkles.
+                c.save();
+                c.beginPath();
+                c.ellipse(cx, topY + lift, R, R * 0.96, 0, 0, Math.PI);
+                c.lineTo(cx - R, topY);
+                c.ellipse(cx, topY, R, R * 0.96, 0, Math.PI, 0, true);
+                c.closePath();
+                c.clip();
+                for (let k = -R; k <= R; k += 0.5) {
+                    const across = k / R;
+                    const v = (0.45 + 0.35 * Math.sqrt(1 - across * across)) * (0.8 + 0.4 * noise(k * 0.9, 3, i + 20));
+                    c.fillStyle = tint(v);
+                    c.fillRect(cx + k, topY, 0.6, R * 2 + lift);
+                }
+                c.restore();
+                // The top: dull foil with creases, lighter toward the lamp, crimped at the edge.
+                for (let py = -R; py <= R; py += 0.5) for (let px = -R; px <= R; px += 0.5) {
+                    const rad = Math.hypot(px, py) / R;
+                    if (rad > 1) continue;
+                    const ang = Math.atan2(py, px);
+                    const crimp = rad > 0.8 ? 0.72 + 0.35 * Math.abs(Math.sin(ang * 14)) : 1;
+                    const crease = 0.85 + 0.3 * fbm((px + 40) * 0.3, (py + 40) * 0.3, i + 40, 3);
+                    const lamp = 1.12 - (py / R) * 0.22 - rad * 0.12;
+                    c.fillStyle = tint(crimp * crease * lamp);
+                    c.fillRect(cx + px, topY + py, 0.6, 0.6);
+                }
+                c.lineWidth = 0.8;
+                c.strokeStyle = "rgba(0,0,0,.3)"; c.beginPath(); c.arc(cx + 0.3, topY + 0.4, R * 0.6, 0, Math.PI * 2); c.stroke();
+                c.strokeStyle = "rgba(255,240,210,.09)"; c.beginPath(); c.arc(cx - 0.3, topY - 0.4, R * 0.6, 0, Math.PI * 2); c.stroke();
+            }
+            return el;
+        };
+
+
+        const BOTTLE = 76;
+        const pct = (v, of) => +((v / of) * 100).toFixed(3);
+        const bottles = [], tags = [];
+        cells.forEach((cell, i) => {
+            const hole = holes[i];
+            const jx = (hash(i, 1, 9) - 0.5) * 5, jy = (hash(i, 2, 9) - 0.5) * 4;
+            const left = hole.x + hole.w / 2 - BOTTLE / 2 + jx, top = hole.y + hole.h / 2 - BOTTLE / 2 + jy;
+            bottles.push({ digit: cell.digit, left: pct(left, W), top: pct(top, H), image: capsule(BOTTLE, i).toDataURL("image/webp", 0.9) });
+            const tx = hole.x + hole.w - 30 + (hash(i, 7, 9) - 0.5) * 6, ty = hole.y + hole.h - 14;
+            tags.push({
+                digit: cell.digit, left: pct(tx, W), top: pct(ty, H),
+                tilt: +((hash(i, 8, 9) - 0.5) * 14).toFixed(2),
+                stringLeft: pct(tx + 16, W), stringTop: pct(hole.y + hole.h - 26, H),
+                stringTilt: +((hash(i, 8, 9) - 0.5) * 20).toFixed(2),
+            });
+        });
+
+        const [lc, lctx] = canvas(300, 44);
+        shade(lctx, 300, 44, (x, y) => oakAt(x, y + 300, 44, 0.85 - (y / 44) * 0.3));
+
+        window.__art = {
+            rack: frame.toDataURL("image/webp", 0.9),
+            ledge: lc.toDataURL("image/webp", 0.9),
+            paper: paperTexture,
+            cork: corkTexture,
+            bottles, tags,
+            size: { width: W, height: H, bottle: pct(BOTTLE, W), bottleHeight: pct(BOTTLE, H) },
+        };
+        document.getElementById("out").textContent = "Done: window.__art";
+    }
+})();
+</script>

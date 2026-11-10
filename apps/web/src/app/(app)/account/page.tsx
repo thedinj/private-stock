@@ -339,7 +339,7 @@ const PinOnRack: React.FC<{ onChosen: (pin: string | null) => void }> = ({ onCho
                 {chosen
                     ? "Enter your password below to save it."
                     : first === null
-                      ? "Pull the bottles in order, then turn the lever. Four to eight; six is a good length."
+                      ? "Pull the bottles in order, then hold the seal. Four to eight; six is a good length."
                       : "Once more, to be sure."}
             </Text>
             <WineRack
