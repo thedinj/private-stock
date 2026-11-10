@@ -91,6 +91,7 @@ import {
 import { useReviewPasses, useSetReviewMark } from "@/lib/api/reviewPasses";
 import { NameReviewPass } from "@/components/media/NameReviewPass";
 import { ReviewControl } from "@/components/media/ReviewControl";
+import { TOUCH_TARGET } from "@/theme";
 
 import classes from "@/components/media/PlayerStage.module.scss";
 
@@ -1104,6 +1105,19 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         </>
     );
 
+    /** "More like this" (§5e), from this moment of a film or from the photograph itself. */
+    const moreLikeThis = () =>
+        router.push(
+            `/?${viewToParams({
+                ...DEFAULT_VIEW,
+                mode: "grid",
+                like:
+                    data.kind === "video"
+                        ? `${data.id}@${Math.round(positionRef.current)}`
+                        : data.id,
+            }).toString()}`
+        );
+
     return (
         <Stack gap="lg">
             {/* The way back to *where you were*, not to the front door.
@@ -1377,19 +1391,29 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {data.title}
                 </h1>
 
-                {/* One height for every action on the row. On a phone they go icon-only:
-                    labelled, the four overflowed a 360px screen. */}
-                <Group gap={narrow ? "xs" : "md"} wrap="nowrap">
+                {/* One height for every action on the row. On a phone it becomes two rows: the
+                    glasses and the heart on their own, thumb-sized, then the actions as square
+                    icons spread across the width. In one row, icon-only, they still overflowed
+                    a 360px screen by half again. */}
+                <Group
+                    gap={narrow ? "xs" : "md"}
+                    wrap={narrow ? "wrap" : "nowrap"}
+                    justify={narrow ? "space-between" : undefined}
+                    w={narrow ? "100%" : undefined}
+                >
                     {/* The most frequent act on this page after playing it. */}
                     {/* Controlled by the page, which saves for it: the keys and the clicks are
                         one path, so both get the message over the picture and both make the
                         row burst (§14b). */}
-                    <RatingControl
-                        rating={shownRating}
-                        favorite={shownFavorite}
-                        onChange={setOpinion}
-                        celebration={flash && isGrand(flash) ? flash : null}
-                    />
+                    <Box w={narrow ? "100%" : undefined}>
+                        <RatingControl
+                            rating={shownRating}
+                            favorite={shownFavorite}
+                            onChange={setOpinion}
+                            celebration={flash && isGrand(flash) ? flash : null}
+                            large={narrow}
+                        />
+                    </Box>
 
                     {/* The way anything gets into a playlist (§14b). Here because this is
                         where you decide you want it -- the decision is made watching the
@@ -1415,28 +1439,27 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                         library rather than the set you came from, which may have been narrowed
                         to something this frame has nothing to do with. Not in a room that
                         does not embed (§21): it would always come back empty. */}
-                    {roomRuns("embed") && (
-                        <Button
-                            variant="default"
-                            onClick={() =>
-                                router.push(
-                                    `/?${viewToParams({
-                                        ...DEFAULT_VIEW,
-                                        mode: "grid",
-                                        like:
-                                            data.kind === "video"
-                                                ? `${data.id}@${Math.round(positionRef.current)}`
-                                                : data.id,
-                                    }).toString()}`
-                                )
-                            }
-                            leftSection={narrow ? undefined : <LookAlikeGlyph size={16} />}
-                            aria-label="More like this"
-                            title="More like this moment"
-                        >
-                            {narrow ? <LookAlikeGlyph size={16} /> : "More like this"}
-                        </Button>
-                    )}
+                    {roomRuns("embed") &&
+                        (narrow ? (
+                            <ActionIcon
+                                variant="default"
+                                size={TOUCH_TARGET}
+                                onClick={moreLikeThis}
+                                aria-label="More like this"
+                                title="More like this moment"
+                            >
+                                <LookAlikeGlyph size={16} />
+                            </ActionIcon>
+                        ) : (
+                            <Button
+                                variant="default"
+                                onClick={moreLikeThis}
+                                leftSection={<LookAlikeGlyph size={16} />}
+                                title="More like this moment"
+                            >
+                                More like this
+                            </Button>
+                        ))}
 
                     {/* Who is this? (§5f): this frame's faces, found across the library.
                         Administrators', as every face surface is; a film's, being a moment. It
@@ -1454,15 +1477,21 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             />
                         )}
 
-                    <Button
-                        variant="default"
-                        onClick={details.open}
-                        leftSection={narrow ? undefined : <InfoIcon />}
-                        aria-label="Details"
-                        title="Details"
-                    >
-                        {narrow ? <InfoIcon /> : "Details"}
-                    </Button>
+                    {narrow ? (
+                        <ActionIcon
+                            variant="default"
+                            size={TOUCH_TARGET}
+                            onClick={details.open}
+                            aria-label="Details"
+                            title="Details"
+                        >
+                            <InfoIcon />
+                        </ActionIcon>
+                    ) : (
+                        <Button variant="default" onClick={details.open} leftSection={<InfoIcon />}>
+                            Details
+                        </Button>
+                    )}
 
                     {/* The way to trash it on a phone, where there is no Delete key and the
                         drawer's button is a scroll away at the foot of everything (§10).
@@ -1476,7 +1505,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             <ActionIcon
                                 variant="subtle"
                                 color="oxblood"
-                                size="input-sm"
+                                size={narrow ? TOUCH_TARGET : "input-sm"}
                                 aria-label="Move to trash"
                                 onClick={trashDialog.open}
                             >

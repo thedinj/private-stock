@@ -112,6 +112,12 @@ const dark: MantineColorsTuple = [
     "#0a0807",
 ];
 
+/**
+ * The smallest a control is drawn on a phone, in px: the touch-target floor CLAUDE.md sets.
+ * Icon-only actions use it as their square, so a row of them is one width apiece.
+ */
+export const TOUCH_TARGET = 44;
+
 export const theme = createTheme({
     primaryColor: "brass",
     primaryShade: { light: 6, dark: 4 },

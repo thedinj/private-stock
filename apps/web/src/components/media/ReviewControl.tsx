@@ -1,12 +1,13 @@
 "use client";
 
-import { Button, Group, Menu } from "@mantine/core";
+import { ActionIcon, Button, Group, Menu } from "@mantine/core";
 
 import type { ItemReview, ReviewPass } from "@private-stock/core";
 
 import { ViewerKeyTip } from "@/components/KeyTip";
 import { CheckGlyph, CloseGlyph } from "@/components/media/Glyph";
 import { useSetReviewMark } from "@/lib/api/reviewPasses";
+import { TOUCH_TARGET } from "@/theme";
 
 /**
  * The item page's Review control (§14d "Reviewing recordings for a reel").
@@ -51,9 +52,9 @@ export const ReviewControl: React.FC<{
         <Menu withinPortal position="bottom-end">
             <Menu.Target>
                 {narrow ? (
-                    <Button variant="default" aria-label="Review">
+                    <ActionIcon variant="default" size={TOUCH_TARGET} aria-label="Review">
                         <CheckGlyph size={16} />
-                    </Button>
+                    </ActionIcon>
                 ) : (
                     <Button
                         variant={reviewing ? "filled" : "default"}

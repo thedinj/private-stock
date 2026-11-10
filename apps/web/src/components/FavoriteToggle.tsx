@@ -1,6 +1,13 @@
 "use client";
 
-import { ActionIcon, Box, Kbd, Tooltip, type ActionIconProps } from "@mantine/core";
+import {
+    ActionIcon,
+    Box,
+    Kbd,
+    Tooltip,
+    type ActionIconProps,
+    type MantineFontSize,
+} from "@mantine/core";
 
 import { Burst } from "@/components/media/Burst";
 
@@ -27,6 +34,8 @@ interface FavoriteToggleProps {
     /** Names the `H` key in the tooltip -- only where the page actually binds it. */
     shortcut?: boolean;
     size?: ActionIconProps["size"];
+    /** The heart is a character, so it is sized as type: grown beside large glasses. */
+    glyphSize?: MantineFontSize;
     /** What is being favourited, for a screen reader on a page of many hearts. */
     subject?: string;
 }
@@ -37,6 +46,7 @@ export const FavoriteToggle: React.FC<FavoriteToggleProps> = ({
     burstKey,
     shortcut = false,
     size = "input-sm",
+    glyphSize,
     subject,
 }) => {
     const action = favorite ? "Remove from favourites" : "Add to favourites";
@@ -62,6 +72,7 @@ export const FavoriteToggle: React.FC<FavoriteToggleProps> = ({
                     variant="subtle"
                     color={favorite ? "oxblood" : "gray"}
                     size={size}
+                    fz={glyphSize}
                     aria-label={label}
                     aria-pressed={favorite}
                     aria-keyshortcuts={shortcut ? "h" : undefined}

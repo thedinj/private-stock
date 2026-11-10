@@ -2,7 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Box, Button, Group, Loader, Modal, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
+import {
+    ActionIcon,
+    Box,
+    Button,
+    Group,
+    Loader,
+    Modal,
+    Paper,
+    SimpleGrid,
+    Stack,
+    Text,
+} from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import {
@@ -28,6 +39,7 @@ import {
 import { faceSquare } from "@/lib/faceSquare";
 import { parseAtParam } from "@/lib/resumePoint";
 import { formatTimecode } from "@/lib/timecode";
+import { TOUCH_TARGET } from "@/theme";
 
 /**
  * Who is this? (§5f "Who is this?"): the frame on screen, its faces, and for the one chosen the
@@ -754,15 +766,27 @@ export const WhoIsThis: React.FC<{
 
     return (
         <>
-            <Button
-                variant="default"
-                onClick={open}
-                leftSection={iconOnly ? undefined : <SomebodyGlyph size={16} />}
-                aria-label="Who is this?"
-                title="Who is this? Find this face across the library"
-            >
-                {iconOnly ? <SomebodyGlyph size={16} /> : "Who is this?"}
-            </Button>
+            {iconOnly ? (
+                <ActionIcon
+                    variant="default"
+                    size={TOUCH_TARGET}
+                    onClick={open}
+                    aria-label="Who is this?"
+                    title="Who is this? Find this face across the library"
+                >
+                    <SomebodyGlyph size={16} />
+                </ActionIcon>
+            ) : (
+                <Button
+                    variant="default"
+                    onClick={open}
+                    leftSection={<SomebodyGlyph size={16} />}
+                    aria-label="Who is this?"
+                    title="Who is this? Find this face across the library"
+                >
+                    Who is this?
+                </Button>
+            )}
 
             <Modal
                 opened={opened}

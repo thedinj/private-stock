@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Group, Menu, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { ActionIcon, Button, Group, Menu, Modal, Stack, Text, TextInput } from "@mantine/core";
 
 import { useAddPlaylistItems, useCreatePlaylist, usePlaylists } from "@/lib/api/playlists";
+import { TOUCH_TARGET } from "@/theme";
 
 /**
  * Putting the item you are watching into a list (§14b).
@@ -54,14 +55,26 @@ export const AddToPlaylist: React.FC<{ mediaId: string; iconOnly?: boolean }> = 
                 <Menu.Target>
                     {/* The height of the other actions on its row -- it was a 22px text
                         button beside a 36px one, reading as a different system. */}
-                    <Button
-                        variant="default"
-                        loading={add.isPending}
-                        aria-label="Add to a playlist"
-                        title="Add to a playlist"
-                    >
-                        {iconOnly ? "+" : "+ Playlist"}
-                    </Button>
+                    {iconOnly ? (
+                        <ActionIcon
+                            variant="default"
+                            size={TOUCH_TARGET}
+                            loading={add.isPending}
+                            aria-label="Add to a playlist"
+                            title="Add to a playlist"
+                        >
+                            +
+                        </ActionIcon>
+                    ) : (
+                        <Button
+                            variant="default"
+                            loading={add.isPending}
+                            aria-label="Add to a playlist"
+                            title="Add to a playlist"
+                        >
+                            + Playlist
+                        </Button>
+                    )}
                 </Menu.Target>
 
                 <Menu.Dropdown>

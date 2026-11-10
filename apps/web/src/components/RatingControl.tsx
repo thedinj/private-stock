@@ -7,6 +7,7 @@ import { FavoriteToggle } from "@/components/FavoriteToggle";
 import { Burst } from "@/components/media/Burst";
 import type { StageFlashMessage } from "@/components/media/StageFlash";
 import { ratingAfterPressing, type UserMediaPatch } from "@/lib/api/userMedia";
+import { TOUCH_TARGET } from "@/theme";
 
 import classes from "./RatingControl.module.scss";
 
@@ -87,6 +88,11 @@ interface RatingControlProps {
     onChange: (patch: UserMediaPatch) => void;
     /** The celebration in progress, if any; a new `key` plays it again. */
     celebration: StageFlashMessage | null;
+    /**
+     * Thumb-sized, for a phone, where the glasses have a row of their own: at the default size
+     * five of them are a 90px strip with an 18px target each.
+     */
+    large?: boolean;
 }
 
 export const RatingControl: React.FC<RatingControlProps> = ({
@@ -94,6 +100,7 @@ export const RatingControl: React.FC<RatingControlProps> = ({
     favorite,
     onChange,
     celebration,
+    large = false,
 }) => {
     const starBurst = celebration?.subject === "rating" ? celebration.key : null;
     const heartBurst = celebration?.subject === "favorite" ? celebration.key : null;
@@ -126,6 +133,7 @@ export const RatingControl: React.FC<RatingControlProps> = ({
                 <Rating
                     value={rating ?? 0}
                     color="brass"
+                    size={large ? "xl" : "sm"}
                     emptySymbol={(value) => <Glass full={false} value={value} />}
                     fullSymbol={(value) => (
                         <Glass
@@ -156,6 +164,8 @@ export const RatingControl: React.FC<RatingControlProps> = ({
                 onToggle={() => onChange({ favorite: !favorite })}
                 burstKey={heartBurst}
                 shortcut
+                size={large ? TOUCH_TARGET : undefined}
+                glyphSize={large ? "xl" : undefined}
             />
         </Group>
     );
