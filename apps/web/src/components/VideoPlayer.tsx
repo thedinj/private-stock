@@ -302,6 +302,12 @@ interface VideoPlayerProps {
      * where it went.
      */
     cast?: CastControl | null;
+    /**
+     * A control about the set rather than the item, on its own row at the top of the bar: the
+     * private screening's "This way up" (§14h). On the bar so it is there in fullscreen, where
+     * a screening plays, and goes when the bar does.
+     */
+    setControl?: React.ReactNode;
 }
 
 /**
@@ -433,6 +439,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     steps = null,
     menuItems,
     cast = null,
+    setControl,
 }) => {
     /**
      * The element on screen, held in state as well as in a ref.
@@ -2159,6 +2166,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         barHoveredRef.current = false;
                     }}
                 >
+                    {setControl && <Group pt={4}>{setControl}</Group>}
+
                     {compact ? (
                         /* On a phone the time reads off the ends of the scrubber, which leaves the
                            row below it to the targets. */

@@ -324,6 +324,9 @@ const whereFor = (kind: KindSql, query: LibraryQuery, scope: Scope): Builder | n
     );
 
     if (query.orientation) clauses.push(ORIENTATION(kind, query.orientation));
+    if (query.fits) {
+        clauses.push(`(${ORIENTATION(kind, query.fits)} OR ${ORIENTATION(kind, "square")})`);
+    }
 
     // Whole days at both ends, as the library reads its own (§14e "Dates").
     if (query.addedFrom) clauses.push(`${kind.added} >= :${b.bind(query.addedFrom)}`);

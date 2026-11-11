@@ -10896,9 +10896,25 @@ Play › From the top -- a shortcut to a path that already existed, not a new mo
 
 - **The viewer, not the tasting or the showcase.** It is a film from the beginning, with the set
   behind it, so `n` is the next random one and everything the viewer does still works.
-- **Videos only, the whole room, no filter.** It does not read the page it is pressed on: a
-  button whose meaning changed with the page would stop being one press. Play on a filtered set
-  is the Play menu's job.
+- **Videos only, the whole room, no filter from the page.** It does not read the page it is
+  pressed on: a button whose meaning changed with the page would stop being one press. Play on a
+  filtered set is the Play menu's job.
+- **Only what fills the screen as it is held** (2026-11-10). The wrong way up plays full screen
+  as a strip between black bars, so a deal keeps to `fits` -- the window's orientation from
+  `matchMedia`, read at the press, or square, which fits both -- on every device, monitors
+  included. It follows the screen, not the page, so the press still means one thing. `fits` is
+  its own query field rather than `orientation` with two values: it asks whether a picture fills
+  a screen, not which way up it is. It is in the address like any filter, so the grid Back lands
+  on shows it as a chip. Turning the phone mid-screening keeps the deal; the next press reads
+  the new way up.
+- **Nothing that fits is the whole room**, not an empty one: a room whose videos are all one
+  way up, like the Game Room, plays everything on a screen held the other way.
+- **"This way up" is the room's choice, set from the viewer.** A chip on the player's bar during
+  a screening (on the bar so it is there in full screen) turns the rule off or on and deals
+  again at once. Remembered per room in this browser (`roomKey`), like the reel target -- losing
+  it costs a tap -- and on until a room is told otherwise. In the viewer rather than in a setting
+  because the bars are noticed there, and a room that has no use for it never gives anyone a
+  reason to touch it.
 - **A new seed every press** (`newShuffleSeed`), recorded in the address the viewer returns to,
   so Back lands on that shuffle's grid. Pressed in the viewer it deals again without leaving.
 - **Full screen is asked for in the press** (`enterPlayerFullscreen`), before page one is
@@ -10910,6 +10926,16 @@ Play › From the top -- a shortcut to a path that already existed, not a new mo
   the two from colliding. Header rather than sidebar because on a phone the sidebar is behind
   the burger. The name is the app's own: private stock, privately screened. "I'm feeling lucky"
   and dice were the obvious alternatives and say nothing about video.
+
+### Not yet
+
+- **A long press on the projector** (right-click on a desktop) opening a menu of the two, as a
+  shortcut to the chip. A menu rather than starting anything, because full screen needs the
+  press itself and a timer firing is not one.
+- **Upright phone video is filed as landscape**, which `fits` inherits and the Orientation
+  filter already gets wrong. `probe.ts` stores the coded frame size and ignores the
+  rotation in the stream's display matrix, so a 1920×1080 frame tagged 90° is landscape in the
+  catalogue. The fix is to swap width and height for ±90° and re-probe the videos.
 
 ## 15. Dev here, run on the QNAP
 

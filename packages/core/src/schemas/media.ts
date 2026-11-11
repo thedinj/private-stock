@@ -274,6 +274,15 @@ export const mediaQuerySchema = z.object({
     orientation: z.enum(["landscape", "portrait", "square"]).optional(),
 
     /**
+     * What fills a screen held this way up: that orientation, or square (§14h).
+     *
+     * Not `orientation` with two values, because it answers a different question -- not "which
+     * way up is the picture" but "will it play without bars down the sides" -- and a square
+     * picture is as good on either screen. A private screening sets it from the window.
+     */
+    fits: z.enum(["landscape", "portrait"]).optional(),
+
+    /**
      * Whether the picture moves (§14e).
      *
      * Three-state like `watched` rather than a boolean, for the same reason: `z.coerce.boolean`

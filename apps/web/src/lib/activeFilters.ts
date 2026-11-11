@@ -238,6 +238,14 @@ export const activeFilters = (
         });
     }
 
+    if (view.fits) {
+        filters.push({
+            id: "fits",
+            label: view.fits === "portrait" ? "Fits upright" : "Fits sideways",
+            clear: (current) => ({ ...current, fits: null, page: 0 }),
+        });
+    }
+
     if (view.animated) {
         filters.push({
             id: "animated",

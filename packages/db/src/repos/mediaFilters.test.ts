@@ -243,6 +243,14 @@ describe("orientation", () => {
 
         expect(matching({ orientation: "square" })).toEqual(["square"]);
     });
+
+    /** A square picture fills neither screen and wastes neither, so it fits both (§14h). */
+    it("fits a screen with its own orientation and square", () => {
+        givenMedia("unprobed", { width: null, height: null });
+
+        expect(matching({ fits: "landscape" }).sort()).toEqual(["square", "wide"]);
+        expect(matching({ fits: "portrait" }).sort()).toEqual(["square", "tall"]);
+    });
 });
 
 describe("movement", () => {

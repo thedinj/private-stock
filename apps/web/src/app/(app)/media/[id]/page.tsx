@@ -57,7 +57,7 @@ import { useAuth } from "@/lib/api/AuthProvider";
 import { api } from "@/lib/api/client";
 import { BACKGROUND } from "@/lib/api/background";
 import { mediaDetailQuery } from "@/lib/api/media";
-import { DEFAULT_VIEW, viewToParams } from "@/lib/libraryQuery";
+import { DEFAULT_VIEW, SCREENING_PARAM, viewToParams } from "@/lib/libraryQuery";
 import { itemHref } from "@/lib/lookMoment";
 import {
     readLastReviewPass,
@@ -91,6 +91,7 @@ import {
 import { useReviewPasses, useSetReviewMark } from "@/lib/api/reviewPasses";
 import { NameReviewPass } from "@/components/media/NameReviewPass";
 import { ReviewControl } from "@/components/media/ReviewControl";
+import { ScreeningFitChip } from "@/components/media/ScreeningFitChip";
 import { TOUCH_TARGET } from "@/theme";
 
 import classes from "@/components/media/PlayerStage.module.scss";
@@ -141,6 +142,10 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     );
 
     const sequence = useViewerSequence(returnTo, id);
+
+    /** Opened by a private screening (§14h), which offers "This way up" on the bar. */
+    const screening =
+        returnTo !== null && new URLSearchParams(returnTo.split("?")[1] ?? "").has(SCREENING_PARAM);
 
     /**
      * A moment the address names, `?at=<ms>` — how the Captures page opens a video where a
@@ -1359,6 +1364,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             steps={steps}
                             menuItems={stageMenu}
                             cast={castControl}
+                            setControl={screening ? <ScreeningFitChip /> : undefined}
                         />
                     ) : (
                         <StillStage

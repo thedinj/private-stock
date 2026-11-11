@@ -97,6 +97,7 @@ const searchTerms = (view: LibraryView, names: SummaryNames): string[] => {
     if (view.orientation) {
         terms.push(view.orientation.charAt(0).toUpperCase() + view.orientation.slice(1));
     }
+    if (view.fits) terms.push(view.fits === "portrait" ? "Fits upright" : "Fits sideways");
     if (view.animated) terms.push(view.animated === "yes" ? "Animated" : "Stills");
     if (view.kind === "image") terms.push("Photos");
     if (view.kind === "all") terms.push("All items");

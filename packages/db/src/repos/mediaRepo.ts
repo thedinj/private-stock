@@ -1292,6 +1292,12 @@ const ORIENTATION_SQL: Record<"landscape" | "portrait" | "square", string> = {
     square: `m."orientation" = 'square'`,
 };
 
+/** A screen held this way up (§14h): its own orientation and square, on the same index. */
+const FITS_SQL: Record<"landscape" | "portrait", string> = {
+    landscape: `m."orientation" IN ('landscape', 'square')`,
+    portrait: `m."orientation" IN ('portrait', 'square')`,
+};
+
 /**
  * Animated stills, and only stills.
  *
@@ -1349,6 +1355,10 @@ const appendMeasureFilters = (
 
     if (query.orientation) {
         where.push(ORIENTATION_SQL[query.orientation]);
+    }
+
+    if (query.fits) {
+        where.push(FITS_SQL[query.fits]);
     }
 
     if (query.animated) {

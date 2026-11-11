@@ -103,6 +103,7 @@ describe("parseView", () => {
             maxRating: null,
             measures: NO_MEASURES,
             orientation: null,
+            fits: null,
             animated: null,
             // One end open is "on or after": no `addedTo` in the URL, so none here.
             dates: {

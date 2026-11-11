@@ -140,6 +140,11 @@ export interface LibraryView {
     measures: MeasureRanges;
     /** Which way up the picture is, or null for any. */
     orientation: Orientation | null;
+    /**
+     * What fills a screen held this way up: that orientation or square (§14h). Set by a private
+     * screening from the window, and shown on the grid it returns to like any other filter.
+     */
+    fits: ScreenFit | null;
     /** Moving stills, still stills, or don't care. Images only. */
     animated: "yes" | "no" | null;
     /**
@@ -202,6 +207,12 @@ export type Measure = (typeof MEASURES)[number];
 export type MeasureRanges = Record<Measure, { min: number | null; max: number | null }>;
 
 export type Orientation = "landscape" | "portrait" | "square";
+
+/** Which way up a screen is. A square picture fits both. */
+export type ScreenFit = "landscape" | "portrait";
+
+const isScreenFit = (value: string | null): value is ScreenFit =>
+    value === "landscape" || value === "portrait";
 
 /**
  * The two dates the library can be filtered by (§14e "Dates"): when the item was added and when
@@ -316,6 +327,7 @@ export const DEFAULT_VIEW: LibraryView = {
     maxRating: null,
     measures: NO_MEASURES,
     orientation: null,
+    fits: null,
     animated: null,
     dates: NO_DATES,
     mode: "room",
@@ -417,6 +429,7 @@ export const parseView = (params: URLSearchParams): LibraryView => {
             ])
         ) as MeasureRanges,
         orientation: isOrientation(rawOrientation) ? rawOrientation : null,
+        fits: isScreenFit(params.get("fits")) ? (params.get("fits") as ScreenFit) : null,
         animated:
             params.get("animated") === "yes"
                 ? "yes"
@@ -494,6 +507,7 @@ export const viewToParams = (view: LibraryView): URLSearchParams => {
     }
 
     if (view.orientation) params.set("orientation", view.orientation);
+    if (view.fits) params.set("fits", view.fits);
     if (view.animated) params.set("animated", view.animated);
 
     for (const axis of DATE_AXES) {
@@ -642,6 +656,7 @@ export const isFiltered = (view: LibraryView): boolean =>
     view.minRating !== null ||
     view.maxRating !== null ||
     view.orientation !== null ||
+    view.fits !== null ||
     view.animated !== null ||
     (view.kind === "clip" && view.unused) ||
     DATE_AXES.some((axis) => isDateSet(view.dates[axis])) ||
@@ -791,6 +806,7 @@ export const clearFilters = (view: LibraryView): LibraryView => ({
     maxRating: null,
     measures: NO_MEASURES,
     orientation: null,
+    fits: null,
     animated: null,
     dates: NO_DATES,
     orVideo: false,
@@ -986,6 +1002,7 @@ export const savedQueryToParams = (query: SavedQuery): URLSearchParams => {
     }
 
     if (query.orientation) params.set("orientation", query.orientation);
+    if (query.fits) params.set("fits", query.fits);
     if (query.animated) params.set("animated", query.animated);
 
     for (const axis of DATE_AXES) {
@@ -1047,6 +1064,7 @@ const paramsToViewFields = (params: URLSearchParams): Partial<LibraryView> => {
         maxRating: parsed.maxRating,
         measures: parsed.measures,
         orientation: parsed.orientation,
+        fits: parsed.fits,
         animated: parsed.animated,
         dates: parsed.dates,
         seed: parsed.seed,
