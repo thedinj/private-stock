@@ -23,6 +23,8 @@ export const NameReviewPass: React.FC<{
 }> = ({ opened, onClose, onCreated, confirmLabel = "Start reviewing" }) => {
     const [name, setName] = useState("");
     const create = useCreateReviewPass();
+    // The example is the room's word for who is in an item: "Players" in the Game Room.
+    const profile = domainProfiles[getActiveDomain()];
 
     const submit = () => {
         const trimmed = name.trim();
@@ -43,10 +45,8 @@ export const NameReviewPass: React.FC<{
             <Stack gap="md">
                 <TextInput
                     label="Name"
-                    placeholder="Players"
-                    description={`What you are going through the items for. Yours, in the ${
-                        domainProfiles[getActiveDomain()].label
-                    }.`}
+                    placeholder={`e.g. ${profile.facets.performer.many}`}
+                    description={`What you are going through the items for. Yours, in the ${profile.label}.`}
                     value={name}
                     maxLength={REVIEW_PASS_NAME_MAX}
                     data-autofocus

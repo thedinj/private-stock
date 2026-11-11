@@ -7887,9 +7887,16 @@ filtered set, with five additions and one mode.
   where the room has one). `review=1` is "the pass last used in this room", remembered per
   device (`roomKey("ps:reviewPass")`), else the first; the viewer resolves it and writes
   `?review=<passId>` back, so a reload and the next item keep the pass. With no pass at all it
-  asks for a name in the page. The button then reads "Reviewing for Players", and its menu
-  switches pass, names a new one, marks the item for a pass without entering the mode, and
-  stops. Beside it, a chip per pass the item has been through; clicking one takes that mark off.
+  asks for a name in the page (the room's word for who is in an item as the example: "e.g.
+  Players"). The button then reads "Reviewing for Players", and its menu switches pass, names a
+  new one, and stops. Beside it, a toggle says whether this item is marked for _that_ pass --
+  "Reviewed" or "Not reviewed" -- and clicking it takes a `d` back or marks without moving on.
+  **Out of the mode the viewer says nothing about marks** (2026-11-10): it was a chip per pass the
+  item had been through, beside the rating on every item, plus a menu that listed the passes twice
+  -- once to review for, once to mark without the mode. Which passes an item has been through is
+  bookkeeping, asked of the library ("Not yet reviewed for"), and marking happens in the mode or
+  from the selection bar. On a phone the button is not offered, since there is no `d` (Play ▸
+  Review still enters the mode, and the in-mode control is shown so it can be stopped).
   In the mode, each item opens where the room looks first -- the tail in the Game Room, the start
   elsewhere -- and the next waits for `d` -- autoplay-next is set aside, since rolling on would
   carry a recording away mid-decision. `go` carries the parameter through the set; an item opened

@@ -1418,8 +1418,8 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                     {/* The way anything gets into a playlist (§14b). Here because this is
                         where you decide you want it -- the decision is made watching the
                         thing, not later in a list of lists. */}
-                    {/* Review (§14d): the mode, for a pass -- Shift+D, or here -- and the
-                        passes this item has been through, each chip taking its mark back. */}
+                    {/* Review (§14d): the mode, for a pass -- Shift+D, or here. In the mode,
+                        whether this item is marked for that pass; out of it, nothing more. */}
                     <ReviewControl
                         mediaId={data.id}
                         reviews={data.reviews}
