@@ -160,6 +160,7 @@ const SetupPage: React.FC = () => {
                         <TextInput
                             label="Display name"
                             placeholder="Optional"
+                            autoComplete="nickname"
                             value={displayName}
                             onChange={(event) => setDisplayName(event.currentTarget.value)}
                             error={fieldErrors.displayName}

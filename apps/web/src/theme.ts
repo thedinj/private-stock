@@ -268,6 +268,21 @@ export const theme = createTheme({
 
     components: {
         /**
+         * The browser's own suggestions are off for every text field unless the field asks.
+         *
+         * Almost every field here names something -- a clip, a reel, a tag, a playlist, a saved
+         * view -- and the browser's memory of what was typed into a field of that name offers
+         * other clips' titles under this one, and on a shared tablet shows the last person's.
+         * The fields where it helps -- sign-in, email, passwords, display name -- say so
+         * themselves (`autoComplete="username"` and the like), and an explicit prop wins over
+         * these defaults.
+         */
+        TextInput: { defaultProps: { autoComplete: "off" } },
+        Textarea: { defaultProps: { autoComplete: "off" } },
+        Autocomplete: { defaultProps: { autoComplete: "off" } },
+        TagsInput: { defaultProps: { autoComplete: "off" } },
+        NumberInput: { defaultProps: { autoComplete: "off" } },
+        /**
          * Panels over the page wear the page's surface, not Mantine's neutral grey.
          *
          * `--mantine-color-body` is a cool #242424, and a Drawer or Modal in it was the one grey
