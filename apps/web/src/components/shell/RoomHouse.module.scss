@@ -1,0 +1,306 @@
+// The house in section (§21 "Going from room to room"). The house's own lines are drawn in the
+// room you are in (`--ps-edge-rgb`); each room inside it is drawn in its own colours, which
+// `RoomHouse` hands over as `--room-*` from that room's theme.
+
+.house {
+    width: 380px;
+    max-width: 100%;
+    padding: 18px 18px 0;
+    overflow: hidden;
+}
+
+.roof {
+    display: block;
+    width: 100%;
+    height: 38px;
+
+    path {
+        fill: none;
+        stroke: rgba(var(--ps-edge-rgb), 0.45);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+    }
+}
+
+.floor {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 1px;
+    background: rgba(var(--ps-edge-rgb), 0.3);
+    border: 1px solid rgba(var(--ps-edge-rgb), 0.3);
+    border-bottom: 0;
+}
+
+.room,
+.below {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 4px;
+    min-height: 128px;
+    padding: 12px;
+    background: var(--room-ground);
+    color: var(--room-text);
+
+    // The window, lit in the room's own accent when you are in it or about to be.
+    &::after {
+        content: "";
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        width: 34px;
+        height: 40px;
+        translate: -50% 0;
+        border: 1px solid rgba(var(--room-accent-rgb), 0.5);
+        background: rgba(var(--room-accent-rgb), 0.06);
+        transition:
+            background var(--ps-dur-move) var(--ps-ease-out),
+            box-shadow var(--ps-dur-move) var(--ps-ease-out);
+    }
+
+    &[data-here]::after {
+        background: rgba(var(--room-accent-rgb), 0.55);
+        box-shadow: 0 0 26px rgba(var(--room-accent-rgb), 0.6);
+    }
+}
+
+button.room {
+    &:hover::after,
+    &:focus-visible::after {
+        background: rgba(var(--room-accent-rgb), 0.55);
+        box-shadow: 0 0 26px rgba(var(--room-accent-rgb), 0.6);
+    }
+
+    &:focus-visible {
+        outline: 2px solid rgba(var(--room-accent-rgb), 0.9);
+        outline-offset: -3px;
+    }
+}
+
+.sign {
+    font-size: 1.2rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.here {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.kept {
+    font-size: 0.82rem;
+}
+
+.groundline {
+    height: 2px;
+    background: rgba(var(--ps-edge-rgb), 0.55);
+}
+
+// Earth: hatched like a drawing's section through the ground, and nothing else until the stair.
+.earth {
+    position: relative;
+    height: 112px;
+    margin: 0 -18px;
+    background:
+        repeating-linear-gradient(
+            135deg,
+            transparent 0 7px,
+            rgba(var(--ps-edge-rgb), 0.05) 7px 8px
+        ),
+        var(--ps-well);
+}
+
+.below {
+    position: absolute;
+    inset: 14px 18px 0;
+    min-height: 0;
+    border: 1px solid rgba(var(--room-accent-rgb), 0.5);
+    border-bottom: 0;
+}
+
+// ── The stair ──
+//
+// Found in four beats: the hatch's leaf swings up out of the floor, the steps are drawn one
+// after another down into the dark, a light comes up at their foot and settles to breathing,
+// and the stair is named. Pointing at it runs a glint down the steps and brightens the light.
+
+$hatch-left: 26px;
+$hatch-width: 54px;
+$step-stagger: 110ms;
+
+.stair {
+    position: absolute;
+    top: 0;
+    left: $hatch-left;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    height: 100%;
+    min-width: 44px;
+    padding: 0 12px 10px 0;
+    color: var(--mantine-color-dimmed);
+
+    &:focus-visible {
+        outline: 2px solid rgba(var(--stair-light), 0.8);
+        outline-offset: 2px;
+    }
+}
+
+// The opening in the floor, cut through the ground line.
+.cut {
+    position: absolute;
+    top: -2px;
+    left: 0;
+    width: $hatch-width;
+    height: 2px;
+    background: var(--ps-well);
+    animation: cut-open var(--ps-dur-brisk) var(--ps-ease-out) both;
+}
+
+// The trapdoor's leaf, hinged at its far edge. It swings up and over and comes to rest flat on
+// the floor beside the opening: left standing, it cut through the name of the room above.
+.leaf {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: $hatch-width;
+    height: 3px;
+    background: rgba(var(--ps-edge-rgb), 0.8);
+    transform-origin: 100% 50%;
+    transform: rotate(-180deg);
+    animation: leaf-open var(--ps-dur-move) var(--ps-ease-in-out) both;
+}
+
+.steps {
+    position: relative;
+    flex: none;
+    width: 96px;
+    height: 80px;
+    align-self: flex-start;
+    overflow: visible;
+
+    path {
+        fill: none;
+        stroke: rgba(var(--ps-edge-rgb), 0.6);
+        stroke-width: 1.4;
+        stroke-linecap: square;
+        stroke-dasharray: 40;
+        stroke-dashoffset: 0;
+        animation: step-draw 260ms var(--ps-ease-out) both;
+        animation-delay: calc(240ms + var(--step) * #{$step-stagger});
+        transition: stroke 300ms var(--ps-ease-out);
+        transition-delay: calc(var(--step) * 45ms);
+    }
+}
+
+// Candlelight from below, at the foot of the steps.
+.glow {
+    position: absolute;
+    top: 60px;
+    left: 30px;
+    width: 120px;
+    height: 56px;
+    background: radial-gradient(
+        closest-side,
+        rgba(var(--stair-light), 0.42),
+        rgba(var(--stair-light), 0.12) 55%,
+        transparent
+    );
+    pointer-events: none;
+    animation:
+        glow-rise var(--ps-dur-signature) var(--ps-ease-out) 700ms both,
+        glow-breathe 3.6s ease-in-out 1.6s infinite;
+    transition:
+        transform var(--ps-dur-move) var(--ps-ease-out),
+        filter var(--ps-dur-move) var(--ps-ease-out);
+}
+
+.entrance {
+    position: relative;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    animation: name-in var(--ps-dur-arrive) var(--ps-ease-out) 1000ms both;
+}
+
+.stair:hover,
+.stair:focus-visible {
+    color: rgba(var(--stair-light), 0.95);
+
+    .steps path {
+        stroke: rgba(var(--stair-light), 0.95);
+    }
+
+    .glow {
+        transform: scale(1.18);
+        filter: brightness(1.5);
+    }
+}
+
+@keyframes cut-open {
+    from {
+        transform: scaleX(0);
+        transform-origin: 0 50%;
+    }
+}
+
+@keyframes leaf-open {
+    from {
+        transform: rotate(0deg);
+    }
+}
+
+@keyframes step-draw {
+    from {
+        stroke-dashoffset: 40;
+    }
+}
+
+@keyframes glow-rise {
+    from {
+        opacity: 0;
+    }
+}
+
+// Uneven, as a flame is: never a metronome.
+@keyframes glow-breathe {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    38% {
+        opacity: 0.72;
+    }
+    52% {
+        opacity: 0.9;
+    }
+    71% {
+        opacity: 0.66;
+    }
+}
+
+@keyframes name-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+
+// The global rule shortens every animation but leaves its delay, which would hold the stair
+// unfinished for a second with nothing moving. Under reduced motion it is simply there.
+@media (prefers-reduced-motion: reduce) {
+    .cut,
+    .leaf,
+    .glow,
+    .entrance,
+    .steps path {
+        animation-delay: 0s !important;
+    }
+
+    .glow {
+        animation: none;
+    }
+}

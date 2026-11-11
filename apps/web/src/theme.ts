@@ -219,6 +219,13 @@ export const theme = createTheme({
         rackBrassLight: "#efd9a3",
         rackBrassDeep: "#835e14",
         /**
+         * The light at the foot of the stair on the switcher's plan of the house (§21 "Going from
+         * room to room"), as an RGB triple. Candlelight from below, and the same in every room:
+         * it is the one hint that anything is down there, so it must not change with the room
+         * you are standing in.
+         */
+        stairLightRgb: "255, 190, 112",
+        /**
          * Three planes, far enough apart to be three.
          *
          * They used to be #17120f, #211a15 and #120e0b — a ground and a surface five points

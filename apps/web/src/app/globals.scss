@@ -414,15 +414,32 @@ body {
 :root[data-domain="games"] {
     --font-display: var(--font-arcade-ui);
     --font-ui: var(--font-arcade-ui);
-    // The pixel face signs the room's name and nothing else (`.ps-room-name`): as every page's
+    // The pixel face signs the room's name and nothing else (`.ps-room-sign`): as every page's
     // title it stopped being a sign and became something to read.
     --font-label: var(--font-arcade-ui);
 }
 
-/** The room's name in the header: a pixel sign, lit. */
-:root[data-domain="games"] .ps-room-name {
+/**
+ * A room's name, signed the room's own way: in the header, and on the switcher's plan of the
+ * house, where every room's sign hangs beside the others whatever room you are in. So it is keyed
+ * on the sign's own `data-room`, not on the page's `data-domain`, and names its faces by their
+ * own variables rather than the role variables a room redefines.
+ *
+ * The cellar's sign takes the role variable on purpose. It is only ever drawn inside the cellar
+ * (the plan shows the stair, never the room, from anywhere else), and there the role variable is
+ * the cellar's own face.
+ */
+.ps-room-sign[data-room="family"] {
+    font-family: var(--font-hearth-display), Georgia, serif;
+    font-weight: 400;
+    color: #f4c9a6;
+}
+
+/** The Game Room's sign: a pixel face, lit. */
+.ps-room-sign[data-room="games"] {
     font-family: var(--font-arcade-pixel), monospace;
-    font-size: 0.8rem;
+    // The pixel face runs large for its size; this is 0.8rem on the header's heading.
+    font-size: 0.71em;
     font-weight: 400;
     color: #ffe3f5;
     text-shadow:
@@ -430,15 +447,7 @@ body {
         0 0 16px rgba(41, 227, 255, 0.55);
 }
 
-:root[data-domain="family"] .ps-room-name {
-    color: #f4c9a6;
-}
-
-// The room switcher's hidden line (§21 "Getting into the cellar") comes up slowly, the way a
-// doorway is noticed rather than announced. The global rule makes it immediate under reduced
-// motion.
-@keyframes ps-stair-in {
-    from {
-        opacity: 0;
-    }
+.ps-room-sign[data-room="cellar"] {
+    font-family: var(--font-display), Georgia, serif;
+    font-weight: 400;
 }

@@ -12243,17 +12243,44 @@ playback, layout, the warming HUD — stay one per browser. The tab's own storag
 switch: everything in it (where an item returns to, a selection, a showcase to resume) is about
 the room being left.
 
+### Going from room to room
+
+Decided 2026-11-10, from three plates (<https://claude.ai/artifact/PSDfPpWtgYot1t3xe1FsPe>:
+doors, signs in a corridor, the house). The room name in the header opens **a plan of the
+house** (`RoomHouse`), not a menu: a hairline section with the rooms anyone may see side by side
+on the ground floor and earth below. A menu of two names said nothing about the rooms; the plan
+lets each one show up in its own look before you go in.
+
+- **Each room is drawn in its own colours** -- its ground, its window lit in its own accent, its
+  name signed as its own header signs it (`.ps-room-sign[data-room]`), and one plain line of what
+  is kept there (`domainProfiles[d].kept`). Library counts were offered and declined. The room you
+  are in is among them, marked "You are here" and not a button. From inside a guarded room the
+  plan shows you below ground.
+- **Choosing a room walks into it.** Changing room reloads the page (`switchDomain`), so the
+  walk covers the reload: the room's ground grows out of the room pressed until it fills the
+  screen, and the page loads under it. The next page paints a ground near enough the same, so the
+  reload has nothing to show. A cross-document view transition was not used: the incoming page's
+  first frame is the default room's until the tab's own room is read, which a crossfade would
+  have shown. Under reduced motion it just goes.
+- **A popover on a desktop, a sheet from the bottom on a phone.**
+- **What closes it:** a press outside it, Escape, choosing a room, or a click on the room name.
+  Nothing else. The first build closed it on the click that ended a long press if the press ran
+  past about a second (a timer forgot the press), and hid the stair when the pointer drifted off
+  the plan, so the stair could not be reached by holding the name.
+
 ### Getting into the cellar
 
 Decided 2026-11-08: the way in should be findable by the person who knows it and pass unnoticed
 by someone looking on, on a desktop and on a phone. Other accounts were not the concern.
 
-- **The switcher does not list it.** The room menu shows the rooms anyone may see. A guarded
-  room's line appears, faintly, only when the menu is held: the pointer resting on the open menu
+- **The switcher does not draw it.** The plan of the house shows the rooms anyone may see, over
+  plain earth. The stair appears only when the plan is held: the pointer resting on the open plan
   for 1.5 s, or the room name pressed and held for half a second (a finger, or a mouse button
-  kept down), which opens the menu with the line already there. Closing the menu hides it, and
-  nothing remembers it was shown. The line says the profile's `entrance` -- "The stair" -- never
-  the room's name.
+  kept down), which opens the plan with the stair already there. A hatch opens in the floor, the
+  steps are drawn down into the dark, and a candle's light comes up at their foot -- the same
+  light in every room, so it says nothing about the room you are in. Once found the stair stays
+  until the plan closes, and nothing remembers it was shown. It says the profile's `entrance` --
+  "The stair" -- never the room's name.
 - **The PIN is pulled from a wine rack, not typed on a keypad.** A keypad says "locked"; the rack
   is a piece of the house. Ten oak cubbies in the keypad's layout, each bottle tagged with a
   vintage whose last figure is its digit. **A tugged bottle springs back**, because a PIN can
@@ -12306,8 +12333,8 @@ admin section says so once.
   administrators never overwrite each other. **At least one room stays on:** turning off the last
   is a `ValidationError`, and a row that names every room reads as none.
 - **The switcher leaves an off room out entirely**, the stair included. With no other room on,
-  the room name is only a name; with only the stair left, the open menu reads "No other rooms"
-  until it is held.
+  the room name is only a name; with only the stair left, the plan shows your room alone over
+  plain earth until it is held.
 - **A tab in a room that is off moves on load** (`RoomCheck`, `roomToOpen`): to the Parlour if it
   is on, else the first room on that is not guarded, and a guarded room only when it is the only
   one on. The check sits outside the gate and moves with `switchDomain`, which forgets that the

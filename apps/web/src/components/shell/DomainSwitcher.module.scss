@@ -1,0 +1,32 @@
+.target {
+    display: flex;
+    align-items: center;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.chevron {
+    display: inline-flex;
+    opacity: 0.8;
+    transition: transform var(--ps-dur-brisk) var(--ps-ease-out);
+
+    &[data-open] {
+        transform: rotate(180deg);
+    }
+}
+
+.dropdown {
+    overflow: hidden;
+    border-color: rgba(var(--ps-accent-rgb), 0.3);
+}
+
+// On a phone the plan comes up from the bottom, full width, clear of the gesture bar.
+.sheet {
+    border-radius: 18px 18px 0 0;
+    padding-bottom: var(--ps-safe-bottom);
+}
+
+.sheetHouse {
+    width: auto;
+}

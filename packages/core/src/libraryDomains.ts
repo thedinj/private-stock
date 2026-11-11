@@ -58,6 +58,12 @@ export interface DomainProfile {
      * for a room that is listed like any other.
      */
     entrance: string | null;
+    /**
+     * What the room holds, in two words, under its name on the switcher's plan of the house
+     * (§21 "Going from room to room"). Null for a guarded room: its line is only ever read by
+     * someone already inside it, who does not need telling.
+     */
+    kept: string | null;
     /** What each facet is called here. The stored kind never changes. */
     facets: Record<OfferedTagKind, FacetLabel>;
     /**
@@ -93,6 +99,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         label: "Parlour",
         guarded: false,
         entrance: null,
+        kept: "Family videos",
         facets: {
             performer: { one: "Person", many: "People" },
             source: { one: "Source", many: "Sources" },
@@ -108,6 +115,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         label: "Cellar",
         guarded: true,
         entrance: "The stair",
+        kept: null,
         facets: {
             performer: { one: "Performer", many: "Performers" },
             source: { one: "Source", many: "Sources" },
@@ -121,6 +129,7 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
         label: "Game Room",
         guarded: false,
         entrance: null,
+        kept: "Game highlights",
         facets: {
             performer: { one: "Player", many: "Players" },
             source: { one: "Game", many: "Games" },
