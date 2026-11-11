@@ -9,6 +9,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
 import {
     effectiveSort,
     PAGE_SIZE,
+    SCREENING_PARAM,
     viewToParams,
     viewToRequestParams,
     type LibraryView,
@@ -40,12 +41,19 @@ export const fetchLibraryPage = (filter: URLSearchParams, page: number) => {
  * The first item, photo or not. The viewer's set is mixed and a photo is a still that advances
  * after its dwell (see `stageDwell`), so skipping ahead to the first video would start somewhere
  * other than the top -- which Showcase and Tasting never do.
+ *
+ * `screening` marks the address returned to as a private screening's (§14h). Resolves to
+ * whether there was a first item to open.
  */
-export const usePlayFromTop = (): ((view: LibraryView, review?: boolean) => Promise<void>) => {
+export const usePlayFromTop = (): ((
+    view: LibraryView,
+    review?: boolean,
+    screening?: boolean
+) => Promise<boolean>) => {
     const queryClient = useQueryClient();
     const openItem = useOpenItem();
 
-    return async (view, review = false) => {
+    return async (view, review = false, screening = false) => {
         const filter = viewToRequestParams({ ...view, sort: effectiveSort(view) });
         const first = await queryClient.fetchQuery({
             queryKey: queryKeys.media.page(filter.toString(), 0),
@@ -54,9 +62,12 @@ export const usePlayFromTop = (): ((view: LibraryView, review?: boolean) => Prom
         });
         const target = first.items[0];
 
-        if (!target) return;
+        if (!target) return false;
 
-        rememberReturnTo(`/?${viewToParams({ ...view, page: 0 }).toString()}`);
+        const address = viewToParams({ ...view, page: 0 });
+
+        if (screening) address.set(SCREENING_PARAM, "1");
+        rememberReturnTo(`/?${address.toString()}`);
         // Warmed before it goes, like any item opened from a tile (§14, "Waiting").
         openItem({
             id: target.id,
@@ -64,5 +75,7 @@ export const usePlayFromTop = (): ((view: LibraryView, review?: boolean) => Prom
             marker: null,
             picture: target.coverUrl,
         });
+
+        return true;
     };
 };

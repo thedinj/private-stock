@@ -40,6 +40,17 @@ describe("remembering a page", () => {
         expect(store.has("ps:section:/review")).toBe(false);
     });
 
+    it("does not keep a private screening's shuffle as the last search, but does the next change (§14h)", () => {
+        rememberPage("/", "view=grid&tags=t1");
+        rememberPage("/", "sort=random&view=grid&seed=5&screening=1");
+
+        expect(store.get("ps:libraryView")).toBe("view=grid&tags=t1");
+
+        rememberPage("/", "sort=random&view=grid&seed=5&page=1");
+
+        expect(store.get("ps:libraryView")).toBe("sort=random&view=grid&seed=5&page=1");
+    });
+
     it("records a listed page's whole address", () => {
         rememberPage("/reels", "q=intro&page=2");
 

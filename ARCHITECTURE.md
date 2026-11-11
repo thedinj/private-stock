@@ -8402,7 +8402,7 @@ free.
 | Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
 | Judging it       | `d` in review mode: reviewed for the pass, and next · shift `d` review mode on or off · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                 |
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
-| Anywhere         | `/` search · `?` these keys                                                                                                                                                                                                           |
+| Anywhere         | `/` search · `?` these keys · shift `s` Private screening (§14h)                                                                                                                                                                      |
 
 Outside the viewer: `1`–`5` rate in the grid, and `Enter` with nothing focused opens a library
 grid's first item (`useEnterOpensFirst`) -- the keyboard's way into a backlog view, whose first tile
@@ -10880,6 +10880,29 @@ from the library forgets it and starts at the beginning.
 
 **Known limits.** A background tab may overrun a segment, since the out point is watched by the
 page. On a phone every join is cold.
+
+## 14h. Private screening
+
+One press from anywhere in the shell to something playing: the room's videos, freshly shuffled,
+opened at the first one in the viewer, full screen. It is exactly the Videos tab, Shuffle and
+Play › From the top -- a shortcut to a path that already existed, not a new mode (2026-11-10).
+
+- **The viewer, not the tasting or the showcase.** It is a film from the beginning, with the set
+  behind it, so `n` is the next random one and everything the viewer does still works.
+- **Videos only, the whole room, no filter.** It does not read the page it is pressed on: a
+  button whose meaning changed with the page would stop being one press. Play on a filtered set
+  is the Play menu's job.
+- **A new seed every press** (`newShuffleSeed`), recorded in the address the viewer returns to,
+  so Back lands on that shuffle's grid. Pressed in the viewer it deals again without leaving.
+- **Full screen is asked for in the press** (`enterPlayerFullscreen`), before page one is
+  fetched, because by the time it arrives the gesture is gone. It sets the full-screen
+  intention (§14b), so the viewer keeps it across items and drops it on the way out; an empty
+  room takes it back.
+- **A projector in the header, beside search, and `Shift+S`.** `s` is the viewer's frame capture,
+  so the screening takes the shifted letter; it is in the viewer's key table, which is what keeps
+  the two from colliding. Header rather than sidebar because on a phone the sidebar is behind
+  the burger. The name is the app's own: private stock, privately screened. "I'm feeling lucky"
+  and dice were the obvious alternatives and say nothing about video.
 
 ## 15. Dev here, run on the QNAP
 

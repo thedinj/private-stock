@@ -36,7 +36,8 @@ export type ViewerAction =
     | "reviewMode"
     | "rate"
     | "favourite"
-    | "trash";
+    | "trash"
+    | "screening";
 
 /** The fields a key jumps into. A facet's are named by the facet, not by the room's word. */
 export type ViewerField = "performer" | "source" | "tag" | "privateTag" | "note";
@@ -222,6 +223,15 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
 
     { group: "page", presses: ["/"], shown: "/", does: "Search" },
     { group: "page", presses: ["?"], shown: "?", does: "These keys" },
+    {
+        group: "page",
+        // `s` is the frame capture, so the screening takes the shifted letter (§14h).
+        presses: ["S"],
+        shown: "Shift s",
+        does: "Private screening: the room's videos, freshly shuffled, full screen",
+        action: "screening",
+        tip: ["Shift+S"],
+    },
 ];
 
 /** A control's keys, for its tooltip: alternatives, written as the tooltip should show them. */

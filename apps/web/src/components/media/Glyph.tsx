@@ -335,3 +335,13 @@ export const LookGlyph: React.FC<GlyphProps> = ({ size }) => (
         <circle cx="12" cy="12" r="2.8" />
     </Glyph>
 );
+
+/** Private screening (§14h): a film projector, two reels on the body and the beam ahead. */
+export const ProjectorGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <circle cx="6.5" cy="6.8" r="2.8" />
+        <circle cx="13" cy="6.8" r="2.8" />
+        <rect x="3" y="11" width="13" height="8" rx="1.2" />
+        <path d="M16 13.6 21 11.6v6.8l-5-2" />
+    </Glyph>
+);

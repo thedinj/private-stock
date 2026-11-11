@@ -61,6 +61,30 @@ const clearHandoff = () => {
 const held = () =>
     typeof document !== "undefined" && document.fullscreenElement === document.documentElement;
 
+/**
+ * Full screen asked for before any player exists, by something about to open one (Private
+ * screening, §14h): in the press, because the browser grants it only in answer to a gesture, and
+ * with the intention set, so the viewer that arrives keeps it and leaving the viewer gives it up
+ * exactly as if its own button had been pressed.
+ *
+ * Returns the way to take it back if nothing opens after all. That only undoes what this call
+ * did: pressed from a viewer already full screen, there is nothing to undo.
+ */
+export const enterPlayerFullscreen = (): (() => void) => {
+    if (held()) return () => undefined;
+
+    intended = true;
+    clearHandoff();
+    void document.documentElement.requestFullscreen?.().catch(() => {
+        intended = false;
+    });
+
+    return () => {
+        intended = false;
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+};
+
 export interface PlayerFullscreen {
     /** Whether the window is given over to the player. */
     isFullscreen: boolean;

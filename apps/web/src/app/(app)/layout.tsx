@@ -24,6 +24,7 @@ import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
 import { HeaderPlateTitle } from "@/components/shell/HeaderPlateTitle";
 import { HeaderSearch } from "@/components/shell/HeaderSearch";
 import { PageTurn } from "@/components/shell/PageTurn";
+import { PrivateScreening } from "@/components/shell/PrivateScreening";
 import { useScreenLock } from "@/components/shell/ScreenLock";
 import { BusySeal } from "@/components/shell/BusySeal";
 import { DomainSwitcher } from "@/components/shell/DomainSwitcher";
@@ -135,6 +136,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
                                 "Scanning" stays: the catalogue is growing under you, which
                                 changes what you are looking at. */}
+                            {/* Shuffled videos, full screen, from anywhere (§14h). */}
+                            <PrivateScreening />
                             {isMobile && <HeaderSearch compact />}
                         </Group>
                     </Group>

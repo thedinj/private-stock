@@ -4,7 +4,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { roomKey } from "./activeDomain";
-import { parseView } from "./libraryQuery";
+import { parseView, SCREENING_PARAM } from "./libraryQuery";
 import { NO_SUMMARY_NAMES, summarizeSearch } from "./searchSummary";
 
 /**
@@ -66,8 +66,11 @@ export const REMEMBERED_PAGES: RememberedPage[] = [
         // and the library as it opens -- or one library as its own row opens it -- is what the
         // sidebar already links to. Remembering either would replace the search you left with
         // the clean library you passed through on the way to a new one, so stepping into the
-        // Library to look around would cost you "Last search" (§14b).
+        // Library to look around would cost you "Last search" (§14b). Nor a private screening's
+        // shuffle, which you were handed rather than searched for (§14h).
         remember: (params) => {
+            if (params.has(SCREENING_PARAM)) return false;
+
             const view = parseView(params);
 
             return view.mode !== "room" && summarizeSearch(view, NO_SUMMARY_NAMES) !== null;

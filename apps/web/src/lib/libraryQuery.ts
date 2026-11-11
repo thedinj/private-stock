@@ -881,6 +881,13 @@ export const effectiveDirection = (view: LibraryView): SortDirection => {
     return view.direction ?? naturalDirection(sort);
 };
 
+/**
+ * Marks the grid address a private screening returns to (§14h), so the sidebar does not keep it
+ * as "Last search". Not part of the view: `parseView` never reads it and `viewToParams` never
+ * writes it, so the first change made on that grid drops it and what follows is remembered.
+ */
+export const SCREENING_PARAM = "screening";
+
 /** A new permutation for a shuffle. */
 export const newShuffleSeed = (): number => Math.floor(Math.random() * 1_000_000);
 
