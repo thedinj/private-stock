@@ -12,6 +12,9 @@ import {
 } from "react";
 import { Box, Button, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 
+import { domainProfiles } from "@private-stock/core";
+
+import { getActiveDomain } from "@/lib/activeDomain";
 import { usePinStatus } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
 import { canTry } from "@/lib/pinDigits";
@@ -41,6 +44,11 @@ import { usePinEntry } from "@/lib/usePinEntry";
  * moment the page is hidden (so the app switcher's thumbnail is the cover, as far as the
  * browser gets a say), playback pauses, and fullscreen is left, because a fullscreen element
  * sits above anything the page can draw.
+ *
+ * **Only in a guarded room** -- the Cellar (decided 2026-11-11). Elsewhere it never covers, never
+ * pauses and never leaves fullscreen, and "Lock now" is not offered. Time spent in another room
+ * is time away from the guarded one: nothing there marks use, so going back down after the delay
+ * asks for the PIN. A room change is a reload (`switchDomain`), so the room is read once.
  */
 
 interface ScreenLockState {
@@ -48,7 +56,9 @@ interface ScreenLockState {
     lockAfter: number | null;
     /** Turn the lock on for this device (minutes) or off (null). */
     setLockAfter: (minutes: number | null) => void;
-    /** Lock now; does nothing on a device that does not lock. */
+    /** Whether this device locks in this room, which is when "Lock now" means anything. */
+    lockable: boolean;
+    /** Lock now; does nothing on a device or in a room that does not lock. */
     lockNow: () => void;
 }
 
@@ -98,11 +108,13 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [locked, setLocked] = useState(false);
     /** Covered while the page is hidden, whether or not the lock has come down yet. */
     const [veiled, setVeiled] = useState(false);
+    /** Whether this tab's room is guarded. Read after hydration: the server knows no room. */
+    const [guardedRoom, setGuardedRoom] = useState(false);
 
     // A device can have the lock on while the account has since removed its PIN. Then there is
     // nothing to ask for, and the lock stands down rather than show a keypad nothing opens.
     const { data: pinStatus } = usePinStatus(userId !== null && lockAfter !== null);
-    const active = userId !== null && lockAfter !== null && pinStatus?.set !== false;
+    const active = guardedRoom && userId !== null && lockAfter !== null && pinStatus?.set !== false;
 
     const lastMark = useRef(0);
 
@@ -110,6 +122,8 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // the first paint of their pages, which a plain effect would come after. `RequireAuth` holds
     // the pages back until `user` is set, so this runs in the commit that first shows them.
     useLayoutEffect(() => {
+        setGuardedRoom(domainProfiles[getActiveDomain()].guarded);
+
         if (userId === null) {
             setLockAfterState(null);
             setLocked(false);
@@ -229,7 +243,8 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (event.key === lockedKey(userId)) {
                 if (event.newValue === "1") {
                     setLocked(true);
-                    putAway();
+                    // Another tab's lock reaches this one only if this one is in a locking room.
+                    if (guardedRoom) putAway();
                 } else {
                     setLocked(false);
                 }
@@ -241,7 +256,7 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         window.addEventListener("storage", onStorage);
 
         return () => window.removeEventListener("storage", onStorage);
-    }, [userId]);
+    }, [userId, guardedRoom]);
 
     const setLockAfter = useCallback(
         (minutes: number | null) => {
@@ -260,8 +275,8 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, [active, lock]);
 
     const value = useMemo<ScreenLockState>(
-        () => ({ lockAfter, setLockAfter, lockNow }),
-        [lockAfter, setLockAfter, lockNow]
+        () => ({ lockAfter, setLockAfter, lockable: active, lockNow }),
+        [lockAfter, setLockAfter, active, lockNow]
     );
 
     const covered = active && (locked || veiled);

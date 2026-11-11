@@ -7055,6 +7055,12 @@ keypad until the account's PIN is entered. Asked for with a shared Samsung table
   guessing of a few digits, so the hash is not tuned to — the miss limit is what holds.
 - **With no PIN on the account the lock stands down** on every device, and a verify against an
   account with none answers yes: removing it took the password.
+- **Only the Cellar locks** (decided 2026-11-11) -- any guarded room (§21). In the Parlour and
+  the Game Room the lock never covers, pauses or leaves fullscreen, even after the delay, and
+  "Lock now" is not offered: there is nothing there to keep from whoever picks the device up.
+  Time in another room is time away from the Cellar -- nothing outside it marks use -- so going
+  back down after the delay asks for the PIN, as the gate would not (it asks once per tab). A
+  room change is a reload, so the provider reads the room once.
 
 ### What a new account can see, and what is still open
 
@@ -12346,8 +12352,9 @@ by someone looking on, on a desktop and on a phone. Other accounts were not the 
   the tab first. A reload of a tab that has passed does not ask again; a new tab does. Only a
   definite "this account has no PIN" opens it unasked; a failed read keeps the rack up. "Back
   upstairs" returns to the Parlour.
-- **Not done:** the idle screen lock keeps its keypad. It covers every room, and a wine rack
-  over the Parlour would be the thing that draws a look. A keyboard-only way to show the hidden
+- **Not done:** the idle screen lock keeps its keypad. It covered every room when this was
+  written, and a wine rack over the Parlour would have been the thing that drew a look; it now
+  covers only the Cellar (§12c), so the rack could be its face there. A keyboard-only way to show the hidden
   line is not built; the pointer's dwell covers the desktop.
 
 ### Turning a room off

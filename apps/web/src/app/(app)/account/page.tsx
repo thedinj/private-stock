@@ -452,9 +452,9 @@ const ScreenLockCard: React.FC = () => {
                 <Stack gap={2}>
                     <Title order={4}>Screen lock</Title>
                     <Text size="sm" c="dimmed">
-                        After a while away, a device you choose covers the library until your PIN is
-                        entered. It keeps out whoever picks the device up, not someone set on
-                        getting in.
+                        After a while away, a device you choose covers the Cellar until your PIN is
+                        entered. The other rooms never lock. It keeps out whoever picks the device
+                        up, not someone set on getting in.
                     </Text>
                 </Stack>
 

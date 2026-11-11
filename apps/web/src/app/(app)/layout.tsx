@@ -54,7 +54,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [aboutOpened, about] = useDisclosure();
     const isMobile = useMediaQuery("(max-width: 48em)");
     const { user, signOut } = useAuth();
-    const { lockAfter, lockNow } = useScreenLock();
+    const { lockable, lockNow } = useScreenLock();
     const pathname = usePathname();
 
     // For the "Scanning" badge only. One shared query rather than a copy here: `useLibraryStats`
@@ -236,8 +236,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                     >
                                         About
                                     </Menu.Item>
-                                    {/* Only where this device locks (§12c). */}
-                                    {lockAfter !== null && (
+                                    {/* Only where this device locks, in a room that does (§12c). */}
+                                    {lockable && (
                                         <Menu.Item
                                             onClick={() => {
                                                 close();
