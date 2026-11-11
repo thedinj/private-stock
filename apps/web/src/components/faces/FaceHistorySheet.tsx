@@ -52,7 +52,7 @@ const WHERE: Record<string, string> = {
 const describe = (entry: FaceHistoryEntry): string => {
     const who = entry.performer?.name ?? `a ${facetLabel("performer").toLowerCase()} since deleted`;
 
-    if (entry.verdict === "later") return `Can't tell — ${faces(entry.faceCount)}`;
+    if (entry.verdict === "later") return `Not naming them — ${faces(entry.faceCount)}`;
     if (entry.verdict === "notOnePerson") return `Not one person — ${faces(entry.faceCount)}`;
     if (entry.verdict === "isNot") return `Not ${who} — ${items(entry.itemCount)}`;
     if (entry.actor === "app") return `Tagged ${who} on ${items(entry.itemCount)}`;

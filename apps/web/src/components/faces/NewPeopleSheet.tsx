@@ -16,7 +16,7 @@ import { MARKS, PersonCardView } from "./PersonCardView";
  * New people (§5f "New people"): people who match nobody known, gathered across the library, a few
  * of their items each — every card ticked to start with; press one that is somebody else to leave
  * it out. Name them, and the ticked items are tagged and their faces confirmed — which is a face to
- * match all their other items against; or "Not one person", or "Later". Each is one decision in
+ * match all their other items against; or "Not one person", or "Not naming them" (set aside). Each is one decision in
  * History. A decided person stays where it was as one line; nothing moves until Refresh.
  */
 
@@ -123,11 +123,14 @@ const NewPersonBlock: React.FC<{
                         onClick={() =>
                             decide.mutate(
                                 { action: "later", people },
-                                { onSuccess: () => setSaid("Put off for later") }
+                                {
+                                    onSuccess: () =>
+                                        setSaid("Not naming them — not asked about again"),
+                                }
                             )
                         }
                     >
-                        Later
+                        Not naming them
                     </Button>
                     <Button
                         variant="subtle"

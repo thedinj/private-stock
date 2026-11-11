@@ -360,7 +360,8 @@ export const itemPeopleSchema = z.object({
     people: z.array(
         z.object({
             card: personCardSchema,
-            state: z.enum(["confirmed", "suggested", "unknown"]),
+            /** `setAside`: "Not naming them" — nobody to ask about until asked again. */
+            state: z.enum(["confirmed", "suggested", "unknown", "setAside"]),
             /** Who: confirmed as, or suggested; with their picture, to compare the face with. */
             performer: z
                 .object({ id: z.string(), name: z.string(), pictureUrl: z.string().nullable() })
@@ -369,6 +370,20 @@ export const itemPeopleSchema = z.object({
             byApp: z.boolean(),
             /** The item already carries them. */
             tagged: z.boolean(),
+            /**
+             * For somebody nobody matched: the performers already in this item — tagged on it, or
+             * a face confirmed as them — who they may be, one person split in two. Their own
+             * closest match first; none they were refused for. Empty for everybody else.
+             */
+            inItem: z.array(
+                z.object({
+                    id: z.string(),
+                    name: z.string(),
+                    pictureUrl: z.string().nullable(),
+                    why: z.enum(["tagged", "confirmed"]),
+                    closest: z.boolean(),
+                })
+            ),
         })
     ),
     named: z.array(
@@ -390,9 +405,12 @@ const itemPerson = z.object({
  * What the item's page says of a person in it, or of a performer its text names: one decision.
  * `is` tags the item if it does not carry them and confirms the person's faces; `isNot` refuses
  * the person for them, taking back a confirmation; `name` is `is` for a name typed, coined if new;
- * `addNamed` tags a performer the text names; `refuseNamed` is "not them" on the item.
+ * `addNamed` tags a performer the text names; `refuseNamed` is "not them" on the item. `setAside`
+ * is "Not naming them" (the set-aside of New people's same button); `askAgain` takes it back.
  */
 export const itemPeopleDecisionSchema = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("setAside"), person: itemPerson }),
+    z.object({ action: z.literal("askAgain"), person: itemPerson }),
     z.object({ action: z.literal("is"), tagId: z.string().min(1).max(64), person: itemPerson }),
     z.object({ action: z.literal("isNot"), tagId: z.string().min(1).max(64), person: itemPerson }),
     z.object({ action: z.literal("name"), name: tagNameSchema, person: itemPerson }),

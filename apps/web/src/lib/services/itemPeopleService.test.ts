@@ -10,7 +10,9 @@ import type { AuthContext } from "../auth/withAuth";
 const state = vi.hoisted(() => ({
     rows: [] as Record<string, unknown>[],
     named: [] as { tagId: string; field: string }[],
-    carried: [] as { tagId: string; source: string; private: null }[],
+    carried: [] as { tagId: string; kind: string; source: string; private: null }[],
+    refused: [] as string[],
+    setAsideDecisions: [] as { decisionId: string; elsewhere: number }[],
     decisions: [] as Record<string, unknown>[],
     calls: [] as unknown[][],
     notThem: [] as unknown[][],
@@ -24,6 +26,10 @@ vi.mock("@private-stock/db", () => ({
             return { decisionId: "d1", result: write() };
         },
         nameActive: () => undefined,
+        undo: (...args: unknown[]) => {
+            state.calls.push(["undo", ...args]);
+            return { faces: 1, refusals: 0, items: 0, scattered: 0 };
+        },
     },
     appearanceRepo: {
         itemPeople: () => state.rows,
@@ -35,6 +41,13 @@ vi.mock("@private-stock/db", () => ({
         facesOnItem: (_mediaId: string, faceIds: string[]) => faceIds,
         confirmPerson: (...args: unknown[]) => state.calls.push(["confirm", ...args]),
         takeBackPerson: (...args: unknown[]) => state.calls.push(["takeBack", ...args]),
+        refusedTagsOf: () => state.refused,
+        setAsidePeople: (...args: unknown[]) => state.calls.push(["setAside", ...args]),
+        setAsideDecisions: () => state.setAsideDecisions,
+        unsetAsidePeople: (...args: unknown[]) => {
+            state.calls.push(["unsetAside", ...args]);
+            return 0;
+        },
     },
     mentionRepo: { untaggedPerformersNamedOn: () => state.named },
     searchRepo: { requestReindex: () => undefined },
@@ -95,6 +108,7 @@ const row = (id: string, bestFaceId: string, extra: Record<string, unknown>) => 
     second: null,
     confirmedTagId: null,
     refusedMatch: 0,
+    setAside: 0,
     ...extra,
 });
 
@@ -105,6 +119,8 @@ beforeEach(() => {
     state.decisions = [];
     state.calls = [];
     state.notThem = [];
+    state.refused = [];
+    state.setAsideDecisions = [];
 });
 
 describe("who is in it", () => {
@@ -114,7 +130,7 @@ describe("who is in it", () => {
             row("p2", "g1", { matchTagId: "jane", score: 0.7, second: 0.3 }),
             row("p3", "h1", { matchTagId: "jane", score: 0.5, second: 0.3 }),
         ];
-        state.carried = [{ tagId: "kim", source: "ai", private: null }];
+        state.carried = [{ tagId: "kim", kind: "performer", source: "ai", private: null }];
         state.named = [
             { tagId: "jane", field: "title" },
             { tagId: "new", field: "filename" },
@@ -130,6 +146,41 @@ describe("who is in it", () => {
         ]);
         // Named, and not already one of the people suggested.
         expect(people.named.map((n) => n.tagId)).toEqual(["new"]);
+    });
+
+    it("offers who is already in the item to somebody nobody matched, their closest first", () => {
+        state.rows = [
+            row("p1", "f1", { confirmedTagId: "kim" }),
+            row("p2", "g1", { matchTagId: "jane", score: 0.3, second: 0.2 }),
+        ];
+        state.carried = [
+            { tagId: "kim", kind: "performer", source: "user", private: null },
+            { tagId: "jane", kind: "performer", source: "user", private: null },
+            { tagId: "beach", kind: "general", source: "user", private: null },
+        ];
+
+        const unknown = itemPeople("m1", admin).people[1]!;
+
+        expect(unknown.state).toBe("unknown");
+        expect(unknown.inItem.map((p) => [p.id, p.why, p.closest])).toEqual([
+            ["jane", "tagged", true],
+            ["kim", "confirmed", false],
+        ]);
+
+        // Never somebody their faces were refused for.
+        state.refused = ["jane"];
+        expect(itemPeople("m1", admin).people[1]!.inItem.map((p) => p.id)).toEqual(["kim"]);
+    });
+
+    it("shows somebody set aside as set aside, asking nothing", () => {
+        state.rows = [
+            row("p2", "g1", { setAside: 1, matchTagId: "jane", score: 0.7, second: 0.1 }),
+        ];
+        state.carried = [{ tagId: "kim", kind: "performer", source: "user", private: null }];
+
+        const [person] = itemPeople("m1", admin).people;
+
+        expect([person!.state, person!.performer, person!.inItem]).toEqual(["setAside", null, []]);
     });
 
     it("is for administrators, on items they can see", () => {
@@ -166,5 +217,33 @@ describe("saying who", () => {
 
         expect(state.calls).toEqual([["tag", [{ mediaId: "m1", tagId: "kim" }]]]);
         expect(state.notThem).toEqual([[["m1"], "kim", "u1", "item"]]);
+    });
+});
+
+describe("not naming them", () => {
+    const person = { faceIds: ["g1", "g2"], shownFaceId: "g1" };
+
+    it("sets the person aside as one decision", () => {
+        decideItemPeople("m1", { action: "setAside", person }, admin);
+
+        expect(state.decisions.map((d) => [d.verdict, d.tagId, d.surface])).toEqual([
+            ["later", null, "item"],
+        ]);
+        expect(state.calls).toEqual([["setAside", ["g1", "g2"], "u1"]]);
+    });
+
+    it("asks again: undoes a press that held only them, lets go of them alone in a wider one", () => {
+        state.setAsideDecisions = [
+            { decisionId: "only", elsewhere: 0 },
+            { decisionId: "wide", elsewhere: 5 },
+        ];
+
+        decideItemPeople("m1", { action: "askAgain", person }, admin);
+
+        expect(state.decisions).toEqual([]);
+        expect(state.calls).toEqual([
+            ["undo", "only", "u1"],
+            ["unsetAside", ["g1", "g2"]],
+        ]);
     });
 });

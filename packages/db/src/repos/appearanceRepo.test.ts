@@ -18,6 +18,7 @@ vi.mock("../db", async () => {
 
 const appearanceRepo = await import("./appearanceRepo.js");
 const faceRepo = await import("./faceRepo.js");
+const faceDecisionRepo = await import("./faceDecisionRepo.js");
 const { db: sharedDb } = await import("../db.js");
 
 let db: Database.Database;
@@ -157,6 +158,7 @@ describe("what is suggested", () => {
         const seen = person("seen", "jane", 0.8);
         const unseen = person("unseen", "jane", 0.8);
         const confirmed = person("theirs", "jane", 0.8);
+        const extra = person("extra", "jane", 0.8);
 
         db.prepare(
             `INSERT INTO "MediaTag" ("id", "mediaId", "tagId", "source") VALUES ('t', 'tagged', 'jane', 'user')`
@@ -172,6 +174,8 @@ describe("what is suggested", () => {
             `INSERT INTO "FaceRefusal" ("faceId", "tagId", "how") VALUES (?, 'jane', 'inferred')`
         ).run(unseen[1]);
         db.prepare(`UPDATE "Face" SET "tagId" = 'kim' WHERE "id" = ?`).run(confirmed[1]);
+        // "Not naming them": set aside, so not asked about here either.
+        appearanceRepo.setAsidePeople(extra, "someone");
 
         expect(suggested()).toEqual(["unseen"]);
     });
@@ -310,6 +314,27 @@ describe("people in this item", () => {
         appearanceRepo.confirmPerson(faces, faces[0], "kim", "someone");
 
         expect(appearanceRepo.itemPeople("a")[0].confirmedTagId).toBe("kim");
+    });
+
+    it("says who is set aside; asked again, only those faces are let go of", () => {
+        const a = person("a", "jane", 0.3);
+        const b = person("b", "jane", 0.3);
+
+        expect(appearanceRepo.refusedTagsOf(a)).toEqual([]);
+        appearanceRepo.refusePerson(a, a[0], "kim", "someone");
+        expect(appearanceRepo.refusedTagsOf(a)).toEqual(["kim"]);
+
+        const { decisionId } = faceDecisionRepo.record(
+            { actor: "user", userId: "someone", verdict: "later", tagId: null, surface: "item" },
+            () => appearanceRepo.setAsidePeople([...a, ...b], "someone")
+        );
+
+        expect(appearanceRepo.itemPeople("a")[0].setAside).toBe(1);
+        // One press set both aside: it holds b's two faces besides a's.
+        expect(appearanceRepo.setAsideDecisions(a)).toEqual([{ decisionId, elsewhere: 2 }]);
+        expect(appearanceRepo.unsetAsidePeople(a)).toBe(2);
+        expect(appearanceRepo.itemPeople("a")[0].setAside).toBe(0);
+        expect(appearanceRepo.itemPeople("b")[0].setAside).toBe(1);
     });
 });
 

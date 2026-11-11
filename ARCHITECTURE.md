@@ -2208,7 +2208,18 @@ faces".)
   of theirs where there is one. The faces nobody matched come first, ahead of the box a name is
   typed into, each with "Who is this?" and its name box open — the three most seen, the rest
   under "N more faces" (2026-10-21: a face found is better evidence than a name remembered, and
-  folded under a dim link it was never answered). A performer's × asks how: **Remove tag** only takes it off (`notThem: false` on the tag edit), and their face may
+  folded under a dim link it was never answered). **Who is already in it** (2026-11-11): each
+  of those faces offers, one press each, the performers the item carries or a person in it is
+  confirmed as — the faces stage splits one person in about one video in sixteen, so the unknown
+  face was most often somebody already named. Their own closest match (below the line, but the
+  best there is) first; never one their faces were refused for; somebody just named in the row
+  above is offered at once. No in-item likeness is measured: the chips are who is there, not who
+  looks alike. **Not naming them** (2026-11-11) sets a face nobody will make a performer for aside
+  — an extra — from its row or from a "‹name›?" card: New people's set-aside (`skippedAt`, the
+  `later` verdict, one decision in History), now also kept out of Suggestions. Set-aside people
+  fold under "N set aside", each with **Ask again**: a press that set aside only them is undone
+  as History's Undo would; one that set aside others too (a New people gathering) lets go of
+  these faces alone. A performer's × asks how: **Remove tag** only takes it off (`notThem: false` on the tag edit), and their face may
   be suggested again; **Not them** is the untag-by-hand of "Corrections stick", refused on the
   item's faces and name. Everybody else sees the cards, without the faces.
 
@@ -2442,7 +2453,8 @@ backs:
 - **An appearance is suggested for its best match** when it is legible, at `SUGGEST_LINE` 0.55
   with `SUGGEST_MARGIN` 0.1 over anybody else — or `SUGGEST_NAMED_LINE` 0.45 where the item's text
   names them — on an item not carrying them and not refused for them (`ItemRefusal`), with none of
-  its faces confirmed as anybody or refused for them by somebody who saw it. Scored per
+  its faces confirmed as anybody, set aside ("Not naming them"), or refused for them by somebody
+  who saw it. Scored per
   appearance, leave-one-item-out on production: 83% of the appearances people confirmed pass, and
   none of the 170 they refused (their highest scored 0.552, and failed the margin). Per face the
   same line kept fewer than half of the confirmed faces. About a thousand suggestions at the start,
@@ -2480,8 +2492,9 @@ on two items. New people asks only of strangers seen often enough to be somebody
   one that is somebody else to leave it out. **Name** them — picked, or coined with the typo check
   — and the ticked items are tagged and the people's faces confirmed, which is a reference the
   next run matches all their other items against. **Not one person** takes their faces out of
-  every person and gathering for good (`scatteredAt`); **Later** puts them off (`skippedAt`). Each
-  is one decision in History.
+  every person and gathering for good (`scatteredAt`); **Not naming them** ("Later" until
+  2026-11-11) sets them aside (`skippedAt`): not asked about in New people, Suggestions or the
+  item's page until asked again there or undone in History. Each is one decision in History.
 - **What went with the groups**: `Face.groupId`, `FaceGroupStat`, `FaceGroupDissolved`,
   `faces/groups.bin` (swept as an orphan), the `faceGroups` job — the faces stage now queues the
   references run itself, once a burst has settled — and with them Matches, Unnamed, Likely (a face

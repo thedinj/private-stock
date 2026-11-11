@@ -170,7 +170,7 @@ const visible = (rootIds: readonly string[], params: Record<string, unknown>): s
 /**
  * What makes an appearance a suggestion for its best match (§5f "Suggestions"): legible, clearly
  * them, on an item that does not carry them and was not refused for them, with none of its faces
- * confirmed as anybody or refused for them by somebody who saw it.
+ * confirmed as anybody, set aside ("Not naming them"), or refused for them by somebody who saw it.
  */
 const SUGGESTED = `
     a."matchTagId" IS NOT NULL AND a."legible" = 1 AND a."score" - a."second" >= :margin
@@ -185,7 +185,7 @@ const SUGGESTED = `
     AND NOT EXISTS (SELECT 1 FROM "PerformerNoFace" nf WHERE nf."tagId" = a."matchTagId")
     AND NOT EXISTS (SELECT 1 FROM "Face" f
                      WHERE f."appearanceId" = a."id"
-                       AND (f."tagId" IS NOT NULL
+                       AND (f."tagId" IS NOT NULL OR f."skippedAt" IS NOT NULL
                             OR EXISTS (SELECT 1 FROM "FaceRefusal" r
                                         WHERE r."faceId" = f."id" AND r."tagId" = a."matchTagId"
                                           AND r."how" IS NOT 'inferred')))`;
@@ -535,6 +535,19 @@ export const takeBackPerson = (
     return refusePerson(faceIds, shownFaceId, tagId, userId);
 };
 
+/**
+ * The performers any of these faces was refused for by somebody who saw it: who a person in an
+ * item is not offered as.
+ */
+export const refusedTagsOf = (faceIds: readonly string[]): string[] =>
+    db
+        .prepare(
+            `SELECT DISTINCT "tagId" FROM "FaceRefusal"
+              WHERE "faceId" IN (SELECT value FROM json_each(?)) AND "how" IS NOT 'inferred'`
+        )
+        .pluck()
+        .all(JSON.stringify(faceIds)) as string[];
+
 /** Ruled out by mistake: these faces' refusals for the performer withdrawn, undecided again. */
 export const restorePerson = (faceIds: readonly string[], tagId: string): number =>
     db
@@ -557,6 +570,8 @@ export interface ItemPersonRow {
     confirmedTagId: string | null;
     /** Whether a face of theirs somebody saw was refused for the match. */
     refusedMatch: 0 | 1;
+    /** Whether a face of theirs is set aside ("Not naming them"), as New people reads it. */
+    setAside: 0 | 1;
 }
 
 /** The people in one item (§5f "People in this item"), the most seen first. */
@@ -570,7 +585,9 @@ export const itemPeople = (mediaId: string): ItemPersonRow[] =>
                       GROUP BY f."tagId" ORDER BY count(*) DESC LIMIT 1) AS "confirmedTagId",
                     EXISTS (SELECT 1 FROM "Face" f JOIN "FaceRefusal" r ON r."faceId" = f."id"
                              WHERE f."appearanceId" = a."id" AND r."tagId" = a."matchTagId"
-                               AND r."how" IS NOT 'inferred') AS "refusedMatch"
+                               AND r."how" IS NOT 'inferred') AS "refusedMatch",
+                    EXISTS (SELECT 1 FROM "Face" f
+                             WHERE f."appearanceId" = a."id" AND f."skippedAt" IS NOT NULL) AS "setAside"
                FROM "FaceAppearance" a
               WHERE a."mediaId" = ?
               ORDER BY a."faceCount" DESC, a."id"`
@@ -676,7 +693,10 @@ export const scatterPeople = (faceIds: readonly string[], userId: string): numbe
         )
         .run(userId, activeDecision(), JSON.stringify(faceIds)).changes;
 
-/** "Later", of people gathered as a new person: set aside, not asked about with the rest. */
+/**
+ * "Not naming them" ("Later" before 2026-11-11), of people gathered as a new person or a person in
+ * an item: set aside, not asked about again — not in New people, not in Suggestions.
+ */
 export const setAsidePeople = (faceIds: readonly string[], userId: string): number =>
     db
         .prepare(
@@ -686,3 +706,32 @@ export const setAsidePeople = (faceIds: readonly string[], userId: string): numb
                 AND "skippedAt" IS NULL`
         )
         .run(userId, activeDecision(), JSON.stringify(faceIds)).changes;
+
+/** The decisions that set these faces aside, each with how many faces it still holds elsewhere. */
+export const setAsideDecisions = (
+    faceIds: readonly string[]
+): { decisionId: string; elsewhere: number }[] =>
+    db
+        .prepare(
+            `SELECT f."decisionId",
+                    (SELECT count(*) FROM "Face" o
+                      WHERE o."decisionId" = f."decisionId"
+                        AND o."id" NOT IN (SELECT value FROM json_each(:ids))) AS "elsewhere"
+               FROM "Face" f
+              WHERE f."id" IN (SELECT value FROM json_each(:ids))
+                AND f."skippedAt" IS NOT NULL AND f."decisionId" IS NOT NULL
+              GROUP BY f."decisionId"`
+        )
+        .all({ ids: JSON.stringify(faceIds) }) as { decisionId: string; elsewhere: number }[];
+
+/**
+ * "Ask again", of these faces alone: no longer set aside. What the deciding press holds elsewhere
+ * stays its own — as an undo leaves rows a later decision rewrote. Returns the faces changed.
+ */
+export const unsetAsidePeople = (faceIds: readonly string[]): number =>
+    db
+        .prepare(
+            `UPDATE "Face" SET "skippedAt" = NULL, "skippedByUserId" = NULL, "decisionId" = NULL
+              WHERE "id" IN (SELECT value FROM json_each(?)) AND "skippedAt" IS NOT NULL`
+        )
+        .run(JSON.stringify(faceIds)).changes;

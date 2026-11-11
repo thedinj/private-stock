@@ -94,6 +94,35 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
             : null;
     };
 
+    // Who is already in it, for somebody nobody matched — the same person split in two is the
+    // usual answer: tagged on it, or a person in it confirmed as them.
+    const inItem = new Map<string, "tagged" | "confirmed">();
+
+    for (const row of rows) {
+        if (row.confirmedTagId) inItem.set(row.confirmedTagId, "confirmed");
+    }
+
+    for (const tag of carried.values()) {
+        if (!inItem.has(tag.tagId) && tag.kind === "performer") inItem.set(tag.tagId, "tagged");
+    }
+
+    const inItemFor = (row: (typeof rows)[number], faceIds: string[]) => {
+        const refused = new Set(appearanceRepo.refusedTagsOf(faceIds));
+
+        return [...inItem]
+            .filter(([tagId]) => !refused.has(tagId))
+            .flatMap(([tagId, why]) => {
+                const performer = nameOf(tagId);
+
+                return performer ? [{ ...performer, why, closest: tagId === row.matchTagId }] : [];
+            })
+            .sort(
+                (a, b) =>
+                    Number(b.closest) - Number(a.closest) ||
+                    Number(b.why === "confirmed") - Number(a.why === "confirmed")
+            );
+    };
+
     const people = rows.flatMap((row): ItemPeople["people"] => {
         const own = faces.filter((face) => face.appearanceId === row.id);
         const best = crops.get(row.bestFaceId);
@@ -125,6 +154,7 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
                     performer,
                     byApp: tag?.source === "ai",
                     tagged: tag !== undefined,
+                    inItem: [],
                 },
             ];
         }
@@ -140,6 +170,19 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
                 (row.score >= SUGGEST_NAMED_LINE && namedTags.has(row.matchTagId)));
         const performer = suggested && row.matchTagId ? nameOf(row.matchTagId) : null;
 
+        if (row.setAside === 1) {
+            return [
+                {
+                    card,
+                    state: "setAside",
+                    performer: null,
+                    byApp: false,
+                    tagged: false,
+                    inItem: [],
+                },
+            ];
+        }
+
         return [
             {
                 card,
@@ -147,6 +190,7 @@ export const itemPeople = (mediaId: string, auth: AuthContext): ItemPeople => {
                 performer,
                 byApp: false,
                 tagged: performer ? carried.has(performer.id) : false,
+                inItem: performer ? [] : inItemFor(row, card.faceIds),
             },
         ];
     });
@@ -183,6 +227,22 @@ const tagItem = (mediaId: string, tagId: string, name: string, userId: string): 
     return assigned;
 };
 
+/**
+ * "Ask again", of a person set aside: a press that set aside only them is undone, as History's
+ * Undo would; one that set aside others too keeps those, and lets go of these faces alone.
+ */
+const askAgain = (faceIds: string[], userId: string): number =>
+    db.transaction((): number => {
+        let changed = 0;
+
+        for (const { decisionId, elsewhere } of appearanceRepo.setAsideDecisions(faceIds)) {
+            if (elsewhere === 0) changed += faceDecisionRepo.undo(decisionId, userId).faces;
+        }
+
+        // Whatever is still set aside: a wider press's, or one from before decisions were kept.
+        return changed + appearanceRepo.unsetAsidePeople(faceIds);
+    })();
+
 export const decideItemPeople = (
     mediaId: string,
     decision: ItemPeopleDecision,
@@ -209,6 +269,25 @@ export const decideItemPeople = (
 
     if (person && person.faceIds.length === 0) {
         throw new ValidationError("That person is not in this item any more. Reload it.");
+    }
+
+    if (decision.action === "setAside") {
+        const { result } = faceDecisionRepo.record(
+            {
+                actor: "user",
+                userId: auth.userId,
+                verdict: "later",
+                tagId: null,
+                surface: "item",
+            },
+            () => appearanceRepo.setAsidePeople(person!.faceIds, auth.userId)
+        );
+
+        return { changed: result };
+    }
+
+    if (decision.action === "askAgain") {
+        return { changed: askAgain(person!.faceIds, auth.userId) };
     }
 
     if (decision.action === "name" && !normalizeName(decision.name)) {
