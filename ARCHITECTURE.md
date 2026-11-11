@@ -12398,16 +12398,23 @@ else.
 
 Reviewed stage by stage (2026-11-08):
 
-| Room      | Skips               | Why                                                                                                                                                                                            |
-| --------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cellar    | nothing             |                                                                                                                                                                                                |
-| Parlour   | Look (`embed`), OCR | Watching by look is the Cellar's idea; a family video has little burned-in text, and OCR's settings are tuned for watermarks.                                                                  |
-| Game Room | faces, Look, OCR    | A detector has nothing to find in a game's frames. OCR would read the HUD — ammo counts, killfeeds — into the search index and the review queue. Players are filed by hand and from filenames. |
+| Room      | Skips                                                            | Why                                                                                                                                                                                                                |
+| --------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cellar    | nothing                                                          |                                                                                                                                                                                                                    |
+| Parlour   | Look (`embed`), OCR                                              | Watching by look is the Cellar's idea; a family video has little burned-in text, and OCR's settings are tuned for watermarks.                                                                                      |
+| Game Room | faces, Look, OCR, look-alike fingerprints (`phash`, `tileprint`) | A detector has nothing to find in a game's frames. OCR would read the HUD — ammo counts, killfeeds — into the search index and the review queue. Players are filed by hand and from filenames. Look-alikes: below. |
 
-**The duplicate fingerprints stay in the Game Room** (`phash`, `tileprint`). A highlight saved
-raw, trimmed and re-encoded is the duplicate most worth catching, and `tileprint` exists for
-exactly "the same clip, starting at a different moment". The risk is false matches between clips
-of one map under one HUD; if the Game Room's queue fills with those, this is the line to change.
+**The Game Room does not look for look-alikes** (`phash`, `tileprint`; changed 2026-11-10). They
+were kept at first, on the argument that a highlight saved raw, trimmed and re-encoded is the
+duplicate most worth catching, with the risk named here: false matches between clips of one map
+under one HUD. That is what happened -- the Look alike tab filled with recordings that were not
+copies of each other. Identical copies are still found, from the identity hash, which runs
+everywhere. Nothing else reads either fingerprint: the filmstrip `tileprint` is made from stays,
+since the scrubber needs it. The migration `game_room_look_alikes` deleted the room's look-alike
+groups, its perceptual hashes, its "kept apart" verdicts between items that are not
+byte-identical (only look-alike detection consulted them), and its pending fingerprint jobs, and
+settled its `phash` and `tileprint` outcomes `skipped`, so the orphan sweep reclaims the tile print
+files. The Duplicates page has no Look alike tab in a room that skips `phash`.
 Everything playback and finding need — identity hash, probe, cover, index, metadata, previews,
 filmstrip, segments — runs everywhere.
 

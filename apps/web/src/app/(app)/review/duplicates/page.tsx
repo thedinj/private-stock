@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { reviewMedia, reviewMediaKind, type DupeListResponse } from "@private-stock/core";
 
+import { roomRuns } from "@/lib/activeDomain";
 import { api, getCurrentUser } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { DupeRulesForm } from "@/components/admin/DupeRulesForm";
@@ -25,6 +26,9 @@ import { defineView, enumField, flagField, pageField, useUrlView } from "@/lib/u
  * - **Look alike** — near duplicates, where the copies genuinely differ and the triage sheet's
  *   comparison is the whole point.
  * - **Reviewed** — groups somebody chose to keep as they are, for changing that mind.
+ *
+ * A room that skips the look-alike fingerprints (`phash`, §21 — the Game Room) has no Look alike
+ * tab: it could only ever be empty there.
  *
  * The old controls — an All/Identical/Looks-the-same filter, a page-size picker and a "show
  * reviewed" switch — were one sheet asked to serve all three. "All" mixed two different kinds
@@ -61,6 +65,9 @@ const DuplicatesPage: React.FC = () => {
     const [view, apply] = useUrlView(dupesView);
     const media = reviewMediaKind(view.media);
     const only: Record<string, string> = media ? { media } : {};
+    const looksAlike = roomRuns("phash");
+    // An address saved in another room can still name the tab this one does not have.
+    const tab = view.tab === "near" && !looksAlike ? "identical" : view.tab;
 
     /**
      * The labels' counts: pending of each kind and reviewed, under the kind control, and pending
@@ -140,7 +147,7 @@ const DuplicatesPage: React.FC = () => {
             {/* Not kept mounted: each sheet binds its keys to the window, so only the tab on
                 screen may have one. */}
             <Tabs
-                value={view.tab}
+                value={tab}
                 onChange={(value) =>
                     value &&
                     apply({
@@ -156,7 +163,11 @@ const DuplicatesPage: React.FC = () => {
                     <Tabs.Tab value="identical">
                         {label("Identical", counts?.pending.exact)}
                     </Tabs.Tab>
-                    <Tabs.Tab value="near">{label("Look alike", counts?.pending.near)}</Tabs.Tab>
+                    {looksAlike && (
+                        <Tabs.Tab value="near">
+                            {label("Look alike", counts?.pending.near)}
+                        </Tabs.Tab>
+                    )}
                     <Tabs.Tab value="reviewed">{label("Reviewed", counts?.reviewed)}</Tabs.Tab>
                 </Tabs.List>
 

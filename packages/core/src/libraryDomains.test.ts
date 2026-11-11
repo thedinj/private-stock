@@ -33,12 +33,15 @@ describe("domains (§21)", () => {
         expect(domainSkipsStage("family", "faces")).toBe(false);
     });
 
-    it("skips faces, Look and OCR in the game room, and keeps the duplicate fingerprints", () => {
+    it("skips faces, Look, OCR and the look-alike fingerprints in the game room", () => {
         expect(domainSkipsStage("games", "faces")).toBe(true);
         expect(domainSkipsStage("games", "embed")).toBe(true);
         expect(domainSkipsStage("games", "ocr")).toBe(true);
-        expect(domainSkipsStage("games", "phash")).toBe(false);
-        expect(domainSkipsStage("games", "tileprint")).toBe(false);
+        expect(domainSkipsStage("games", "phash")).toBe(true);
+        expect(domainSkipsStage("games", "tileprint")).toBe(true);
+        // Identical copies are still found, and the filmstrip the tile prints read is still made.
+        expect(domainSkipsStage("games", "filehash")).toBe(false);
+        expect(domainSkipsStage("games", "sprite")).toBe(false);
     });
 
     it("runs a stage for a room it does not know, rather than silently skipping it", () => {

@@ -127,9 +127,10 @@ export const domainProfiles: Record<DomainKind, DomainProfile> = {
             tag: { one: "Keyword", many: "Keywords" },
         },
         // Players are filed by hand and from filenames. OCR would read the HUD -- ammo counts and
-        // killfeeds -- into the search index and the review queue. The duplicate fingerprints
-        // stay: a highlight saved raw, trimmed and re-encoded is the duplicate most worth finding.
-        skipsStages: ["faces", "embed", "ocr"],
+        // killfeeds -- into the search index and the review queue. The look-alike fingerprints
+        // (`phash`, `tileprint`) matched clips of one map under one HUD far more often than
+        // copies of one clip; identical copies are still found from the identity hash.
+        skipsStages: ["faces", "embed", "ocr", "phash", "tileprint"],
         // Saved after the fact, so the moment is in the last seconds (§14d "Reviewing
         // recordings for a reel").
         tailMs: 10_000,
