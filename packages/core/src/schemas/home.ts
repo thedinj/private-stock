@@ -24,8 +24,19 @@ export const builtinShelfSchema = z.enum([
 ]);
 export type BuiltinShelf = z.infer<typeof builtinShelfSchema>;
 
-/** How many items a shelf may show. A row, not a page — the shelf links onward for the rest. */
-const shelfLimit = z.coerce.number().int().min(1).max(24).default(12);
+/**
+ * How many items a shelf carries unless its layout says fewer.
+ *
+ * More than any screen shows. A shelf is drawn as whole rows -- two, three on a phone -- with
+ * the rest clipped (`TileGrid`), so it has to bring enough to fill those rows at the widest
+ * width: twelve columns of the grid, a content area about 2,400 pixels across. A dozen was two
+ * rows of six, and left a stray pair under five. Still a row, not a page: the shelf links onward
+ * for the rest.
+ */
+export const SHELF_TILES = 24;
+
+/** A ceiling: a layout can ask for fewer, never for more than the rows can show. */
+const shelfLimit = z.coerce.number().int().min(1).max(SHELF_TILES).default(SHELF_TILES);
 
 /**
  * A title the user chose, overriding the one the shelf would name itself.
@@ -77,10 +88,10 @@ export type HomeLayout = z.infer<typeof homeLayoutSchema>;
  * the rest of the shelf the hero came from rather than what was just watched.
  */
 export const DEFAULT_HOME_LAYOUT: HomeLayout = [
-    { source: "builtin", builtin: "recentlyAdded", limit: 12 },
-    { source: "builtin", builtin: "recentlyViewed", limit: 12 },
-    { source: "builtin", builtin: "favorites", limit: 12 },
-    { source: "builtin", builtin: "random", limit: 12 },
+    { source: "builtin", builtin: "recentlyAdded", limit: SHELF_TILES },
+    { source: "builtin", builtin: "recentlyViewed", limit: SHELF_TILES },
+    { source: "builtin", builtin: "favorites", limit: SHELF_TILES },
+    { source: "builtin", builtin: "random", limit: SHELF_TILES },
 ];
 
 export const resolvedShelfSchema = z.object({

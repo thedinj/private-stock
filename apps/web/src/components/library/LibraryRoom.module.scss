@@ -202,7 +202,11 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, rgba(var(--ps-accent-rgb), 0.5), rgba(var(--ps-accent-rgb), 0));
+    background: linear-gradient(
+        90deg,
+        rgba(var(--ps-accent-rgb), 0.5),
+        rgba(var(--ps-accent-rgb), 0)
+    );
 }
 
 .inviteBody {
@@ -242,5 +246,40 @@
         &:hover {
             transform: none;
         }
+    }
+}
+
+/**
+ * A shelf: whole rows only, two of them, three on a phone.
+ *
+ * A shelf carries more tiles than any screen shows (`SHELF_TILES`), and every row past the
+ * visible ones is zero pixels tall and clipped -- the filmstrip's trick (FilmstripRow), with
+ * more than one row. Without it a dozen tiles on a five-column screen was two full rows and a
+ * stray pair, and how ragged the last row was depended on the width of the window.
+ *
+ * The rows have no gap of their own: the space between them is each slot's padding (`.slot`),
+ * so the zero-height rows add nothing to the height, and the tiles in them start exactly at the
+ * box's bottom edge, which is where they are cut. The padding on the other three sides, and the
+ * last row's own, are room for the hover lift and glow that `overflow: hidden` would otherwise
+ * clip; the margins take all of it back. 12px throughout is `GRID_GAP`.
+ */
+.shelf {
+    display: grid;
+    grid-template-rows: repeat(2, auto);
+    grid-auto-rows: 0;
+    row-gap: 0;
+    overflow: hidden;
+    padding: 12px 12px 0;
+    margin: -12px;
+}
+
+.slot {
+    padding-bottom: 12px;
+}
+
+// Two across on a phone (GRID_TRACKS), so two rows would be four tiles.
+@media (max-width: 48em) {
+    .shelf {
+        grid-template-rows: repeat(3, auto);
     }
 }

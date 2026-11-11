@@ -12,6 +12,7 @@ import {
     type LibraryTab,
     normalizeName,
     SELECTION_TAG_LIMIT,
+    SHELF_TILES,
     orderTagMatches,
     rowidShuffleParams,
     TAG_BROWSE_PAGE_SIZE,
@@ -1015,8 +1016,8 @@ export const setTagFavorite = (
     return { favorite };
 };
 
-/** Items per shelf on a tag's page. Two rows of the grid on a wide screen. */
-const PROFILE_SHELF = 12;
+/** Items per shelf on a tag's page: as many as a home shelf, drawn the same way (`TileGrid`). */
+const PROFILE_SHELF = SHELF_TILES;
 
 /**
  * Several statements read as one snapshot (§20), `mediaService.listMedia`'s helper for its

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { Anchor, Box, Button, Center, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -144,24 +144,49 @@ export const TileGrid: React.FC<{ items: MediaListItem[]; live?: boolean }> = ({
     items,
     live = false,
 }) => {
-    const { ref } = useFlipGrid(
+    const { ref: flipRef } = useFlipGrid(
         items.map((item) => item.id),
         { live }
     );
+    const grid = useRef<HTMLDivElement | null>(null);
+    const ref = useCallback(
+        (node: HTMLDivElement | null) => {
+            grid.current = node;
+            flipRef(node);
+        },
+        [flipRef]
+    );
+
+    /**
+     * The tiles on screen, as the set the viewer plays on through.
+     *
+     * The shelf holds more than it shows (`.shelf`), and playing on into tiles nobody saw would
+     * make the row a lie about what comes next. Measured at the click rather than on render: the
+     * browser has long since laid the grid out, and the computed tracks are its own answer --
+     * every column, and every row it gave a height.
+     */
+    const onScreen = (): MediaListItem[] => {
+        if (!grid.current) return items;
+
+        const style = getComputedStyle(grid.current);
+        const columns = style.gridTemplateColumns.split(" ").length;
+        const rows = style.gridTemplateRows
+            .split(" ")
+            .filter((track) => parseFloat(track) > 0).length;
+
+        return items.slice(0, columns * rows);
+    };
 
     return (
         <Box
             ref={ref}
-            style={{
-                display: "grid",
-                gridTemplateColumns: GRID_TRACKS,
-                gap: GRID_GAP,
-            }}
+            className={classes.shelf}
+            style={{ gridTemplateColumns: GRID_TRACKS, columnGap: GRID_GAP }}
         >
             {items.map((item) => (
                 // The slot is what moves; the tile inside it is never animated on its own.
-                <div key={item.id} data-flip-key={item.id}>
-                    <MediaTile item={item} onOpen={() => rememberShelf(items)} />
+                <div key={item.id} data-flip-key={item.id} className={classes.slot}>
+                    <MediaTile item={item} onOpen={() => rememberShelf(onScreen())} />
                 </div>
             ))}
         </Box>

@@ -1,5 +1,6 @@
 import {
     homeLayoutSchema,
+    SHELF_TILES,
     type BuiltinShelf,
     type HomeLayout,
     type HomeResponse,
@@ -380,7 +381,7 @@ const pinnedFilterShelves = (layout: HomeLayout, auth: AuthContext): Shelf[] => 
             (row) => row.pinned === 1 && row.userId === auth.userId && !alreadyPlaced.has(row.id)
         )
         .sort((left, right) => left.position - right.position)
-        .map((row): Shelf => ({ source: "filter", filterId: row.id, limit: 12 }));
+        .map((row): Shelf => ({ source: "filter", filterId: row.id, limit: SHELF_TILES }));
 };
 
 /**

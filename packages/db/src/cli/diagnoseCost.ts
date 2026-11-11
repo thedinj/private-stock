@@ -33,6 +33,7 @@ import {
     PROGRESS_STAGE_NAMES,
     savedQuerySchema,
     SETTING_KEYS,
+    SHELF_TILES,
     type HomeLayout,
     type MediaQuery,
     type Shelf,
@@ -522,7 +523,7 @@ const homeShelves = (viewer: Viewer): Shelf[] => {
         .listVisibleTo(viewer.userId, "cellar")
         .filter((row) => row.pinned === 1 && row.userId === viewer.userId && !placed.has(row.id))
         .sort((left, right) => left.position - right.position)
-        .map((row): Shelf => ({ source: "filter", filterId: row.id, limit: 12 }));
+        .map((row): Shelf => ({ source: "filter", filterId: row.id, limit: SHELF_TILES }));
 
     return [...layout, ...pinned].slice(0, 20);
 };
