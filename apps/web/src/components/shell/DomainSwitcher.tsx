@@ -233,10 +233,12 @@ export const DomainSwitcher: React.FC = () => {
                     opened={opened}
                     onClose={() => setOpen(false)}
                     position="bottom"
-                    size="auto"
                     withCloseButton={false}
                     padding={0}
                     classNames={{ content: classes.sheet }}
+                    // As tall as the plan. Not `size="auto"`: Mantine reads that as a theme size
+                    // name, finds no `--drawer-size-auto`, and the sheet filled the screen.
+                    styles={{ content: { height: "auto", maxHeight: "90dvh" } }}
                 >
                     {house}
                 </Drawer>
