@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Badge, Box, Button, Group, Paper, Stack, Switch, Text } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
 
 import { locateInReel, type ReelEntry } from "@private-stock/core";
 
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { ClipThumb } from "@/components/media/ClipThumb";
+import { mediaDetailQuery } from "@/lib/api/media";
 import { isTypingTarget } from "@/lib/typingTarget";
 
 /**
@@ -119,6 +121,17 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({
         cue.index + 1 < playable.length ? cue.index + 1 : loop && playable.length > 1 ? 0 : null;
 
     const currentId = current?.id;
+
+    /**
+     * Who is in the span on screen, for the caption over a full screen (`StageCaption`): the
+     * clip's own name, and the people and tags of the item it was cut from. The item's details
+     * rather than the clip's tags, which a reel never carries (`clipSchema.tags`), and the same
+     * cache entry the item page reads, so a clip of something just watched costs nothing.
+     */
+    const source = useQuery({
+        ...mediaDetailQuery(current?.media.id ?? ""),
+        enabled: current !== undefined,
+    });
 
     useEffect(() => {
         if (current) onCurrent?.(current);
@@ -254,6 +267,12 @@ export const ReelPlayer: React.FC<ReelPlayerProps> = ({
                 // only at its end, and starts again.
                 onReplay={() => goTo(rollOn ? 0 : cue.index)}
                 freezeRef={freezeRef}
+                caption={{
+                    title: current.clip.label ?? current.media.title,
+                    // Only once the details are this span's: a join keeps the last item's
+                    // until its own arrive, and naming the wrong people is worse than none.
+                    tags: source.data?.id === current.media.id ? source.data.tags : null,
+                }}
             />
 
             <Group justify="space-between" wrap="wrap" gap="xs">

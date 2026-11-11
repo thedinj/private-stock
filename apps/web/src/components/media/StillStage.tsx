@@ -19,6 +19,7 @@ import {
     PlayGlyph,
     PreviousGlyph,
 } from "./Glyph";
+import { StageCaption, type StageCaptionContent } from "./StageCaption";
 import { StillSlots } from "./StillSlots";
 
 import classes from "./StillStage.module.scss";
@@ -68,6 +69,8 @@ interface StillStageProps {
     steps?: { previous: (() => void) | null; next: (() => void) | null } | null;
     /** The page's actions on the item, in a "more" menu: the rating and the bin. */
     menuItems?: React.ReactNode;
+    /** What is on show, across the top of a full screen while the bar is up (`StageCaption`). */
+    caption?: StageCaptionContent | null;
 }
 
 export const StillStage: React.FC<StillStageProps> = ({
@@ -83,6 +86,7 @@ export const StillStage: React.FC<StillStageProps> = ({
     onDwellSeconds,
     steps = null,
     menuItems,
+    caption = null,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const {
@@ -243,6 +247,8 @@ export const StillStage: React.FC<StillStageProps> = ({
                     </div>
                 )}
             </div>
+
+            {caption && isFullscreen && <StageCaption {...caption} hidden={controlsIdle} />}
 
             {/* Always here, for full screen: a photograph with no show running used to have no
                 bar at all, so `f` was the only way to give it the screen while a film always

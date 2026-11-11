@@ -1,0 +1,66 @@
+/**
+ * The bottom bar's counterpart: over the top of the picture on a gradient, there while the bar is
+ * and gone when it goes, by the same slide (VideoPlayer.module.scss, `.controls`).
+ *
+ * Never takes the pointer, shown or not: a tap on the top of the picture is a tap on the picture.
+ */
+.caption {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-block: calc(var(--mantine-spacing-sm) + var(--ps-safe-top))
+        calc(var(--mantine-spacing-xl) * 1.5);
+    padding-inline: calc(var(--mantine-spacing-md) + var(--ps-safe-left))
+        calc(var(--mantine-spacing-md) + var(--ps-safe-right));
+    color: #fff;
+    background: linear-gradient(
+        to bottom,
+        rgb(0 0 0 / 0.85),
+        rgb(0 0 0 / 0.6) 45%,
+        rgb(0 0 0 / 0.25) 75%,
+        transparent
+    );
+    pointer-events: none;
+    transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+}
+
+.caption[data-hidden] {
+    opacity: 0;
+    transform: translateY(-100%);
+}
+
+.title {
+    font-size: var(--mantine-font-size-lg);
+    line-height: 1.3;
+}
+
+.people {
+    color: var(--mantine-color-brass-3);
+}
+
+.tags {
+    color: rgb(255 255 255 / 0.72);
+}
+
+/** A phone has room for two lines over the picture: the title and who is in it. */
+@media (max-width: 48em) {
+    .title {
+        font-size: var(--mantine-font-size-md);
+    }
+
+    .tags {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .caption {
+        transition: none;
+    }
+}

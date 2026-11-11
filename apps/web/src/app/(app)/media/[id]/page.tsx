@@ -1365,6 +1365,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             menuItems={stageMenu}
                             cast={castControl}
                             setControl={screening ? <ScreeningFitChip /> : undefined}
+                            caption={{ title: data.title, tags: data.tags }}
                         />
                     ) : (
                         <StillStage
@@ -1382,6 +1383,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             hotkeys={!overlayOpen && !trashOpen && !helpOpen}
                             steps={steps}
                             menuItems={stageMenu}
+                            caption={{ title: data.title, tags: data.tags }}
                         />
                     )}
                 </Box>

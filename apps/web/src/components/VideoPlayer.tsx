@@ -6,6 +6,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import { ViewerKeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
+import { StageCaption, type StageCaptionContent } from "@/components/media/StageCaption";
 import { SkipButton } from "@/components/SkipButton";
 import { SpriteScrubber } from "@/components/SpriteScrubber";
 import type { ViewerAction } from "@/lib/viewerKeys";
@@ -308,6 +309,12 @@ interface VideoPlayerProps {
      * a screening plays, and goes when the bar does.
      */
     setControl?: React.ReactNode;
+    /**
+     * What is playing -- its title, who is in it, its tags -- across the top of a full screen
+     * while the bar is up (`StageCaption`). Only in full screen: in the page the title is under
+     * the picture already.
+     */
+    caption?: StageCaptionContent | null;
 }
 
 /**
@@ -440,6 +447,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     menuItems,
     cast = null,
     setControl,
+    caption = null,
 }) => {
     /**
      * The element on screen, held in state as well as in a ref.
@@ -2151,6 +2159,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     />
                 );
             })}
+
+            {caption && isFullscreen && !bare && (
+                <StageCaption {...caption} hidden={controlsIdle} />
+            )}
 
             {!bare && (
                 <Box
