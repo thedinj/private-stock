@@ -143,7 +143,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
 
     const sequence = useViewerSequence(returnTo, id);
 
-    /** Opened by a private screening (§14h), which offers "This way up" on the bar. */
+    /** Opened by a private screening (§14h), which offers "Fits" on the bar. */
     const screening =
         returnTo !== null && new URLSearchParams(returnTo.split("?")[1] ?? "").has(SCREENING_PARAM);
 

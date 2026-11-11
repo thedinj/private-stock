@@ -304,7 +304,7 @@ interface VideoPlayerProps {
     cast?: CastControl | null;
     /**
      * A control about the set rather than the item, on its own row at the top of the bar: the
-     * private screening's "This way up" (§14h). On the bar so it is there in fullscreen, where
+     * private screening's "Fits" (§14h). On the bar so it is there in fullscreen, where
      * a screening plays, and goes when the bar does.
      */
     setControl?: React.ReactNode;

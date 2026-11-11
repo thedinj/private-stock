@@ -345,3 +345,22 @@ export const ProjectorGlyph: React.FC<GlyphProps> = ({ size }) => (
         <path d="M16 13.6 21 11.6v6.8l-5-2" />
     </Glyph>
 );
+
+/**
+ * "Fits" on a private screening's bar (§14h): the screen as it is held -- tall on an upright
+ * phone, wide on a monitor -- with a tick in it while the screening keeps to what fills it.
+ */
+export const FitsGlyph: React.FC<GlyphProps & { portrait: boolean; on: boolean }> = ({
+    size,
+    portrait,
+    on,
+}) => (
+    <Glyph size={size}>
+        {portrait ? (
+            <rect x="6.5" y="3" width="11" height="18" rx="1.6" />
+        ) : (
+            <rect x="3" y="6.5" width="18" height="11" rx="1.6" />
+        )}
+        {on && <path d="M9 12.2l2.2 2.2L15.2 10" />}
+    </Glyph>
+);

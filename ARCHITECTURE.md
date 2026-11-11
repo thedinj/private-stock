@@ -10909,14 +10909,19 @@ Play › From the top -- a shortcut to a path that already existed, not a new mo
   the new way up.
 - **Nothing that fits is the whole room**, not an empty one: a room whose videos are all one
   way up, like the Game Room, plays everything on a screen held the other way.
-- **"This way up" is the room's choice, set from the viewer.** A chip on the player's bar during
-  a screening (on the bar so it is there in full screen) turns the rule off or on and deals
-  again at once. Remembered per room in this browser (`roomKey`), like the reel target -- losing
+- **"Fits" is the room's choice, set from the viewer.** A toggle on the player's bar during a
+  screening (on the bar so it is there in full screen) turns the rule off or on and deals again
+  at once. Its icon is the screen as it is held, tall or wide, ticked while on, so it says what
+  "fits" is measured against without a tooltip a phone cannot show. The caption was "This way
+  up" first, which was long for the bar and read as an instruction. Remembered per room in this browser (`roomKey`), like the reel target -- losing
   it costs a tap -- and on until a room is told otherwise. In the viewer rather than in a setting
   because the bars are noticed there, and a room that has no use for it never gives anyone a
   reason to touch it.
 - **A new seed every press** (`newShuffleSeed`), recorded in the address the viewer returns to,
-  so Back lands on that shuffle's grid. Pressed in the viewer it deals again without leaving.
+  so Back lands on that shuffle's grid. Pressed in the viewer it deals again without leaving,
+  and replaces the item in the history rather than adding to it, as stepping does: pushed, each
+  deal was another entry, and Back walked through the earlier deals' items under a label that
+  promised the library.
 - **Full screen is asked for in the press** (`enterPlayerFullscreen`), before page one is
   fetched, because by the time it arrives the gesture is gone. It sets the full-screen
   intention (§14b), so the viewer keeps it across items and drops it on the way out; an empty
