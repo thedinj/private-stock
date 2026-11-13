@@ -50,7 +50,13 @@ export interface FacetLabel {
 export interface DomainProfile {
     kind: DomainKind;
     label: string;
-    /** Whether entering it asks for the screen-lock PIN (§21 "Getting into the cellar"). */
+    /**
+     * Whether the account's PIN keeps this room (§21 "Getting into the cellar", §12c). One flag
+     * for all of it: entering asks for the PIN on the wine rack, the screen lock comes down here
+     * after a while away and from the header's key, and the PIN opens only this room. There is
+     * no separate "lockable" -- a lock where the PIN guards nothing, or a guard that never locks
+     * again, would be two meanings of one PIN.
+     */
     guarded: boolean;
     /**
      * What the room switcher's hidden line says, for a guarded room (§21 "Getting into the
