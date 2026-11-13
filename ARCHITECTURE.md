@@ -7026,20 +7026,24 @@ touched.
 
 ### The screen lock
 
-Off by default and opt-in per device: after a stretch of downtime, the app is covered by a
-keypad until the account's PIN is entered. Asked for with a shared Samsung tablet in mind
+Off by default and opt-in per device: after a stretch of downtime, the Cellar closes again and
+its wine rack (§21) covers the page until the account's PIN is entered. Asked for with a shared Samsung tablet in mind
 (decided 2026-10-30).
 
 - **The PIN is the account's; the lock is the device's.** `User.pinHash` holds one PIN per
   account, so changing it reaches every device at once. Whether a device locks, and after how
   long, lives in that browser's `localStorage` keyed by account (`lib/screenLock.ts`) and never
   reaches the server, so a tablet two people share can lock for one and not the other.
-- **4 to 8 digits**, chosen by the person; the form suggests six. The keypad needs no fixed
+- **4 to 8 digits**, chosen by the person; the form suggests six. The rack needs no fixed
   length, so the range costs nothing.
 - **The PIN is chosen on the cellar's wine rack** (§21 "Getting into the cellar"), pulled twice
   to be sure, because the rack is where it is entered on the way down: choosing it is learning
-  the way in. The lock itself keeps its keypad. Both share `usePinEntry`, so the attempt limit
-  is enforced in one place.
+  the way in. **The rack is the only PIN screen** (decided 2026-11-13): the lock had a keypad
+  of its own until then, and two faces for one PIN read as two locks. When the lock comes down,
+  `ScreenLockProvider` only says so; `DomainGate` puts the rack back up over the room, which
+  stays mounted and inert underneath, so the right PIN returns to the page as it was left (with
+  the same split seal and candle as the way in). The PIN opens only the Cellar -- "Back
+  upstairs" leaves without it. While the page is hidden the cover is blank.
 - **Setting, changing or removing the PIN asks for the password** — otherwise a borrowed unlocked
   screen could set a PIN its owner does not know. Turning the lock _off_ on a device asks for
   the PIN, for the same reason; turning it on asks for nothing.
@@ -7061,8 +7065,8 @@ keypad until the account's PIN is entered. Asked for with a shared Samsung table
   that guessing is bounded — `POST /api/auth/pin/verify` answers five wrong tries in a row,
   counted per account in memory, and the fifth revokes _this device's_ refresh token and clears
   its cookie. Getting back in takes the password, and signing in with the password clears the
-  lock, being the stronger proof. **Forgetting the PIN** is the same path: "Sign out" on the lock
-  screen.
+  lock, being the stronger proof. **Forgetting the PIN** is the same path: "Sign out" under the
+  rack.
 - **Hashed with `scrypt`, not bcrypt.** `bcryptjs` would hold the request thread for seconds on
   the NAS (§20) to unlock a tablet; `scrypt` runs on the libuv pool. Neither resists offline
   guessing of a few digits, so the hash is not tuned to — the miss limit is what holds.
@@ -7074,6 +7078,10 @@ keypad until the account's PIN is entered. Asked for with a shared Samsung table
   Time in another room is time away from the Cellar -- nothing outside it marks use -- so going
   back down after the delay asks for the PIN, as the gate would not (it asks once per tab). A
   room change is a reload, so the provider reads the room once.
+- **A key in the Cellar's header locks it at once** (decided 2026-11-13), beside the projector,
+  as well as "Lock now" in the account menu. Locking by hand needs only a PIN on the account, not
+  the idle lock on the device: the idle lock is the opt-in, and a lock asked for is a lock
+  wanted. It holds across a reload and every tab like the idle one, and the rack opens it.
 
 ### What a new account can see, and what is still open
 
@@ -12355,7 +12363,7 @@ by someone looking on, on a desktop and on a phone. Other accounts were not the 
 - **A wrong PIN says nothing.** The corks go and the rack is as it was. The one exception is the
   try before the device is signed out, which gets a single dim line, since a sign-out with no
   warning at all would be worse than a hint. The attempt limit is the screen lock's
-  (`usePinEntry`, shared with its keypad).
+  (`usePinEntry`).
 - **A right PIN puts the lights out to one candle** -- the snuff's dark (`CandleDark`) -- and
   the room comes up out of it. Under reduced motion it simply opens.
 - **The PIN is chosen on the same rack** (Settings, §12c), so choosing it teaches the way in,
@@ -12365,10 +12373,10 @@ by someone looking on, on a desktop and on a phone. Other accounts were not the 
   the tab first. A reload of a tab that has passed does not ask again; a new tab does. Only a
   definite "this account has no PIN" opens it unasked; a failed read keeps the rack up. "Back
   upstairs" returns to the Parlour.
-- **Not done:** the idle screen lock keeps its keypad. It covered every room when this was
-  written, and a wine rack over the Parlour would have been the thing that drew a look; it now
-  covers only the Cellar (§12c), so the rack could be its face there. A keyboard-only way to show the hidden
-  line is not built; the pointer's dwell covers the desktop.
+- **The rack is the screen lock's face too** (§12c, decided 2026-11-13): when the idle lock comes
+  down, the rack goes back up over the room rather than a keypad of the lock's own.
+- **Not done:** a keyboard-only way to show the hidden line is not built; the pointer's dwell
+  covers the desktop.
 
 ### Turning a room off
 

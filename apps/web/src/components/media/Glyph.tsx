@@ -346,6 +346,14 @@ export const ProjectorGlyph: React.FC<GlyphProps> = ({ size }) => (
     </Glyph>
 );
 
+/** Locking the cellar (§12c): an old door key, bow to the left and the bit hanging off the end. */
+export const KeyGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <circle cx="7" cy="12" r="3.6" />
+        <path d="M10.6 12H21M17 12v3.4M20 12v2.4" />
+    </Glyph>
+);
+
 /**
  * "Fits" on a private screening's bar (§14h): the screen as it is held -- tall on an upright
  * phone, wide on a monitor -- with a tick in it while the screening keeps to what fills it.

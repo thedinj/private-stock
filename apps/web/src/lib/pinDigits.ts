@@ -1,5 +1,5 @@
 /**
- * The digits of a PIN being entered, on the screen lock's keypad or the wine rack (§12c, §21
+ * The digits of a PIN being entered, on the wine rack or the account page's PIN form (§12c, §21
  * "Getting into the cellar"). Pure, so the rules both surfaces share are tested once.
  */
 

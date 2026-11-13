@@ -23,6 +23,7 @@ import { AppNavbar, AppNavbarUpkeep } from "@/components/shell/AppNavbar";
 import { ArrivalScroll } from "@/components/shell/ArrivalScroll";
 import { HeaderPlateTitle } from "@/components/shell/HeaderPlateTitle";
 import { HeaderSearch } from "@/components/shell/HeaderSearch";
+import { LockCellar } from "@/components/shell/LockCellar";
 import { PageTurn } from "@/components/shell/PageTurn";
 import { PrivateScreening } from "@/components/shell/PrivateScreening";
 import { useScreenLock } from "@/components/shell/ScreenLock";
@@ -138,6 +139,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                 changes what you are looking at. */}
                             {/* Shuffled videos, full screen, from anywhere (§14h). */}
                             <PrivateScreening />
+                            {/* Only in the cellar, for an account with a PIN (§12c). */}
+                            <LockCellar />
                             {isMobile && <HeaderSearch compact />}
                         </Group>
                     </Group>
@@ -236,7 +239,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                     >
                                         About
                                     </Menu.Item>
-                                    {/* Only where this device locks, in a room that does (§12c). */}
+                                    {/* Only in the cellar, for an account with a PIN (§12c). */}
                                     {lockable && (
                                         <Menu.Item
                                             onClick={() => {

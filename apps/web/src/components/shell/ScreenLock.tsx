@@ -10,14 +10,13 @@ import {
     useRef,
     useState,
 } from "react";
-import { Box, Button, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
+import { Box } from "@mantine/core";
 
 import { domainProfiles } from "@private-stock/core";
 
 import { getActiveDomain } from "@/lib/activeDomain";
 import { usePinStatus } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
-import { canTry } from "@/lib/pinDigits";
 import {
     activeAtKey,
     lockedKey,
@@ -28,13 +27,14 @@ import {
     writeLockAfter,
     writeLocked,
 } from "@/lib/screenLock";
-import { usePinEntry } from "@/lib/usePinEntry";
 
 /**
  * The screen lock (§12c "The screen lock").
  *
- * After a stretch of downtime on a device that has asked for it, the whole app is covered by a
- * keypad until the account's PIN is entered. Downtime is either of two things, measured from the
+ * After a stretch of downtime on a device that has asked for it, the cellar closes again: the
+ * gate's wine rack (`DomainGate`) goes back up over the page until the account's PIN is pulled
+ * from it. This provider decides *when*; it draws nothing but a blank cover while the page is
+ * hidden. There is one PIN screen, and it opens only the cellar (decided 2026-11-13). Downtime is either of two things, measured from the
  * last touch, key or scroll: the app in the background or the screen off, or the app in front
  * and untouched with nothing playing. A video playing on screen counts as use, so a long film
  * watched hands-off does not lock halfway through.
@@ -46,7 +46,12 @@ import { usePinEntry } from "@/lib/usePinEntry";
  * sits above anything the page can draw.
  *
  * **Only in a guarded room** -- the Cellar (decided 2026-11-11). Elsewhere it never covers, never
- * pauses and never leaves fullscreen, and "Lock now" is not offered. Time spent in another room
+ * pauses and never leaves fullscreen, and "Lock now" is not offered.
+ *
+ * **Locking by hand needs only a PIN** (decided 2026-11-13): in the Cellar, "Lock now" -- the key
+ * in the header -- works on every device whose account has a PIN, whether or not the device has
+ * the idle lock on. The idle lock is the opt-in; a lock asked for by hand holds across a reload
+ * and every tab the same way. Time spent in another room
  * is time away from the guarded one: nothing there marks use, so going back down after the delay
  * asks for the PIN. A room change is a reload (`switchDomain`), so the room is read once.
  */
@@ -56,10 +61,14 @@ interface ScreenLockState {
     lockAfter: number | null;
     /** Turn the lock on for this device (minutes) or off (null). */
     setLockAfter: (minutes: number | null) => void;
-    /** Whether this device locks in this room, which is when "Lock now" means anything. */
+    /** Whether "Lock now" means anything here: a guarded room, and an account with a PIN. */
     lockable: boolean;
-    /** Lock now; does nothing on a device or in a room that does not lock. */
+    /** Lock now; does nothing where `lockable` is false. */
     lockNow: () => void;
+    /** Whether the lock is down here, which is when the gate puts its rack back up. */
+    locked: boolean;
+    /** Open the lock, on every tab; the gate calls it when the right PIN is entered. */
+    unlock: () => void;
 }
 
 const ScreenLockContext = createContext<ScreenLockState | null>(null);
@@ -112,9 +121,16 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [guardedRoom, setGuardedRoom] = useState(false);
 
     // A device can have the lock on while the account has since removed its PIN. Then there is
-    // nothing to ask for, and the lock stands down rather than show a keypad nothing opens.
-    const { data: pinStatus } = usePinStatus(userId !== null && lockAfter !== null);
-    const active = guardedRoom && userId !== null && lockAfter !== null && pinStatus?.set !== false;
+    // nothing to ask for, and the lock stands down rather than put up a rack nothing opens.
+    const { data: pinStatus } = usePinStatus(
+        userId !== null && (lockAfter !== null || guardedRoom)
+    );
+    /** Whether a lock, however it came, holds here. */
+    const holds = guardedRoom && userId !== null && pinStatus?.set !== false;
+    /** Whether the idle lock is watching: `holds`, on a device that asked for it. */
+    const active = holds && lockAfter !== null;
+    /** Whether locking by hand is offered: a definite PIN, not just the absence of a "no". */
+    const lockable = holds && pinStatus?.set === true;
 
     const lastMark = useRef(0);
 
@@ -134,7 +150,8 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setLockAfterState(minutes);
 
         if (minutes === null) {
-            setLocked(false);
+            // No idle lock here, but a lock asked for by hand still holds.
+            setLocked(readLocked(userId));
             return;
         }
 
@@ -271,15 +288,24 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
 
     const lockNow = useCallback(() => {
-        if (active) lock();
-    }, [active, lock]);
+        if (lockable) lock();
+    }, [lockable, lock]);
 
     const value = useMemo<ScreenLockState>(
-        () => ({ lockAfter, setLockAfter, lockable: active, lockNow }),
-        [lockAfter, setLockAfter, active, lockNow]
+        () => ({
+            lockAfter,
+            setLockAfter,
+            lockable,
+            lockNow,
+            locked: holds && locked,
+            unlock,
+        }),
+        [lockAfter, setLockAfter, lockable, lockNow, holds, locked, unlock]
     );
 
-    const covered = active && (locked || veiled);
+    // Hidden: a blank cover, so the app switcher's thumbnail shows nothing. Locked and in front,
+    // the gate draws the rack instead.
+    const covered = active && veiled;
 
     return (
         <ScreenLockContext.Provider value={value}>
@@ -289,184 +315,14 @@ export const ScreenLockProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 {children}
             </div>
             {covered && (
-                <LockScreen
-                    // Hidden but not yet due: a blank cover, with no keypad to answer.
-                    showKeypad={locked}
-                    displayName={user?.displayName ?? ""}
-                    onUnlock={unlock}
+                <Box
+                    aria-hidden
+                    pos="fixed"
+                    inset={0}
+                    bg="var(--ps-ground)"
+                    style={{ zIndex: 10_000 }}
                 />
             )}
         </ScreenLockContext.Provider>
-    );
-};
-
-const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"] as const;
-
-/**
- * The cover and its keypad.
- *
- * A keypad of its own rather than a text field: a tablet's soft keyboard would cover half the
- * screen to type four digits, and a field invites the browser to offer to save the PIN. Keys are
- * 64px, past the 44px floor, because this is the screen most often reached for half-awake.
- * A physical keyboard's digits, Backspace and Enter work too.
- */
-const LockScreen: React.FC<{
-    showKeypad: boolean;
-    displayName: string;
-    onUnlock: () => void;
-}> = ({ showKeypad, displayName, onUnlock }) => {
-    const { signOut } = useAuth();
-    const {
-        digits,
-        busy,
-        remaining,
-        unreachable,
-        wrong,
-        press: pressDigit,
-        back,
-        clear,
-        submit,
-    } = usePinEntry(onUnlock);
-
-    const message = unreachable
-        ? "Could not reach the library. Try again."
-        : wrong
-          ? remaining === 1
-              ? "Wrong PIN. One more wrong try signs this device out."
-              : `Wrong PIN. ${remaining} tries left.`
-          : null;
-
-    const press = useCallback(
-        (key: (typeof KEYS)[number]) => {
-            if (key === "back") back();
-            else if (key === "clear") clear();
-            else pressDigit(key);
-        },
-        [back, clear, pressDigit]
-    );
-
-    // In the capture phase, and nothing else hears the key: the page underneath has shortcuts of
-    // its own on `window` (the viewer's Space plays), and `inert` stops focus, not listeners.
-    useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            event.stopImmediatePropagation();
-
-            if (!showKeypad) {
-                return;
-            }
-
-            if (/^\d$/.test(event.key)) {
-                press(event.key as (typeof KEYS)[number]);
-            } else if (event.key === "Backspace") {
-                press("back");
-            } else if (event.key === "Escape") {
-                press("clear");
-            } else if (event.key === "Enter") {
-                void submit();
-            } else {
-                return;
-            }
-
-            event.preventDefault();
-        };
-
-        window.addEventListener("keydown", onKey, { capture: true });
-
-        return () => window.removeEventListener("keydown", onKey, { capture: true });
-    }, [showKeypad, press, submit]);
-
-    return (
-        <Box
-            role="dialog"
-            aria-modal
-            aria-label="Locked"
-            pos="fixed"
-            inset={0}
-            style={{
-                zIndex: 10_000,
-                background: "var(--ps-ground)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "calc(16px + var(--ps-safe-top)) 16px calc(16px + var(--ps-safe-bottom))",
-            }}
-        >
-            {showKeypad && (
-                <Stack align="center" gap="lg" w="100%" maw={320}>
-                    <Stack align="center" gap={4}>
-                        <Title order={3} c="var(--ps-title)">
-                            Locked
-                        </Title>
-                        <Text size="sm" c="dimmed">
-                            Enter {displayName ? `${displayName}’s` : "your"} PIN
-                        </Text>
-                    </Stack>
-
-                    <Group
-                        gap={12}
-                        h={16}
-                        aria-live="polite"
-                        aria-label={`${digits.length} digits`}
-                    >
-                        {Array.from({ length: Math.max(4, digits.length) }, (_, index) => (
-                            <Box
-                                key={index}
-                                w={14}
-                                h={14}
-                                style={{
-                                    borderRadius: "50%",
-                                    border: "1px solid var(--mantine-color-brass-5)",
-                                    background:
-                                        index < digits.length
-                                            ? "var(--mantine-color-brass-5)"
-                                            : "transparent",
-                                }}
-                            />
-                        ))}
-                    </Group>
-
-                    <Text size="sm" c="oxblood.4" mih={20} ta="center" role="alert">
-                        {message}
-                    </Text>
-
-                    <SimpleGrid cols={3} spacing="md" w="100%">
-                        {KEYS.map((key) => (
-                            <UnstyledButton
-                                key={key}
-                                onClick={() => press(key)}
-                                disabled={busy}
-                                aria-label={
-                                    key === "back" ? "Delete" : key === "clear" ? "Clear" : key
-                                }
-                                h={64}
-                                style={{
-                                    borderRadius: 32,
-                                    border: "1px solid var(--ps-hairline-strong)",
-                                    background: "var(--ps-surface)",
-                                    fontSize: key.length === 1 ? 24 : 14,
-                                    textAlign: "center",
-                                }}
-                            >
-                                {key === "back" ? "⌫" : key === "clear" ? "Clear" : key}
-                            </UnstyledButton>
-                        ))}
-                    </SimpleGrid>
-
-                    <Button
-                        fullWidth
-                        size="md"
-                        loading={busy}
-                        disabled={!canTry(digits)}
-                        onClick={() => void submit()}
-                    >
-                        Unlock
-                    </Button>
-
-                    <Button variant="subtle" color="gray" size="sm" onClick={() => void signOut()}>
-                        Forgot it? Sign out
-                    </Button>
-                </Stack>
-            )}
-        </Box>
     );
 };

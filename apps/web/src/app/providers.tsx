@@ -126,9 +126,9 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
                     {/* Here rather than in the app shell, so it covers the tasting and the
                         showcase as well (§12c "The screen lock"). */}
                     <ScreenLockProvider>
-                        {/* Inside the lock, so a locked device never shows the cellar's
-                            keypad over a page; around everything, so the tasting and the
-                            showcase are guarded as well (§21). A room that is off is left
+                        {/* Inside the lock, which tells it when to put the rack back up --
+                            the gate's rack is the lock's only face; around everything, so the
+                            tasting and the showcase are guarded as well (§21). A room that is off is left
                             before the gate is reached, so a fallback into a guarded room
                             still meets it. */}
                         <RoomCheck>

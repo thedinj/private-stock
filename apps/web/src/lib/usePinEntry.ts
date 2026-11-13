@@ -14,8 +14,6 @@ export interface PinEntry {
     remaining: number | null;
     /** The last try could not reach the server. Cleared by the next press. */
     unreachable: boolean;
-    /** Whether the last try was wrong. Cleared by the next press, as the keypad's message is. */
-    wrong: boolean;
     press: (digit: string) => void;
     back: () => void;
     clear: () => void;
@@ -24,9 +22,8 @@ export interface PinEntry {
 
 /**
  * Entering the account's PIN (§12c, §21 "Getting into the cellar"): the digits, the server's
- * answer and the attempt limit, shared by the screen lock's keypad and the cellar's wine rack so
- * the limit is enforced in one place. What a wrong try *looks* like is each surface's own: the
- * keypad says so, the rack says nothing until the last try.
+ * answer and the attempt limit, behind the cellar's wine rack, which is
+ * also the screen lock's face. A wrong try says nothing until the last one.
  */
 export const usePinEntry = (onUnlock: () => void): PinEntry => {
     const { signOut } = useAuth();
@@ -34,11 +31,9 @@ export const usePinEntry = (onUnlock: () => void): PinEntry => {
     const [busy, setBusy] = useState(false);
     const [remaining, setRemaining] = useState<number | null>(null);
     const [unreachable, setUnreachable] = useState(false);
-    const [wrong, setWrong] = useState(false);
 
     const settle = () => {
         setUnreachable(false);
-        setWrong(false);
     };
 
     const press = useCallback((digit: string) => {
@@ -74,7 +69,6 @@ export const usePinEntry = (onUnlock: () => void): PinEntry => {
                 await signOut();
             } else {
                 setRemaining(result.remaining ?? null);
-                setWrong(true);
             }
         } catch {
             setUnreachable(true);
@@ -83,5 +77,5 @@ export const usePinEntry = (onUnlock: () => void): PinEntry => {
         }
     }, [busy, digits, onUnlock, signOut]);
 
-    return { digits, busy, remaining, unreachable, wrong, press, back, clear, submit };
+    return { digits, busy, remaining, unreachable, press, back, clear, submit };
 };

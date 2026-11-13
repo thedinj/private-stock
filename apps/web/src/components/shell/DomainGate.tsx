@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { Box, Button, Stack } from "@mantine/core";
 
-import { DEFAULT_DOMAIN, domainProfiles, roomToOpen } from "@private-stock/core";
+import { DEFAULT_DOMAIN, type DomainKind, domainProfiles, roomToOpen } from "@private-stock/core";
 
 import { CANDLE_HELD_MS, CandleDark } from "@/components/shell/CandleArrival";
+import { useScreenLock } from "@/components/shell/ScreenLock";
 import { WineRack } from "@/components/shell/WineRack";
 import { usePinStatus } from "@/lib/api/account";
 import { useAuth } from "@/lib/api/AuthProvider";
@@ -13,7 +14,7 @@ import { useEnabledRooms } from "@/lib/api/rooms";
 import { getActiveDomain, hasPassedGate, markGatePassed, switchDomain } from "@/lib/activeDomain";
 import { SNUFF_BLACK } from "@/lib/candleSnuff";
 import { DURATION, prefersReducedMotion } from "@/lib/motion";
-import { usePinEntry } from "@/lib/usePinEntry";
+import { type PinEntry, usePinEntry } from "@/lib/usePinEntry";
 
 type Phase = "rack" | "leaving" | "arriving" | "in";
 
@@ -33,22 +34,41 @@ const SPLIT_MS = 600;
  * Once the tab has passed, a reload does not ask again; a new tab or a restarted browser does.
  * Nothing underneath is mounted until then, so no query for the guarded room leaves the tab
  * before the PIN is entered. An account with no PIN has nothing to ask for, and the room opens.
+ *
+ * The rack is also the screen lock's face (§12c, decided 2026-11-13): there is one PIN screen,
+ * and the PIN opens only the cellar. When the lock comes down the rack goes back up over the
+ * room, which stays mounted and inert underneath, so the right PIN returns to the page as it was
+ * left -- and "Back upstairs" leaves without it.
  */
 export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, signOut } = useAuth();
+    const { locked, unlock } = useScreenLock();
     const domain = getActiveDomain();
     const guarded = domainProfiles[domain].guarded;
     const [phase, setPhase] = useState<Phase>(() =>
         !guarded || hasPassedGate(domain) ? "in" : "rack"
     );
+    // Whether the room has been up in this tab. Once it has, the rack the screen lock brings
+    // back goes over it rather than in place of it, so the page is where it was left.
+    const [underneath, setUnderneath] = useState(false);
+
+    if (!underneath && user !== null && (phase === "in" || phase === "arriving")) {
+        setUnderneath(true);
+    }
+
     // Upstairs is the room a tab falls back to (§21 "Turning a room off"). With every room that
     // is not guarded turned off there is no upstairs, and the way back is not offered.
     const upstairs = roomToOpen(DEFAULT_DOMAIN, useEnabledRooms());
 
-    const { data: pinStatus, isPending } = usePinStatus(user !== null && phase === "rack");
+    // The rack is asked for on the way in, and again whenever the screen lock comes down.
+    const asking =
+        user !== null && (phase === "rack" || phase === "leaving" || (phase === "in" && locked));
+
+    const { data: pinStatus, isPending } = usePinStatus(asking);
 
     const entry = usePinEntry(() => {
         markGatePassed(domain);
+        unlock();
         setPhase(prefersReducedMotion() ? "in" : "leaving");
     });
 
@@ -66,31 +86,59 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
         }
     }, [phase]);
 
-    if (user === null || phase === "in") {
-        return <>{children}</>;
-    }
-
-    if (phase === "arriving") {
-        return (
-            <>
-                {children}
-                <CandleDark />
-            </>
-        );
-    }
-
-    // Asking whether the account has a PIN; nothing is shown in the meantime.
-    if (phase === "rack" && isPending) {
-        return null;
-    }
-
     // Only a definite "no PIN" opens it. A failed read keeps the rack up: failing open would
     // show the cellar whenever the network blinked.
-    if (phase === "rack" && pinStatus?.set === false) {
-        return <>{children}</>;
-    }
+    const open = asking && phase !== "leaving" && pinStatus?.set === false;
+    const covered = asking && !open;
+    // Asking whether the account has a PIN: a blank cover in the meantime.
+    const rackUp = covered && (phase === "leaving" || !isPending);
 
-    const leaving = phase === "leaving";
+    // In the capture phase, and nothing else hears the key: a page underneath has shortcuts of
+    // its own on `window` (the viewer's Space plays), and `inert` stops focus, not listeners.
+    // The rack's own listener was added first (a child's effect runs before its parent's).
+    useEffect(() => {
+        if (!covered) return;
+
+        const stop = (event: KeyboardEvent) => event.stopImmediatePropagation();
+        window.addEventListener("keydown", stop, { capture: true });
+
+        return () => window.removeEventListener("keydown", stop, { capture: true });
+    }, [covered]);
+
+    // One shape on every path, so the page is never remounted by the rack coming or going.
+    // Nothing is mounted under the rack on the way in, so no query for the guarded room leaves
+    // the tab before the PIN is entered.
+    return (
+        <>
+            {(!covered || underneath) && (
+                <div style={{ display: "contents" }} inert={covered}>
+                    {children}
+                </div>
+            )}
+            {phase === "arriving" && <CandleDark />}
+            {covered &&
+                (rackUp ? (
+                    <Rack
+                        domain={domain}
+                        entry={entry}
+                        leaving={phase === "leaving"}
+                        upstairs={domainProfiles[upstairs].guarded ? null : upstairs}
+                        onSignOut={() => void signOut()}
+                    />
+                ) : (
+                    <Box pos="fixed" inset={0} bg="var(--ps-ground)" style={{ zIndex: 10_000 }} />
+                ))}
+        </>
+    );
+};
+
+const Rack: React.FC<{
+    domain: DomainKind;
+    entry: PinEntry;
+    leaving: boolean;
+    upstairs: DomainKind | null;
+    onSignOut: () => void;
+}> = ({ domain, entry, leaving, upstairs, onSignOut }) => {
     const note = entry.unreachable
         ? "Could not reach the library. Try again."
         : entry.remaining === 1
@@ -139,7 +187,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
                 />
 
                 <Stack gap={4} align="center">
-                    {!domainProfiles[upstairs].guarded && (
+                    {upstairs !== null && (
                         <Button
                             variant="subtle"
                             color="gray"
@@ -149,7 +197,7 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
                             Back upstairs
                         </Button>
                     )}
-                    <Button variant="subtle" color="gray" size="xs" onClick={() => void signOut()}>
+                    <Button variant="subtle" color="gray" size="xs" onClick={onSignOut}>
                         Forgot it? Sign out
                     </Button>
                 </Stack>
