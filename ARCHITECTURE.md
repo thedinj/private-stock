@@ -12325,7 +12325,11 @@ in another would relay the wrong library.
 **What the browser remembers about a room is the room's.** The last search, each list page's
 address, the Review and Studio entries' last page, the tag names behind "Last search" and the
 header search's kind are kept per room (`roomKey`): the Cellar under the keys they always had,
-so nothing remembered before rooms is lost, and every other room under its own. Device habits —
+so nothing remembered before rooms is lost, and every other room under its own. **The address a
+page load opens on is never recorded**: the room is the tab's and not the address's, so a load can
+open on another room's search — Back after a room change when the browser kept no frozen copy of
+the page, or a phone's address bar offering the last URL — and recording it made one room's search
+the other's "Last search" (found 2026-11-14). A search is recorded when it is made. Device habits —
 playback, layout, the warming HUD — stay one per browser. The tab's own storage is emptied on a
 switch: everything in it (where an item returns to, a selection, a showcase to resume) is about
 the room being left.

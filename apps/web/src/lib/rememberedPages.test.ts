@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { parseView } from "./libraryQuery";
-import { FIRST_LIBRARY_QUERY, rememberPage } from "./rememberedPages";
+import { FIRST_LIBRARY_QUERY, isLoadAddress, rememberPage } from "./rememberedPages";
 
 /**
  * The sidebar returns you to where each list page was left (§14b). What is recorded decides
@@ -92,6 +92,16 @@ describe("remembering a page", () => {
         rememberPage("/", "root=r1");
 
         expect(store.get("ps:libraryView")).toBe("view=grid&tags=t1");
+    });
+
+    it("knows the address a page load opened on, so another room's search is not taken (§21)", () => {
+        const loaded = "https://stock.example/?view=grid&tags=t1";
+
+        expect(isLoadAddress("/", "view=grid&tags=t1", loaded)).toBe(true);
+        // Encoded differently by the router, still the same address.
+        expect(isLoadAddress("/", "q=a+b", "https://stock.example/?q=a%20b")).toBe(true);
+        expect(isLoadAddress("/", "view=grid&tags=t2", loaded)).toBe(false);
+        expect(isLoadAddress("/reels", "view=grid&tags=t1", loaded)).toBe(false);
     });
 
     it("starts the library on videos before anything is remembered", () => {

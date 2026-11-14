@@ -171,12 +171,52 @@ export const rememberPage = (pathname: string, search: string): void => {
     }
 };
 
-/** Records the current address whenever it changes. Called once, by the sidebar. */
+/**
+ * Whether an address is the one this page load opened on, given the document's own URL.
+ *
+ * That address was not chosen in this room (§21). The room is the tab's, not the address's, so a
+ * page load can open on another room's search: Back after a room change when the browser kept no
+ * frozen copy of the page, or a phone's address bar offering the last URL in a tab that opens
+ * in whichever room the browser was last in. Recording it made one room's search the other's
+ * "Last search". A search made here is recorded the moment it changes the address; a reload of
+ * one was recorded when it was made.
+ */
+export const isLoadAddress = (pathname: string, search: string, documentUrl: string): boolean => {
+    const loaded = new URL(documentUrl);
+
+    return (
+        loaded.pathname === pathname &&
+        new URLSearchParams(loaded.search).toString() === new URLSearchParams(search).toString()
+    );
+};
+
+/**
+ * The URL the document was loaded at -- not where it is now, which client navigation moves. The
+ * navigation entry says it however late the sidebar mounts.
+ */
+const documentUrl = (): string | null => {
+    try {
+        const [entry] = performance.getEntriesByType("navigation");
+
+        return entry?.name ?? null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Records the current address whenever it changes, except the one the page load opened on
+ * (`isLoadAddress`). Called once, by the sidebar.
+ */
 export const useRememberPages = (): void => {
     const pathname = usePathname();
     const search = useSearchParams().toString();
 
     useEffect(() => {
+        const loaded = documentUrl();
+
+        if (loaded !== null && isLoadAddress(pathname, search, loaded)) return;
+
         rememberPage(pathname, search);
     }, [pathname, search]);
 };
