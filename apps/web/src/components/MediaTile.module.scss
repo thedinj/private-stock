@@ -84,13 +84,13 @@
     opacity: 0.92;
 }
 
-// A look's matching frame, over the cover (§5e): a crop of the sprite sheet, filling the frame.
-// Under the preview, which still plays on hover.
+// A look's matching frame, in place of the cover (§5e): the tile's centre square, cut on the
+// server. Under the preview, which still plays on hover.
 .moment {
     position: absolute;
     inset: 0;
-    // Over the cover, so the sides of the square are the frame's ground rather than a
-    // different picture of the same item.
+    // The sides of the square are the frame's ground rather than a different picture of the
+    // same item.
     background: var(--ps-well);
 }
 
@@ -98,10 +98,12 @@
 .momentSquare {
     position: absolute;
     top: 0;
-    bottom: 0;
     left: 50%;
+    height: 100%;
     aspect-ratio: 1 / 1;
     transform: translateX(-50%);
+    object-fit: cover;
+    display: block;
 }
 
 // Bottom left, opposite the duration and at the same inset: the two badges are the frame's

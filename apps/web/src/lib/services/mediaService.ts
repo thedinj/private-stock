@@ -54,7 +54,7 @@ import { listClipsFor } from "./clipService";
 import { duplicateStanding } from "./keepAdvice";
 import { toMediaTags } from "./tagService";
 import { countOfOrder, keepsOrder, keptOrder, pageOfOrder } from "./keptOrders";
-import { spriteThumbFor } from "./spriteThumb";
+import { spriteTileUrl } from "./spriteThumb";
 
 /**
  * Library reads. Authorization lives here; the routes only speak HTTP.
@@ -176,21 +176,17 @@ export const lookupMedia = (ids: string[], auth: AuthContext): MediaLookupRespon
 });
 
 /**
- * A look's moments with a picture of each: the sprite tile nearest it (§5e).
+ * A look's moments with a picture of each: the centre square of the sprite tile nearest it (§5e).
  *
- * Arithmetic over the item's sprite rows, as a clip's face is (`spriteThumbFor`), so a page of
- * them costs sixty indexed lookups and no ffmpeg.
+ * Arithmetic over the item's sprite rows, as a clip's face is (`spriteTileUrl`), so a page of
+ * them costs sixty indexed lookups here; the square itself is cut when the browser asks for it.
  */
 const withMomentThumbs = (moments: Record<string, number>): Record<string, LookMoment> =>
     Object.fromEntries(
-        Object.entries(moments).map(([mediaId, atMs]) => {
-            const thumb = spriteThumbFor(mediaId, atMs);
-
-            return [
-                mediaId,
-                { atMs, thumbUrl: thumb?.url ?? null, thumbRect: thumb?.rect ?? null },
-            ];
-        })
+        Object.entries(moments).map(([mediaId, atMs]) => [
+            mediaId,
+            { atMs, thumbUrl: spriteTileUrl(mediaId, atMs, "square") },
+        ])
     );
 
 /**

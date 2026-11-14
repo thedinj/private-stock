@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { calendarDaySchema, clipSchema, spriteRectSchema } from "./clips.js";
+import { calendarDaySchema, clipSchema } from "./clips.js";
 
 import { mediaKindSchema, sortDirectionSchema, type SortDirection } from "../domain.js";
 import { filterGroupsSchema, findsUntagged, type FilterGroup } from "./filterLogic.js";
@@ -468,16 +468,26 @@ export const mediaListItemSchema = z.object({
 export type MediaListItem = z.infer<typeof mediaListItemSchema>;
 
 /**
+ * How a sprite tile is cut out of its sheet when served on its own (§5e, `/api/art/:id/tile/:n`).
+ *
+ * `square` is the largest square at the centre of the frame, whatever its shape. Clips' 16:9 faces
+ * and faces' own rectangles are the shapes still drawn from the whole sheet (§14d, §5f); each is a
+ * value here when it moves over.
+ */
+export const tileCropSchema = z.enum(["square"]);
+export type TileCrop = z.infer<typeof tileCropSchema>;
+
+/**
  * Where an item matched a look, and a picture of that moment (§5e "Three ways in, one way out").
  *
  * The picture is the scrubber's sprite tile nearest the moment, as a clip's face is (§14d): the
- * match is the evidence, and the cover of a twenty-minute video rarely shows the glasses. Null
- * where the item has no sprite sheet; the tile keeps its cover.
+ * match is the evidence, and the cover of a twenty-minute video rarely shows the glasses. Served
+ * as that tile's centre square on its own, not as the sheet to crop. Null where the item has no
+ * sprite sheet; the tile keeps its cover.
  */
 export const lookMomentSchema = z.object({
     atMs: z.number(),
     thumbUrl: z.string().nullable(),
-    thumbRect: spriteRectSchema.nullable(),
 });
 export type LookMoment = z.infer<typeof lookMomentSchema>;
 

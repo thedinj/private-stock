@@ -1607,6 +1607,17 @@ its match rather than finding a new moment: one moment per item is what a look k
   centred in the tile: the whole frame cropped into the grid's 16:9 stretched every upright one.
   A brass "4:10 / 22:31" badge stands where the duration was, and the tile opens the item a second
   before the match. Its hover preview plays as ever.
+- **The square is cut on the server** (decided 2026-11-13), by `/api/art/:id/tile/:index?crop=square`
+  with `sharp`, and shown in place of the cover rather than over it. It was a crop of the whole
+  sheet drawn by the browser, as a clip's face still is: a sheet is 2000 px wide, so every tile
+  decoded ~9 MB of bitmap (~28 MB for an upright video) to show a 112 px square, sixty at once
+  with nothing lazy about a CSS background, and the grid struggled to render a look at all. Cut, a
+  square is a few KB. **No cache but the browser's**: the URL names the sheet's version and the
+  tile, so it is kept for a year, and a second viewer's request costs one more cut — a 50 KB read
+  and a decode — rather than a reaper for a cache on disk. Cuts run one at a time, because they
+  share libuv's threads with every cover the page is reading. `crop` is a schema enum so clips'
+  16:9 faces and the face crops (§5f), which have the same problem in long lists, can move over
+  as shapes of their own.
 - **"More like this" is the viewer's alone** (decided 2026-10-06). It was on every tile's hover as
   well, and was obtrusive there: a rack of sixty pictures with a button over each. The viewer is
   where the moment on screen is, which is what it asks about.

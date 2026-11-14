@@ -10,7 +10,6 @@ import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
 import { itemHref } from "@/lib/lookMoment";
 import { rememberReturn } from "@/lib/returnTo";
-import { centreSquare, spriteCropStyle } from "@/lib/spriteCrop";
 import { useHoverIntent, useTilePreview } from "@/lib/useTilePreview";
 
 import classes from "./MediaTile.module.scss";
@@ -214,7 +213,25 @@ export const MediaTile: React.FC<MediaTileProps> = ({
         >
             <AspectRatio ratio={16 / 9}>
                 <Box className={classes.thumb} ref={containerRef} data-morph-frame>
-                    {item.coverUrl ? (
+                    {/* A look's matching frame stands in for the cover rather than over it, so the
+                        cover is not fetched to be hidden. */}
+                    {moment?.thumbUrl ? (
+                        <Box className={classes.moment}>
+                            {/* A square from the centre of the frame, whatever its shape, in the
+                                middle of the tile: the whole frame cropped into 16:9 stretched an
+                                upright one. Cut on the server (§5e): drawn from the sheet here, each
+                                tile decoded the whole 2000 px sprite sheet to show it. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={moment.thumbUrl}
+                                alt="The moment that matched"
+                                loading={priority ? "eager" : "lazy"}
+                                fetchPriority={priority ? "high" : "auto"}
+                                decoding="async"
+                                className={classes.momentSquare}
+                            />
+                        </Box>
+                    ) : item.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                             src={item.coverUrl}
@@ -231,22 +248,6 @@ export const MediaTile: React.FC<MediaTileProps> = ({
                             <Text size="xs" c="dimmed" ta="center" px="xs">
                                 {item.probed ? item.kind : "processing…"}
                             </Text>
-                        </Box>
-                    )}
-
-                    {/* A square from the centre of the frame, whatever its shape, in the middle of
-                        the tile: the whole frame cropped into 16:9 stretched an upright one. */}
-                    {moment?.thumbUrl && moment.thumbRect && (
-                        <Box className={classes.moment}>
-                            <Box
-                                className={classes.momentSquare}
-                                style={spriteCropStyle(
-                                    moment.thumbUrl,
-                                    centreSquare(moment.thumbRect)
-                                )}
-                                role="img"
-                                aria-label="The moment that matched"
-                            />
                         </Box>
                     )}
 

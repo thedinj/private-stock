@@ -3,7 +3,9 @@ import {
     SPRITE_TILE_WIDTH,
     TILES_PER_SHEET,
     type ArtifactKind,
+    type TileCrop,
 } from "@private-stock/core";
+import { artifactVersion } from "@private-stock/core/server";
 import { artifactRepo } from "@private-stock/db";
 
 import { artifactUrl } from "./artService";
@@ -38,6 +40,8 @@ export interface SpriteThumb {
 }
 
 export interface SpriteTileFile {
+    /** The tile's position across all of the item's sheets. */
+    index: number;
     ordinal: number;
     relPath: string;
     generatedAt: string;
@@ -68,11 +72,45 @@ export const spriteThumbFor = (mediaId: string, atMs: number): SpriteThumb | nul
  * The tile nearest `atMs` as a file on disk: its sheet, the rectangle in it, and the interval
  * the sheets were sampled at -- for reading the tile itself rather than drawing it.
  */
-export const spriteTileFile = (mediaId: string, atMs: number): SpriteTileFile | null => {
-    const sheets = artifactRepo
+export const spriteTileFile = (mediaId: string, atMs: number): SpriteTileFile | null =>
+    tileOf(spriteSheets(mediaId), (intervalMs) => Math.floor(atMs / intervalMs));
+
+/**
+ * The tile at a position in the item's sheets, counting across them: what a URL for one tile
+ * names (`spriteTileUrl`), so that two moments a few seconds apart ask for the same picture.
+ */
+export const spriteTileAtIndex = (mediaId: string, index: number): SpriteTileFile | null =>
+    tileOf(spriteSheets(mediaId), () => index);
+
+/**
+ * The URL of one tile cut out of its sheet (§5e), or null when the item has no sprite.
+ *
+ * A small picture of its own rather than a crop of the sheet drawn by the browser: a sheet is
+ * 2000 px wide, and a page of sixty tiles each painting one decoded ~9 MB of bitmap -- ~28 MB for
+ * an upright video -- to show a square of it. Versioned by the sheet, so a re-sprited item asks
+ * for new bytes and the old URL is simply never asked for again.
+ */
+export const spriteTileUrl = (mediaId: string, atMs: number, crop: TileCrop): string | null => {
+    const tile = spriteTileFile(mediaId, atMs);
+
+    return (
+        tile &&
+        `/api/art/${mediaId}/tile/${tile.index}?crop=${crop}&v=${artifactVersion(
+            tile.relPath,
+            tile.generatedAt
+        )}`
+    );
+};
+
+const spriteSheets = (mediaId: string) =>
+    artifactRepo
         .listForMedia(mediaId, [SPRITE])
         .sort((left, right) => left.ordinal - right.ordinal);
 
+const tileOf = (
+    sheets: ReturnType<typeof spriteSheets>,
+    position: (intervalMs: number) => number
+): SpriteTileFile | null => {
     if (sheets.length === 0) {
         return null;
     }
@@ -87,7 +125,7 @@ export const spriteTileFile = (mediaId: string, atMs: number): SpriteTileFile | 
     // Clamped to the tiles that exist: a clip at the very end of a file can round past the last
     // frame that was sampled, and a rectangle off the edge of the sheet is a blank square.
     const total = sheets.reduce((sum, sheet) => sum + (sheet.tileCount ?? 0), 0);
-    const index = Math.min(Math.max(0, Math.floor(atMs / intervalMs)), Math.max(0, total - 1));
+    const index = Math.min(Math.max(0, position(intervalMs)), Math.max(0, total - 1));
 
     const sheet = sheets[Math.floor(index / TILES_PER_SHEET)];
 
@@ -101,6 +139,7 @@ export const spriteTileFile = (mediaId: string, atMs: number): SpriteTileFile | 
     const tileHeight = sheet.height && sheet.width ? Math.round(sheet.height / SPRITE_COLUMNS) : 0;
 
     return {
+        index,
         ordinal: sheet.ordinal,
         relPath: sheet.relPath,
         generatedAt: sheet.generatedAt,

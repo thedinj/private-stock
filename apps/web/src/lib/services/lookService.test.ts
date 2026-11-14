@@ -180,7 +180,7 @@ describe("a look in words", () => {
 
         expect(times(first.moments)).toEqual({ m3: 9000, m1: 4000 });
         expect(times(second.moments)).toEqual({ m2: 1000 });
-        expect(first.moments?.m3).toEqual({ atMs: 9000, thumbUrl: null, thumbRect: null });
+        expect(first.moments?.m3).toEqual({ atMs: 9000, thumbUrl: null });
     });
 
     it("lists only what the rest of the query allows", async () => {
