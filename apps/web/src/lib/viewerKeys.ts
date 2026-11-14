@@ -152,7 +152,7 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         group: "clips",
         presses: ["]"],
         shown: "]",
-        does: "Mark the out point. The clip's tag box takes the keys: Enter adds a tag; Shift+Tab, arrows and Tab choose where tags go",
+        does: "Mark the out point. The clip's Name field takes the keys; Enter goes on to the tags, where Enter adds one and Tab moves to the next box",
         action: "markOut",
         tip: ["]"],
     },

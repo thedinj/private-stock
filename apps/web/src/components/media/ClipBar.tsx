@@ -218,11 +218,12 @@ export const ClipBar: React.FC<ClipBarProps> = ({
     /**
      * Marking without the mouse (§14d "Reviewing recordings for a reel").
      *
-     * When `]` closes a span the first tag box takes the keys: type a name, Enter to add it, Tab
-     * to the next box, and Enter on an empty box saves the clip. An effect on the out point,
-     * because that is the moment: a new `]` after the first moves focus back here too. Nothing
-     * else in the bar takes focus on its own.
+     * When `]` closes a span the Name field takes the keys: type a name, Enter to go on to the
+     * first tag box, type a tag, Enter to add it, Tab to the next box, and Enter on an empty box
+     * saves the clip. An effect on the out point, because that is the moment: a new `]` after the
+     * first moves focus back here too. Nothing else in the bar takes focus on its own.
      */
+    const nameBox = useRef<HTMLDivElement>(null);
     const tagsBox = useRef<HTMLDivElement>(null);
     const ready = complete ? endMs : null;
 
@@ -230,13 +231,38 @@ export const ClipBar: React.FC<ClipBarProps> = ({
         if (ready === null) return;
 
         // A tick later: the effect runs inside the `]` keydown, and focus moved there takes the
-        // key's own character -- every first tag began "]".
+        // key's own character -- every first name began "]".
         const timer = window.setTimeout(() =>
-            tagsBox.current?.querySelector<HTMLInputElement>("input")?.focus()
+            nameBox.current?.querySelector<HTMLInputElement>("input")?.focus()
         );
 
         return () => window.clearTimeout(timer);
     }, [ready]);
+
+    /**
+     * Enter in the Name field goes on to the tags -- they sit below the bar, so Tab would walk
+     * through the reel, speed and buttons first -- unless a suggestion is highlighted, which Enter
+     * picks. Escape leaves the field once its suggestions are closed, as the tag boxes do.
+     */
+    const onNameKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        const input = event.target;
+
+        if (!(input instanceof HTMLInputElement)) return;
+        if (input.getAttribute("aria-expanded") === "true" && event.key === "Escape") return;
+
+        if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            input.blur();
+            return;
+        }
+
+        if (event.key === "Enter" && !input.getAttribute("aria-activedescendant")) {
+            event.preventDefault();
+            event.stopPropagation();
+            tagsBox.current?.querySelector<HTMLInputElement>("input")?.focus();
+        }
+    };
 
     return (
         <Paper withBorder p="xs" radius="sm">
@@ -284,14 +310,16 @@ export const ClipBar: React.FC<ClipBarProps> = ({
                      * Suggestions from this person's own past labels, so a clip's name is offered
                      * rather than retyped. The name is a title; what the browser filters on is tags.
                      */}
-                    <Autocomplete
-                        label="Name"
-                        placeholder="optional"
-                        value={label}
-                        onChange={setLabel}
-                        data={labels.data?.labels ?? []}
-                        w={200}
-                    />
+                    <Box ref={nameBox} onKeyDownCapture={onNameKeys}>
+                        <Autocomplete
+                            label="Name"
+                            placeholder="optional"
+                            value={label}
+                            onChange={setLabel}
+                            data={labels.data?.labels ?? []}
+                            w={200}
+                        />
+                    </Box>
 
                     {/* Where a pass is filling (§14d "Reviewing recordings for a reel"): kept
                         between clips and visits, per room, so it is chosen once per pass. */}

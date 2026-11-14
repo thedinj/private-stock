@@ -7971,9 +7971,10 @@ filtered set, with five additions and one mode.
   on the ticked items -- the same selection, cap (500) and per-item report as every other verb
   there (§14b), and one owner-and-room check for the whole selection, so it cannot end
   half-marked. Select-all is still the page and only the page.
-- **A clip from the keyboard.** When `]` closes a span the clip bar's tag box takes the keys: a tag
-  and Enter adds it, Enter on the empty box saves, Escape hands the keys back to the player with
-  the span kept. Clip tags still start empty for every span: one clip per recording means
+- **A clip from the keyboard.** When `]` closes a span the clip bar's Name field takes the keys:
+  Enter goes on to the first tag box (unless a suggestion is highlighted, which it picks), a tag
+  and Enter adds it, Enter on an empty tag box saves, Escape hands the keys back to the player
+  with the span kept. Clip tags still start empty for every span: one clip per recording means
   carrying them over would buy nothing.
 - **Into a reel as it is saved.** "Into reel" on the clip bar names a reel of your own, remembered
   per room in the browser. The clip and its `ReelItem` are one transaction, so a reel that refuses
@@ -8462,7 +8463,7 @@ free.
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playing          | `space` / `k` play/pause · `←` `→` ±5 s, shift ±30 s · `j` `l` by the bar's jump lengths (§14b) · `,` `.` frame step (paused) · `0`–`9` jump to 0–90% · `-` `+` speed (0.25×–4×) · `m` mute · `f` full screen · `s` capture the frame |
 | Through the set  | `n` next · `p` previous                                                                                                                                                                                                               |
-| Marking a clip   | `[` in · `]` out, and the clip bar's tag box takes the keys (§14d)                                                                                                                                                                    |
+| Marking a clip   | `[` in · `]` out, and the clip bar's Name field takes the keys (§14d)                                                                                                                                                                 |
 | Judging it       | `d` in review mode: reviewed for the pass, and next · shift `d` review mode on or off · numpad `1`–`5` rating (the same number again clears it) · `h` favourite · `Delete` (or `Backspace`) trash, `Enter` to confirm                 |
 | Writing about it | `w` the performer box · `o` the source box · `t` the keyword box · shift `t` the private keyword box · `r` the note · `Esc` leaves a field                                                                                            |
 | Anywhere         | `/` search · `?` these keys · shift `s` Private screening (§14h)                                                                                                                                                                      |
