@@ -24,6 +24,8 @@ export interface MediaRootRow {
     writable: 1 | null;
     /** What kind of collection this is (§21). One of `domainKinds`; unCHECKed like `Tag.kind`. */
     domain: string;
+    /** Where the editing PC finds this folder (§14d "Editor export"); never read through. */
+    networkPath: string | null;
     lastScanAt: string | null;
     createdAt: string;
     updatedAt: string;
@@ -138,6 +140,12 @@ export const setWritable = (id: string, writable: boolean): void => {
     db.prepare(
         `UPDATE "MediaRoot" SET "writable" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`
     ).run(writable ? 1 : null, id);
+};
+
+export const setNetworkPath = (id: string, networkPath: string | null): void => {
+    db.prepare(
+        `UPDATE "MediaRoot" SET "networkPath" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`
+    ).run(networkPath, id);
 };
 
 export const setLabel = (id: string, label: string): void => {

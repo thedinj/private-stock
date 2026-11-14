@@ -34,8 +34,14 @@ const DISPLAY_NAME = "Claude (test)";
 const FOLDER = "claude-test";
 const LABEL = "Test patterns";
 
-/** Each is ffmpeg's own synthetic source: nothing here was ever filmed. */
-const VIDEOS: { name: string; source: string; seconds: number }[] = [
+/**
+ * Each is ffmpeg's own synthetic source: nothing here was ever filmed.
+ *
+ * The last four exist for the editor export (§14d): a reel cut across them has the mixed frame
+ * rates, the start timecode and the MPEG-TS container that real footage brings to Resolve.
+ * `args` replaces the MP4 muxer options for a source that needs others.
+ */
+const VIDEOS: { name: string; source: string; seconds: number; args?: string[] }[] = [
     { name: "Colour bars.mp4", source: "smptehdbars=s=1280x720:r=30", seconds: 40 },
     { name: "Test card.mp4", source: "testsrc2=s=1280x720:r=30", seconds: 60 },
     { name: "Mandelbrot zoom.mp4", source: "mandelbrot=s=1280x720:r=30", seconds: 30 },
@@ -44,6 +50,21 @@ const VIDEOS: { name: string; source: string; seconds: number }[] = [
         name: "Gradient (portrait).mp4",
         source: "gradients=s=720x1280:r=30:speed=0.05",
         seconds: 25,
+    },
+    { name: "Counter 25 fps.mp4", source: "testsrc=s=1280x720:r=25", seconds: 30 },
+    { name: "Counter 29.97 fps.mp4", source: "testsrc=s=1920x1080:r=30000/1001", seconds: 30 },
+    { name: "Counter 60 fps.mp4", source: "testsrc=s=1280x720:r=60", seconds: 30 },
+    {
+        name: "Counter with timecode.mp4",
+        source: "testsrc=s=1280x720:r=25",
+        seconds: 30,
+        args: ["-timecode", "01:00:00:00", "-movflags", "+faststart"],
+    },
+    {
+        name: "Counter MPEG-TS.ts",
+        source: "testsrc2=s=1280x720:r=30",
+        seconds: 30,
+        args: ["-f", "mpegts"],
     },
 ];
 
@@ -93,8 +114,7 @@ const generate = async (folder: string): Promise<number> => {
             "aac",
             "-t",
             String(video.seconds),
-            "-movflags",
-            "+faststart",
+            ...(video.args ?? ["-movflags", "+faststart"]),
             out,
         ]);
         made += 1;

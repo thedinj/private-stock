@@ -67,6 +67,7 @@ import { runOrphanSweep } from "./jobs/orphans.js";
 import { runPurge, runRestore, runTrash } from "./jobs/trash.js";
 import { runIndex } from "./jobs/searchIndex.js";
 import { runMetadata } from "./jobs/metadata.js";
+import { runTiming } from "./jobs/timing.js";
 import { resolveSource } from "./media/sourcePath.js";
 import { COLLECT_INTERVAL_MS, collectGarbage } from "./memory.js";
 import {
@@ -236,6 +237,7 @@ const handlers: Record<string, JobHandler> = {
     variantPurge: runVariantPurge,
     index: runIndex,
     metadata: runMetadata,
+    timing: runTiming,
     phash: runPhash,
     tileprint: runTilePrint,
     segments: runSegments,

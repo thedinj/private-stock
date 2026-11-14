@@ -7999,6 +7999,61 @@ with that reel open keeps the old span until they refetch. §13b's ChangeLog and
 mechanism that would close it — `entity` would need a `clip` member — and that is a §13b change
 rather than a phase-7 one. A reel is watched far more often than a clip is retimed.
 
+### Editor export: a reel as a Resolve timeline
+
+The app is where footage is found and roughly cut; an editor is where it is finished. "Export for
+Resolve…" on a reel's menu downloads a timeline that DaVinci Resolve opens with File → Import →
+Timeline, linked to the **original files where they already are** -- nothing is copied, rendered
+or written to a media root. Built 2026-11-14 from the parked design in
+`docs/design/editor-export.md`, which keeps the research and the roadmap beyond it.
+
+**FCPXML 1.10, not OTIO.** Resolve imports both, but its OTIO import keeps only cuts: a clip's
+speed, its label as a clip name and a marker, and tags as keywords -- three of the four things a
+reel carries -- arrive only through FCPXML. That was checked against Resolve before anything was
+wired up: a test-pattern reel with mixed rates, a 2× and a 0.5× clip, a timecoded source, an
+MPEG-TS file and one file over the SMB share imported online with every one of them intact. The
+writer (`packages/core/src/fcpxml.ts`) is hand-built XML with no dependency; its time maps follow
+auto-editor's, the reference known to import. Media tags travel as keywords; clip tags only to the
+clip's owner, because a shared reel grants the span and not its owner's filing of it.
+
+**Frames, not milliseconds, and two clocks.** `packages/core/src/timeline.ts` converts each span's
+in-point on its **source's** own rate and lays every position and length out in whole frames of
+the **sequence** rate, summing frames rather than rounding each offset so cut points cannot drift
+across forty clips. Every time is a rational (`1001/30000s`), never a decimal.
+
+**The timeline rate is chosen, with the evidence beside it.** The dialog lists the reel's watching
+time at each source rate and pre-selects one; rates vote **by family** (29.97 with 30, 59.94 with 60) because conforming within a family is invisible and across one drops or doubles frames. Only
+the eight standard rates are offered or accepted.
+
+**The probe now records what an editor needs.** `Media.fps` is the average rate rounded to three
+decimals -- right for display, and a frame off every sixteen seconds as a timeline clock. So
+`fpsNum`/`fpsDen` (the `r_frame_rate` rational), `isVfr` (the average strays from it by more than a
+percent: phone footage) and `timecodeStart` are probed beside it. Rows probed earlier are filled by
+the **`timing` stage** (§7b): a header read that chains nothing, because re-running the probe across
+a library would chain a cover, a hash and a transcode check behind every item. The probe records
+`timing` done as it writes the same columns, so on a fresh deployment and for every newly scanned
+file the stage never has work; it exists only to bring older catalogues up to date. Until it
+reaches an item the exporter snaps the rounded `fps` to the nearest standard rational within
+0.02% -- exact for every standard rate, and far inside the 0.1% that separates 30 from 29.97 -- and
+the dialog says which clips that applies to.
+
+**Where the files are is a library fact: `MediaRoot.networkPath`.** The container's `/media/...`
+means nothing on the editing PC, so each library carries the same folder as Windows sees it -- a
+UNC share or a mapped drive -- set by an administrator beside the library's name. It is written
+into timelines and never read through, so it is checked for shape only. A browser-local prefix
+(the parked design's choice) was rejected for a household with one editing PC: typing it again on
+every browser buys nothing. `MediaRoot.path` itself never leaves the server.
+
+**Readable is exportable.** The service goes through `listReelEntries`, so the reel's read rule
+and the viewer's libraries are decided once; an item the viewer cannot reach is left out and
+counted. The export reveals the share paths of the files in a reel the viewer can already open --
+on a household server, the point of the feature.
+
+**Warned about, not fixed:** MPEG-TS sources (Resolve may not open them; remux), variable-frame-rate
+sources (Resolve conforms them, so a cut can land a frame off), and rates read from a rounding.
+The download is fetched with the bearer token and saved from a blob (`downloadFile` in the API
+client), because a plain link cannot carry the header.
+
 ### Designed and not built
 
 - **Rendering and export.** A `reelRender` job concatenating the spans, per §9's

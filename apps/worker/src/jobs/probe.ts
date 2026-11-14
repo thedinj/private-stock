@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import { assessPlayback, findStage, NotFoundError, stageApplies } from "@private-stock/core";
 import { libraryFilePath } from "@private-stock/core/server";
-import { changeLogRepo, db, mediaFileRepo, mediaRootRepo, mediaRepo } from "@private-stock/db";
+import {
+    changeLogRepo,
+    db,
+    mediaFileRepo,
+    mediaRootRepo,
+    mediaRepo,
+    stageRepo,
+} from "@private-stock/db";
 
 import { probeFile } from "../media/probe.js";
 import { enqueue, type JobRow } from "../queue.js";
@@ -14,6 +21,7 @@ import { enqueue, type JobRow } from "../queue.js";
 const COVER_PRIORITY = findStage("cover")?.priority ?? 70;
 const PHASH_PRIORITY = findStage("phash")?.priority ?? 100;
 const METADATA_STAGE = findStage("metadata");
+const TIMING_STAGE = findStage("timing");
 
 /**
  * The `probe` job: read real metadata out of a file and record it.
@@ -47,6 +55,20 @@ export const runProbe = async (job: JobRow): Promise<void> => {
 
     db.transaction(() => {
         mediaRepo.applyProbe(job.mediaId!, probe);
+
+        // The probe has just written what the `timing` stage writes (§14d), so the item does
+        // not owe it -- which is what keeps that stage's sweep to the items probed before the
+        // columns existed, and empty on a fresh deployment.
+        const probedKind = mediaRepo.findBasic(job.mediaId!)?.kind;
+
+        if (TIMING_STAGE && probedKind && stageApplies(TIMING_STAGE, probedKind)) {
+            stageRepo.record({
+                mediaId: job.mediaId!,
+                stage: TIMING_STAGE.name,
+                version: TIMING_STAGE.version,
+                state: "done",
+            });
+        }
 
         // Streams are replaced wholesale rather than merged: a re-probe follows the file
         // changing, so the previous track list is not evidence of anything.

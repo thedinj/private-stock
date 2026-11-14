@@ -64,6 +64,7 @@ export const CONCURRENCY: Record<string, number> = {
     index: 2,
     // One header read per file, like the probe's.
     metadata: 2,
+    timing: 2,
     // One at a time. Mostly an unlink or a catalogue change now, but a restore from the old
     // bin copies a whole file between volumes, and two of those halve each other (§10).
     trash: 1,

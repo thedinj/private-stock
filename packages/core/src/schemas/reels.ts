@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { REEL_ITEM_LIMIT } from "../clips.js";
 import { collectionVisibilitySchema, sortDirectionSchema, type SortDirection } from "../domain.js";
+import { frameRateSchema, parseFrameRateKey, rateShareSchema } from "../timeline.js";
 import { clipSchema } from "./clips.js";
 
 /**
@@ -157,3 +158,60 @@ export const moveReelItemSchema = z.object({
     toIndex: z.number().int().min(0),
 });
 export type MoveReelItemInput = z.infer<typeof moveReelItemSchema>;
+
+/**
+ * What the export dialog shows before anything is downloaded (§14d "Editor export").
+ *
+ * The rates are there so the choice of timeline rate is made knowing what it will conform;
+ * the libraries so a missing network path is named rather than discovered as "media offline"
+ * in Resolve; the warnings for files an editor will struggle with, counted and named.
+ */
+export const reelExportWarningSchema = z.object({
+    /**
+     * `mpegts`: a transport stream, which Resolve may not open.
+     * `vfr`: frames at a varying rate, which Resolve conforms, so cuts can land a frame off.
+     * `inferredRate`: probed before exact rates were recorded; the rate is read from a rounding.
+     */
+    kind: z.enum(["mpegts", "vfr", "inferredRate"]),
+    clipCount: z.number().int(),
+    /** A few of the file names, enough to find them. */
+    files: z.array(z.string()),
+});
+export type ReelExportWarning = z.infer<typeof reelExportWarningSchema>;
+
+export const reelExportPreviewSchema = z.object({
+    clipCount: z.number().int(),
+    /** Spans in the reel this viewer cannot reach, which the timeline leaves out. */
+    unreachableCount: z.number().int(),
+    rates: z.array(rateShareSchema),
+    recommended: frameRateSchema,
+    /** The rates a timeline may be cut at. */
+    options: z.array(frameRateSchema),
+    libraries: z.array(
+        z.object({
+            id: z.string(),
+            label: z.string(),
+            networkPath: z.string().nullable(),
+            clipCount: z.number().int(),
+        })
+    ),
+    warnings: z.array(reelExportWarningSchema),
+    /** One file as Resolve will look for it, so a wrong share is visible before importing. */
+    samplePath: z.string().nullable(),
+});
+export type ReelExportPreview = z.infer<typeof reelExportPreviewSchema>;
+
+/** `?rate=30000/1001` on the download. */
+export const reelExportQuerySchema = z.object({
+    rate: z.string().transform((value, ctx) => {
+        const rate = parseFrameRateKey(value);
+
+        if (!rate) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a frame rate" });
+
+            return z.NEVER;
+        }
+
+        return rate;
+    }),
+});

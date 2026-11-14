@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ActionIcon, Anchor, Button, Group, Menu, Modal, Paper, Stack, Text } from "@mantine/core";
 
 import { LoadFailed } from "@/components/LoadFailed";
+import { ReelExportDialog } from "@/components/reel/ReelExportDialog";
 import { ReelPlayer } from "@/components/reel/ReelPlayer";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
@@ -50,6 +51,7 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
 
     const [arranging, setArranging] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [dragging, setDragging] = useState<string | null>(null);
 
     const reel = useReel(id);
@@ -115,9 +117,9 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
                 title={reel.data.name}
                 back={back}
                 actions={
-                    editable ? (
-                        <Group gap="xs" wrap="nowrap">
-                            {/* The same control the playlist page uses for the same job. */}
+                    <Group gap="xs" wrap="nowrap">
+                        {/* The same control the playlist page uses for the same job. */}
+                        {editable && (
                             <Button
                                 variant={arranging ? "light" : "default"}
                                 color={arranging ? "brass" : undefined}
@@ -125,44 +127,57 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
                             >
                                 {arranging ? "Done arranging" : "Arrange"}
                             </Button>
+                        )}
 
-                            <Menu position="bottom-end" withinPortal>
-                                <Menu.Target>
-                                    <Button variant="subtle" color="gray" aria-label="Reel actions">
-                                        <MoreGlyph size={18} />
-                                    </Button>
-                                </Menu.Target>
-                                <Menu.Dropdown>
-                                    {/* Sharing is an administrator's; unsharing is not. The
+                        {/* Everyone who can open the reel can take it to Resolve (§14d
+                            "Editor export"); only its owner can change it. */}
+                        <Menu position="bottom-end" withinPortal>
+                            <Menu.Target>
+                                <Button variant="subtle" color="gray" aria-label="Reel actions">
+                                    <MoreGlyph size={18} />
+                                </Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                                <Menu.Item
+                                    disabled={entries.length === 0}
+                                    onClick={() => setExporting(true)}
+                                >
+                                    Export for Resolve…
+                                </Menu.Item>
+                                {editable && (
+                                    <>
+                                        <Menu.Divider />
+                                        {/* Sharing is an administrator's; unsharing is not. The
                                         service is where the rule is true (§14c). */}
-                                    <Menu.Item
-                                        onClick={() =>
-                                            update.mutate({
-                                                id,
-                                                patch: {
-                                                    visibility:
-                                                        reel.data.visibility === "shared"
-                                                            ? "private"
-                                                            : "shared",
-                                                },
-                                            })
-                                        }
-                                    >
-                                        {reel.data.visibility === "shared"
-                                            ? "Make private"
-                                            : "Share with everyone"}
-                                    </Menu.Item>
-                                    <Menu.Divider />
-                                    <Menu.Item
-                                        color="oxblood"
-                                        onClick={() => setConfirmingDelete(true)}
-                                    >
-                                        Delete reel…
-                                    </Menu.Item>
-                                </Menu.Dropdown>
-                            </Menu>
-                        </Group>
-                    ) : undefined
+                                        <Menu.Item
+                                            onClick={() =>
+                                                update.mutate({
+                                                    id,
+                                                    patch: {
+                                                        visibility:
+                                                            reel.data.visibility === "shared"
+                                                                ? "private"
+                                                                : "shared",
+                                                    },
+                                                })
+                                            }
+                                        >
+                                            {reel.data.visibility === "shared"
+                                                ? "Make private"
+                                                : "Share with everyone"}
+                                        </Menu.Item>
+                                        <Menu.Divider />
+                                        <Menu.Item
+                                            color="oxblood"
+                                            onClick={() => setConfirmingDelete(true)}
+                                        >
+                                            Delete reel…
+                                        </Menu.Item>
+                                    </>
+                                )}
+                            </Menu.Dropdown>
+                        </Menu>
+                    </Group>
                 }
             />
 
@@ -254,6 +269,13 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
                     ))}
                 </Stack>
             )}
+
+            <ReelExportDialog
+                reelId={id}
+                reelName={reel.data.name}
+                opened={exporting}
+                onClose={() => setExporting(false)}
+            />
 
             {/* Deleting a reel asks first, as deleting a playlist does: it was one click on a
                 small red word, with nothing to bring it back. The clips are not touched. */}

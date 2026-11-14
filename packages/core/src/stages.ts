@@ -233,6 +233,27 @@ export const STAGES: StageDefinition[] = [
         describe: "Titles, comments and artists written into the file, so they can be searched",
     },
     /**
+     * The exact frame rate, a variable-rate flag and the start timecode (§14d "Editor export").
+     *
+     * The probe records these itself, and records this stage done as it does, so a fresh
+     * deployment and every newly scanned file never owe it. It exists for the items probed
+     * before the columns did: re-running the probe across a library would chain a cover, a hash
+     * and a transcode check behind every item, where this reads one header and chains nothing.
+     *
+     * Last but one in priority: nothing on screen waits for it, only a reel's export, which
+     * falls back to the rounded rate meanwhile.
+     */
+    {
+        name: "timing",
+        version: 1,
+        mode: "automatic",
+        appliesTo: "video",
+        priority: 210,
+        maxAttempts: 2,
+        needsProbe: true,
+        describe: "Exact frame rates and timecodes, so reels export to an editor on the frame",
+    },
+    /**
      * Ahead of previews and sprites, which it used to trail at 180.
      *
      * Those two share its CPU budget and cost far more — a sprite decodes the whole file — so

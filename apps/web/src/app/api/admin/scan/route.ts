@@ -47,6 +47,7 @@ export async function GET(request: Request) {
                     id: root.id,
                     label: root.label,
                     path: root.path,
+                    networkPath: root.networkPath,
                     available: reachable.get(root.id) ?? false,
                     enabled: root.enabled === 1,
                     writable: root.writable === 1,

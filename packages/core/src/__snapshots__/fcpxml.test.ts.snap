@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`writeFcpxml > writes the fixture reel 1`] = `
+"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+    <resources>
+        <format id="r1" name="FFVideoFormat1080p2997" frameDuration="1001/30000s" width="1920" height="1080"/>
+        <format id="r4" frameDuration="1/25s" width="3840" height="2160"/>
+        <format id="r6" name="FFVideoFormat1080p25" frameDuration="1/25s" width="1920" height="1080"/>
+        <asset id="r2" name="phone.mp4" start="0s" duration="899899/15000s" hasVideo="1" hasAudio="1" format="r1" audioSources="1" audioChannels="2">
+            <media-rep kind="original-media" src="file://NAS/Multimedia/Holiday%202024/phone.mp4"/>
+        </asset>
+        <asset id="r3" name="camera.mp4" start="0s" duration="60s" hasVideo="1" format="r4">
+            <media-rep kind="original-media" src="file://NAS/Multimedia/Holiday%202024/camera.mp4"/>
+        </asset>
+        <asset id="r5" name="tc.mp4" start="3600s" duration="60s" hasVideo="1" hasAudio="1" format="r6" audioSources="1" audioChannels="2">
+            <media-rep kind="original-media" src="file://NAS/Multimedia/Holiday%202024/tc.mp4"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Pool &amp; &quot;friends&quot;">
+            <project name="Pool &amp; &quot;friends&quot;">
+                <sequence format="r1" duration="7007/1000s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+                    <note>Summer &lt;2024&gt;</note>
+                    <spine>
+                        <asset-clip ref="r2" offset="0s" name="A&amp;B &lt;&quot;jump&quot;&gt;" start="1001/500s" duration="3003/1000s" tcFormat="NDF">
+                            <marker start="1001/500s" duration="1001/30000s" value="A&amp;B &lt;&quot;jump&quot;&gt;"/>
+                            <keyword start="1001/500s" duration="3003/1000s" value="pool, kids  small"/>
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="3003/1000s" name="camera.mp4" start="5s" duration="1001/1000s" tcFormat="NDF">
+                            <timeMap>
+                                <timept time="0s" value="0s" interp="linear"/>
+                                <timept time="30s" value="60s" interp="linear"/>
+                            </timeMap>
+                        </asset-clip>
+                        <asset-clip ref="r2" offset="1001/250s" name="phone.mp4" start="899899/15000s" duration="1001/500s" tcFormat="NDF">
+                            <timeMap>
+                                <timept time="0s" value="0s" interp="linear"/>
+                                <timept time="899899/7500s" value="899899/15000s" interp="linear"/>
+                            </timeMap>
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="3003/500s" name="Timecode" start="3601s" duration="1001/1000s" tcFormat="NDF">
+                            <marker start="3601s" duration="1001/30000s" value="Timecode"/>
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>
+"
+`;

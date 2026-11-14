@@ -13,6 +13,7 @@ import type {
     CreateClipInput,
     CreateReelInput,
     Reel,
+    ReelExportPreview,
     ReelItemsResponse,
     ReelListResponse,
     ReelQuery,
@@ -80,6 +81,14 @@ export const useReelItems = (reelId: string) =>
         queryKey: queryKeys.reels.items(reelId),
         queryFn: () => api<ReelItemsResponse>(`/api/reels/${reelId}/items`),
         enabled: reelId !== "",
+    });
+
+/** What exporting the reel to Resolve will produce (§14d "Editor export"). */
+export const useReelExportPreview = (reelId: string, enabled: boolean) =>
+    useQuery({
+        queryKey: queryKeys.reels.exportPreview(reelId),
+        queryFn: () => api<ReelExportPreview>(`/api/reels/${reelId}/export/preview`),
+        enabled: enabled && reelId !== "",
     });
 
 /**

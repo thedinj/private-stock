@@ -334,7 +334,12 @@ export interface ApiOptions extends RequestInit {
     skipRetry?: boolean;
 }
 
-export const api = async <T>(path: string, options: ApiOptions = {}): Promise<T> => {
+/**
+ * A request with this tab's credentials: the bearer token, the room, the refresh cookie, and
+ * one refresh-and-replay on a 401. Everything the app fetches goes through here, whether it
+ * reads the answer as JSON (`api`) or saves it as a file (`downloadFile`).
+ */
+const authorizedFetch = async (path: string, options: ApiOptions = {}): Promise<Response> => {
     const { skipRetry, ...init } = options;
 
     const headers = new Headers(init.headers);
@@ -364,7 +369,7 @@ export const api = async <T>(path: string, options: ApiOptions = {}): Promise<T>
         const renewed = accessToken !== null && accessToken !== sent;
 
         if (renewed || (await refreshSession())) {
-            return api<T>(path, { ...options, skipRetry: true });
+            return authorizedFetch(path, { ...options, skipRetry: true });
         }
     }
 
@@ -372,11 +377,41 @@ export const api = async <T>(path: string, options: ApiOptions = {}): Promise<T>
         throw await parseError(response);
     }
 
+    return response;
+};
+
+export const api = async <T>(path: string, options: ApiOptions = {}): Promise<T> => {
+    const response = await authorizedFetch(path, options);
+
     if (response.status === 204) {
         return undefined as T;
     }
 
     return (await response.json()) as T;
+};
+
+/**
+ * Saves a response as a file, named by its `Content-Disposition` (§14d "Editor export").
+ *
+ * A plain `<a href download>` cannot carry the bearer token, so the bytes are fetched here and
+ * handed to the browser as an object URL. Only for small files -- the whole body is in memory.
+ */
+export const downloadFile = async (path: string, fallbackName: string): Promise<void> => {
+    const response = await authorizedFetch(path);
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+    const plain = /filename="([^"]+)"/i.exec(disposition)?.[1];
+    const name = encoded ? decodeURIComponent(encoded) : (plain ?? fallbackName);
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // After the click has been handed to the browser, which reads the URL asynchronously.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
 };
 
 export const login = async (email: string, password: string): Promise<SessionUser> => {

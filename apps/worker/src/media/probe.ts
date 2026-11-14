@@ -76,6 +76,94 @@ const parseFrameRate = (value: string | undefined): number | null => {
 };
 
 /**
+ * `r_frame_rate` as the rational an editor needs (§14d "Editor export").
+ *
+ * The nominal rate, not the average: a 30000/1001 camera file says so exactly here, and an
+ * average over a file with one dropped frame does not. Both halves are capped at what a real
+ * rate needs -- ffprobe reports 90000/1 for some broken streams, and that is not a timeline.
+ */
+const parseRationalRate = (
+    value: string | undefined
+): { fpsNum: number; fpsDen: number } | null => {
+    const match = /^(\d+)\/(\d+)$/.exec(value ?? "");
+
+    if (!match) return null;
+
+    const fpsNum = Number(match[1]);
+    const fpsDen = Number(match[2]);
+
+    if (fpsNum <= 0 || fpsDen <= 0 || fpsNum / fpsDen > 240 || fpsNum > 1_000_000) return null;
+
+    return { fpsNum, fpsDen };
+};
+
+/**
+ * Whether the frames arrive at a varying rate, which phones do: the average strays from the
+ * nominal by more than a percent. An editor conforms such a file and in-points drift, so the
+ * export warns about it rather than pretending.
+ */
+const isVariableRate = (stream: FfprobeStream | undefined): boolean => {
+    const nominal = parseFrameRate(stream?.r_frame_rate);
+    const average = parseFrameRate(stream?.avg_frame_rate);
+
+    return nominal !== null && average !== null && Math.abs(nominal - average) / nominal > 0.01;
+};
+
+/**
+ * The SMPTE start timecode a camera writes: a `tmcd` data stream's tag, the video stream's, or
+ * the container's. Kept only in the shape a timecode has.
+ */
+const parseTimecode = (output: FfprobeOutput): string | null => {
+    const raw =
+        output.streams?.find((stream) => stream.tags?.timecode)?.tags?.timecode ??
+        output.format?.tags?.timecode;
+
+    return raw && /^\d{1,2}:\d{2}:\d{2}[:;.,]\d{2}$/.test(raw.trim()) ? raw.trim() : null;
+};
+
+/** The editor-export facts of a probe's output (§14d). */
+const timingOf = (
+    output: FfprobeOutput
+): {
+    fpsNum: number | null;
+    fpsDen: number | null;
+    isVfr: boolean;
+    timecodeStart: string | null;
+} => {
+    const video = output.streams?.find((stream) => stream.codec_type === "video");
+
+    return {
+        ...(parseRationalRate(video?.r_frame_rate) ?? { fpsNum: null, fpsDen: null }),
+        isVfr: isVariableRate(video),
+        timecodeStart: parseTimecode(output),
+    };
+};
+
+/**
+ * Only the timing facts, for the `timing` stage's sweep over items probed before they were
+ * recorded. Streams and container tags, never frames: one header read.
+ */
+export const readTiming = async (absolutePath: string): Promise<ReturnType<typeof timingOf>> => {
+    const ffprobe = await resolveFfprobe();
+
+    const { stdout } = await execFileAsync(
+        ffprobe,
+        [
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,r_frame_rate,avg_frame_rate:stream_tags=timecode:format_tags=timecode",
+            "-of",
+            "json",
+            absolutePath,
+        ],
+        { timeout: PROBE_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 }
+    );
+
+    return timingOf(JSON.parse(stdout) as FfprobeOutput);
+};
+
+/**
  * Capture date from container or EXIF tags.
  *
  * Only tags that actually mean "when this was recorded" are used. `creation_time` on a
@@ -217,6 +305,7 @@ export const probeFile = async (absolutePath: string): Promise<FullProbe> => {
         container: output.format?.format_name ?? null,
         bitrate: Number.isFinite(bitrate) && bitrate > 0 ? bitrate : null,
         fps: parseFrameRate(video?.avg_frame_rate ?? video?.r_frame_rate),
+        ...timingOf(output),
         capturedAt: parseCapturedAt({ ...output.format?.tags, ...video?.tags }),
         isAnimated,
         streams: streams

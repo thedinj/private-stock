@@ -1013,6 +1013,8 @@ export const scanStatusSchema = z.object({
             label: z.string(),
             /** Where the library actually is, and the thing an admin edits to move it. */
             path: z.string(),
+            /** Where the PC running Resolve finds it, for editor export (§14d). */
+            networkPath: z.string().nullable(),
             /**
              * Whether that directory can be read right now.
              *

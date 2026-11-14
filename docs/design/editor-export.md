@@ -1,12 +1,10 @@
 # Reels → editor timelines (Resolve first), and where it goes next
 
-> **Status: parked design, 2026-10-02.** Nothing is implemented. To resume, re-check:
->
-> - the §14d text in `ARCHITECTURE.md`
-> - the probe fields in `apps/worker/src/media/probe.ts`
-> - how `/api/media/:id/stream` authenticates downloads
->
-> Then start at Phase 1, step 1.
+> **Status: built 2026-11-14 -- superseded by `ARCHITECTURE.md` §14d "Editor export".** Phase 1
+> below is history; where it differs from what was built (OTIO was dropped, the share prefix
+> became `MediaRoot.networkPath` rather than a per-browser setting, the timeline rate is chosen in
+> the dialog, and a `timing` stage fills older rows), §14d is right. "Where it goes next" is
+> still the roadmap.
 >
 > Research sources:
 >

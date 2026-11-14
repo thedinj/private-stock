@@ -206,6 +206,11 @@ export interface ProbeResult {
     container: string | null;
     bitrate: number | null;
     fps: number | null;
+    /** `r_frame_rate` as the rational it is, for editor export (§14d). */
+    fpsNum: number | null;
+    fpsDen: number | null;
+    isVfr: boolean;
+    timecodeStart: string | null;
     capturedAt: string | null;
     isAnimated: boolean;
 }
@@ -217,6 +222,7 @@ export const applyProbe = (mediaId: string, probe: ProbeResult): void => {
                 "bitrate" = ?, "fps" = ?, "capturedAt" = ?, "isAnimated" = ?,
                 "videoProfile" = ?, "videoLevel" = ?, "pixFmt" = ?,
                 "audioCodec" = ?, "audioChannels" = ?,
+                "fpsNum" = ?, "fpsDen" = ?, "isVfr" = ?, "timecodeStart" = ?,
                 "probedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
           WHERE "id" = ?`
     ).run(
@@ -234,8 +240,25 @@ export const applyProbe = (mediaId: string, probe: ProbeResult): void => {
         probe.pixFmt,
         probe.audioCodec,
         probe.audioChannels,
+        probe.fpsNum,
+        probe.fpsDen,
+        probe.isVfr ? 1 : null,
+        probe.timecodeStart,
         mediaId
     );
+};
+
+/** The `timing` stage's write: the editor-export facts alone (§14d). */
+export const applyTiming = (
+    mediaId: string,
+    timing: Pick<ProbeResult, "fpsNum" | "fpsDen" | "isVfr" | "timecodeStart">
+): void => {
+    db.prepare(
+        `UPDATE "Media"
+            SET "fpsNum" = ?, "fpsDen" = ?, "isVfr" = ?, "timecodeStart" = ?,
+                "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "id" = ?`
+    ).run(timing.fpsNum, timing.fpsDen, timing.isVfr ? 1 : null, timing.timecodeStart, mediaId);
 };
 
 /**
@@ -1966,6 +1989,46 @@ export interface MediaDetailRow extends MediaListRow {
     rootWritable: number | null;
     relPath: string;
 }
+
+/** What exporting a reel to an editor needs about each item it draws on (§14d). */
+export interface EditorExportFactsRow {
+    id: string;
+    relPath: string;
+    rootId: string;
+    durationMs: number | null;
+    width: number | null;
+    height: number | null;
+    container: string | null;
+    audioCodec: string | null;
+    audioChannels: number | null;
+    fps: number | null;
+    fpsNum: number | null;
+    fpsDen: number | null;
+    isVfr: 1 | null;
+    timecodeStart: string | null;
+}
+
+/**
+ * Editor-export facts for items the caller has **already** decided the viewer can reach.
+ *
+ * No viewer filter, like `clipRepo.listByIds`: the ids come out of `listReelEntries`, which
+ * applied the reel's read rule and the viewer's libraries, and stating that rule twice is how
+ * the two come to disagree. The original file only, through `ORIGINAL_FILE_JOIN` -- a
+ * timeline references the file somebody filmed, never a rendition the app made.
+ */
+export const listEditorExportFacts = (mediaIds: string[]): EditorExportFactsRow[] =>
+    mediaIds.length === 0
+        ? []
+        : (db
+              .prepare(
+                  `SELECT m."id", f."relPath", f."rootId", m."durationMs", m."width", m."height",
+                          m."container", m."audioCodec", m."audioChannels", m."fps",
+                          m."fpsNum", m."fpsDen", m."isVfr", m."timecodeStart"
+                     FROM "Media" m
+                     ${ORIGINAL_FILE_JOIN}
+                    WHERE m."id" IN (SELECT value FROM json_each(?))`
+              )
+              .all(JSON.stringify(mediaIds)) as EditorExportFactsRow[]);
 
 export const findDetail = (
     mediaId: string,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { networkPathSchema } from "@private-stock/core";
 import { mediaRootRepo } from "@private-stock/db";
 
 import { forgetAuth } from "@/lib/auth/authCache";
@@ -32,6 +33,16 @@ const updateSchema = z.object({
      * intact.
      */
     path: z.string().trim().min(1).max(1024).optional(),
+    /**
+     * Where the PC running Resolve finds this folder (§14d "Editor export"). Empty clears it.
+     * Checked for shape only: the server cannot reach a Windows share, and never needs to.
+     */
+    networkPath: z
+        .string()
+        .trim()
+        .transform((value) => value || null)
+        .pipe(networkPathSchema.nullable())
+        .nullish(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -55,6 +66,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         // writable, so switching it on is refused while the volume is mounted :ro.
         if (body.writable !== undefined) await setLibraryWritable(id, body.writable);
         if (body.label !== undefined) mediaRootRepo.setLabel(id, body.label);
+        if (body.networkPath !== undefined) mediaRootRepo.setNetworkPath(id, body.networkPath);
         // Last, and validated: an unreadable path is rejected before anything is stored, so a
         // typo cannot leave a library pointing nowhere.
         if (body.path !== undefined) await repointLibrary(id, body.path);

@@ -86,6 +86,8 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
      */
     const [labelDraft, setLabelDraft] = useState("");
     const [labelTouched, setLabelTouched] = useState(false);
+    /** The network path as typed in the rename dialog, or null while it shows the stored one. */
+    const [networkDraft, setNetworkDraft] = useState<string | null>(null);
 
     const suggestedLabel = basename(pathDraft);
     const newLabel = labelTouched ? labelDraft : suggestedLabel;
@@ -94,6 +96,7 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
     const closeAndReset = () => {
         setLabelDraft("");
         setLabelTouched(false);
+        setNetworkDraft(null);
         setDeletable(false);
         onClose();
     };
@@ -101,6 +104,7 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
     const doneAndReset = () => {
         setLabelDraft("");
         setLabelTouched(false);
+        setNetworkDraft(null);
         setDeletable(false);
         done();
     };
@@ -135,8 +139,19 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
     });
 
     const rename = useMutation({
-        mutationFn: ({ id, label }: { id: string; label: string }) =>
-            api(`/api/admin/roots/${id}`, { method: "PATCH", body: JSON.stringify({ label }) }),
+        mutationFn: ({
+            id,
+            label,
+            networkPath,
+        }: {
+            id: string;
+            label: string;
+            networkPath: string;
+        }) =>
+            api(`/api/admin/roots/${id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ label, networkPath }),
+            }),
         onSuccess: doneAndReset,
     });
 
@@ -155,6 +170,11 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
 
     /** The rename box: the stored name until somebody edits it, the edit afterwards. */
     const renameValue = labelTouched ? labelDraft : (target?.label ?? "");
+    const networkValue = networkDraft ?? target?.networkPath ?? "";
+    const saveRename = () =>
+        renaming &&
+        renameValue.trim() &&
+        rename.mutate({ id: renaming, label: renameValue.trim(), networkPath: networkValue });
 
     /** The server's own words: it knows why a path was refused, and the reason is the point. */
     const reason = (error: unknown): string =>
@@ -285,15 +305,27 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
                             setLabelDraft(event.currentTarget.value);
                         }}
                         onKeyDown={(event) => {
-                            if (event.key === "Enter" && renameValue.trim() && renaming) {
-                                rename.mutate({ id: renaming, label: renameValue.trim() });
-                            }
+                            if (event.key === "Enter") saveRename();
                         }}
                     />
 
                     <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>
                         {target?.path}
                     </Text>
+
+                    {/* Only written into reels exported for Resolve (§14d); the server never
+                        reads through it, so it is checked for shape and nothing else. */}
+                    <TextInput
+                        label="Network path"
+                        description="How Windows reaches this folder, for reels exported to Resolve. Optional."
+                        placeholder="\\NAS\Multimedia\Videos"
+                        value={networkValue}
+                        maxLength={1024}
+                        onChange={(event) => setNetworkDraft(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") saveRename();
+                        }}
+                    />
 
                     {rename.error && (
                         <Alert color="oxblood" variant="light">
@@ -310,12 +342,9 @@ export const LibraryDialogs: React.FC<LibraryDialogsProps> = ({
                             // A library with no name would show as a blank row in the
                             // sidebar, so the only invalid name is an empty one.
                             disabled={!renameValue.trim()}
-                            onClick={() =>
-                                renaming &&
-                                rename.mutate({ id: renaming, label: renameValue.trim() })
-                            }
+                            onClick={saveRename}
                         >
-                            Rename
+                            Save
                         </Button>
                     </Group>
                 </Stack>

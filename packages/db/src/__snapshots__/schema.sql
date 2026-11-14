@@ -375,6 +375,10 @@ CREATE TABLE "Media" (
             "container" TEXT CHECK("container" IS NULL OR length("container") <= 40),
             "bitrate" INTEGER,
             "fps" REAL,
+            "fpsNum" INTEGER CHECK("fpsNum" IS NULL OR "fpsNum" > 0),
+            "fpsDen" INTEGER CHECK("fpsDen" IS NULL OR "fpsDen" > 0),
+            "isVfr" INTEGER CHECK("isVfr" IS NULL OR "isVfr" = 1),
+            "timecodeStart" TEXT CHECK("timecodeStart" IS NULL OR length("timecodeStart") <= 20),
             -- Enough to decide whether a browser can actually play this (§8).
             --
             -- "codec = h264" is not sufficient and assuming it is produces a library where
@@ -519,6 +523,7 @@ CREATE TABLE "MediaRoot" (
             "writable" INTEGER CHECK("writable" IS NULL OR "writable" = 1),
             "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "lastScanAt" DATETIME,
+            "networkPath" TEXT CHECK("networkPath" IS NULL OR length("networkPath") <= 1024),
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL
         );

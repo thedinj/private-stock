@@ -126,6 +126,10 @@ export function initializeDatabase(db: Database): void {
         --
         -- "domain" is what kind of collection it is (§21) — domainKinds in core, unCHECKed
         -- like Tag.kind so the list is code. Set when the library is added, never edited.
+        --
+        -- "networkPath" is the same folder as the PC running Resolve sees it -- a UNC share or
+        -- a mapped drive -- written into exported timelines and never read through (§14d
+        -- "Editor export"). "path" is the container's view and means nothing on that PC.
         CREATE TABLE IF NOT EXISTS "MediaRoot" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "path" TEXT NOT NULL UNIQUE CHECK(length("path") BETWEEN 1 AND 1024),
@@ -134,6 +138,7 @@ export function initializeDatabase(db: Database): void {
             "writable" INTEGER CHECK("writable" IS NULL OR "writable" = 1),
             "domain" TEXT NOT NULL DEFAULT 'cellar' CHECK(length("domain") BETWEEN 1 AND 32),
             "lastScanAt" DATETIME,
+            "networkPath" TEXT CHECK("networkPath" IS NULL OR length("networkPath") <= 1024),
             "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt" DATETIME NOT NULL
         );
@@ -191,6 +196,15 @@ export function initializeDatabase(db: Database): void {
         -- ─────────────────────────────────────────────────────────────────────────────
 
         -- Objective facts only. Anything a person decides lives in UserMedia (§5).
+        --
+        -- What an editor needs that "fps" cannot say (§14d "Editor export"). "fps" is the
+        -- average rate rounded to three decimals -- right for display and playability, and
+        -- a frame off every sixteen seconds if a timeline is built on it. "fpsNum"/"fpsDen"
+        -- is ffprobe's r_frame_rate as the rational it is (30000/1001); "isVfr" is 1 when
+        -- the average strays from it, which is phone footage, and the export warns about
+        -- it; "timecodeStart" is the SMPTE start a camera writes, so in-points match the
+        -- source timecode Resolve shows. NULL until probed, or re-probed after the column
+        -- arrived.
         CREATE TABLE IF NOT EXISTS "Media" (
             "id" TEXT NOT NULL PRIMARY KEY,
             "kind" TEXT NOT NULL CHECK("kind" IN ('image', 'video')),
@@ -203,6 +217,10 @@ export function initializeDatabase(db: Database): void {
             "container" TEXT CHECK("container" IS NULL OR length("container") <= 40),
             "bitrate" INTEGER,
             "fps" REAL,
+            "fpsNum" INTEGER CHECK("fpsNum" IS NULL OR "fpsNum" > 0),
+            "fpsDen" INTEGER CHECK("fpsDen" IS NULL OR "fpsDen" > 0),
+            "isVfr" INTEGER CHECK("isVfr" IS NULL OR "isVfr" = 1),
+            "timecodeStart" TEXT CHECK("timecodeStart" IS NULL OR length("timecodeStart") <= 20),
             -- Enough to decide whether a browser can actually play this (§8).
             --
             -- "codec = h264" is not sufficient and assuming it is produces a library where
