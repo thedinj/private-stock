@@ -20,9 +20,6 @@ import { invalidateListable } from "@/lib/api/trash";
  * an afternoon, and it is the rows nobody has scrolled to that a "select all" must not reach.
  */
 
-/** While anything on the trash tab is still being copied in, look again this often. */
-const MOVING_POLL_MS = 3000;
-
 export const useUnreadable = (tab: UnreadableTab) =>
     useInfiniteQuery({
         queryKey: queryKeys.admin.unreadablePage(tab),
@@ -32,18 +29,12 @@ export const useUnreadable = (tab: UnreadableTab) =>
             ),
         initialPageParam: null as string | null,
         getNextPageParam: (last) => last.next,
-        // Only a move in progress changes this list by itself, and only on the trash side.
-        refetchInterval: (query) =>
-            query.state.data?.pages.some((page) => page.items.some((item) => item.moving))
-                ? MOVING_POLL_MS
-                : false,
     });
 
 /**
  * Moves the chosen files to the trash, through the same bulk action the library uses.
  *
- * So the permission, the writable-library check, the free-space check on `/data` and the
- * per-item reasons for anything refused are the ones every other deletion gets.
+ * So the permission, the writable-library check and the per-item reasons for anything refused are the ones every other deletion gets.
  */
 export const useTrashUnreadable = () => {
     const queryClient = useQueryClient();

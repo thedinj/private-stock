@@ -392,8 +392,9 @@ export const scanRoot = async (
                         continue;
                     }
 
-                    // Still on its way to the bin. Even a forced rescan must not queue work
-                    // against it: that work would fail once the move lands.
+                    // In the bin, its file still at the path until purge. Even a forced rescan
+                    // must not queue work against it: nobody is going to look at the result,
+                    // and the purge takes the file out from under it.
                     if (result.file.state === "trashed") {
                         continue;
                     }

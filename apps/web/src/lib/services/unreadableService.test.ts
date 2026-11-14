@@ -21,7 +21,6 @@ interface Row {
     detail: string | null;
     at: string;
     writable: 1 | null;
-    moving: 0 | 1;
 }
 
 let rows: Row[] = [];
@@ -74,7 +73,6 @@ const row = (overrides: Partial<Row> = {}): Row => ({
     detail: null,
     at: "2026-10-01 00:00:00",
     writable: 1,
-    moving: 0,
     ...overrides,
 });
 
@@ -142,26 +140,10 @@ describe("purgeUnreadable", () => {
 
         expect(purgeUnreadable({ mediaIds: ["m1", "m2"] }, admin)).toEqual({
             queued: 2,
-            waiting: 0,
             freedBytes: 1500,
         });
         expect(purged).toEqual(["t1", "t2"]);
         expect(lastFilter).toMatchObject({ place: "trash", mediaIds: ["m1", "m2"] });
-    });
-
-    /**
-     * Its original is still in the media root. Purging it would delete the catalogue row and
-     * leave the file for the next scan to adopt as something new.
-     */
-    it("leaves an entry whose move has not finished", () => {
-        rows = [row({ moving: 1 })];
-
-        expect(purgeUnreadable({ mediaIds: ["m1"] }, admin)).toEqual({
-            queued: 0,
-            waiting: 1,
-            freedBytes: 0,
-        });
-        expect(purged).toEqual([]);
     });
 
     it("passes over an id the list would not show", () => {

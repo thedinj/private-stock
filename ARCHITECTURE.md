@@ -244,8 +244,9 @@ is really deleted. Two things that look like exceptions are not:
 
 - `MediaFile.state` (`active` / `missing` / `archived`) is a lifecycle state, not a deleted
   flag. A file on an offline share must not be treated as gone (§5).
-- **Files on disk** are moved to `/data/trash/<date>/` rather than unlinked (§8). That is a
-  filesystem policy, not a database one. The app never calls `unlink` inside a media root.
+- **Files on disk** stay at their path through the retention window, and only the purge
+  unlinks them (§10). That is a filesystem policy, not a database one. The trash jobs are the
+  only code that calls `unlink` inside a media root.
 
 ## 5. Data model
 
@@ -5026,9 +5027,9 @@ from backups — losing it costs CPU, not data.
   them, so on a new library no near-duplicate appeared until every preview and sprite had
   been built, including those for the copies about to be deleted. Hashing first gives an admin
   the chance to prune the library before paying to process all of it.
-- **Deletion is a recycle bin, in two stages** — trashing hides the item and moves its
-  bytes to `/data/trash/<date>/`; purging, after a retention window, is the irreversible
-  one. Only from a root flagged writable (§18.1).
+- **Deletion is a recycle bin, in two stages** — trashing hides the item and leaves its file
+  where it is; purging, after a retention window, unlinks the file there and is the
+  irreversible one. Only from a root flagged writable (§18.1).
 
 ### Limbo keeps the catalog entry, not only the file
 
@@ -5057,18 +5058,20 @@ limbo for a retention window, not indefinitely — and it is recorded rather tha
 
 ### The four states, and what is irreversible
 
-1. **Trash** — checks the `delete` scope, a writable root, and free space on `/data`.
-   Sets `MediaFile.state = 'trashed'`, writes `TrashEntry` with `purgeAfter`, and the item
-   leaves the library at once. A `trash` job then copies the bytes to `/data/trash/<date>/`,
-   fsyncs, and unlinks the original — copy rather than rename because `/data` and `/media`
-   are different volumes (§18.1), and a job rather than a request because a 10 GB file is
-   not a round trip. **The exception is an identical copy** (§10e): when a file with the same
-   `contentHash` stays, it bypasses the bin — the job deletes the original and purges the item.
+1. **Trash** — checks the `delete` scope and a writable root. Sets
+   `MediaFile.state = 'trashed'`, writes `TrashEntry` with `purgeAfter`, and the item leaves
+   the library at once. **The file stays at its path** — nothing is copied or moved (see "The
+   file stays where it is until purge" below). **The exception is an identical copy** (§10e):
+   when a file with the same `contentHash` stays, it bypasses the bin — a `trash` job deletes
+   the original and purges the item.
 2. **Limbo** — visible only in the admin trash view. **Artifacts are kept deliberately**: a
    trash view without covers cannot be reviewed, only guessed at.
-3. **Restore** — bytes copied back, state returns to `'active'`, `restoredAt` set. The item
-   returns with its id and everything attached to it intact.
-4. **Purge** — after the window or on admin demand. Bytes unlinked, artifacts removed,
+3. **Restore** — state returns to `'active'`, `restoredAt` set. The item returns with its id
+   and everything attached to it intact. It runs as a job only because an entry from before
+   2026-11-13 has its bytes in `dataDir/trash` and must have them copied back first.
+4. **Purge** — after the window or on admin demand. The file is unlinked at its path, once
+   its size and mtime still match the catalogue (a different file at the same path is
+   refused, and the scan then revives the row as that file), artifacts removed,
    `Media` hard-deleted. `TrashEntry.mediaId` is `ON DELETE SET NULL`, so the audit row
    outlives the item it describes — which is the point of an audit row, and is why the column
    was made nullable before anything used it.
@@ -5085,40 +5088,38 @@ every other operational knob (§12b).
 
 **The trash page can also be emptied at once.** "Empty trash…" queues a purge for every entry,
 the same job the sweep and the per-entry button use, behind one confirmation that states the
-count, the space and that nothing comes back, with Cancel focused. It skips entries whose move has
-not happened yet: purging one of those would delete the catalogue row and leave the original in
-the media root, where the next scan would adopt it as something new. It says how many it left, and
-emptying again once they have landed takes them.
+count, the space and that nothing comes back, with Cancel focused.
 
 ### Two locks on the irreversible door
 
-A file can come back without the app's help — someone puts it where it was with a file
-manager — and the scan then revives its row. The entry left open keeps counting down, and the
-purge at the end of it destroys an item the library is, by that point, happily showing.
+A file can change under the app — someone replaces it at the same path with a file manager —
+and the scan then revives its row as the new bytes. The entry left open keeps counting down, and
+the purge at the end of it destroys an item the library is, by that point, happily showing.
 
 So it is closed twice. The scan path resolves the entry at the moment it revives the file, and
 the purge job refuses outright to act on a file whose state is no longer `trashed`. The second
 check is redundant whenever the first one worked, and it is there because this is the only
-step in the app that cannot be undone.
+step in the app that cannot be undone. The purge also checks the file's size and mtime against
+the catalogue before unlinking, the third look at the same question.
 
-**Not yet gone is not back.** Between the delete and its `trash` job, the original is still at
-its path, and a scan walking past it used to take that for a file put back by hand: the row
-revived, the entry closed, and the move job, finding a restored entry, did nothing. The deletion
-was undone without anyone asking — after §10c had already merged its ratings and tags away. A
-pending scan outranks the move in the queue, so this was the ordinary case, not a corner.
+**Still there is not back.** A trashed file stays at its path until purge, so every scan walks
+past every file in the bin. Taking that for a file put back by hand would undo the deletion
+without anyone asking — after §10c had already merged its ratings and tags away. (Before
+2026-11-13 this was the window between the delete and its move job, and a pending scan outranked
+the move, so it was the ordinary case then too.)
 
-So a trashed row is revived only when its bytes are provably back. An entry without `movedAt`
-says no, unless the bytes at the path are no longer the ones catalogued; that is the case the
-move job refuses to touch, and its "rescan and try again" relies on the revival. An entry with
-`movedAt` still looks at the path again inside the batch's transaction, because the scan's own
-`stat` can predate the move's unlink. The worker is single-threaded and `movedAt` is written
-only after the unlink completes, so that second look cannot be stale.
+So a trashed row is revived only when its bytes are provably different. An entry whose file is
+in place says no, unless the bytes at the path are no longer the ones catalogued; that is the
+case the purge refuses to touch, and its "rescan and try again" relies on the revival. An entry
+from the old bin — `movedAt` set — is back when its path is occupied again, and that is checked
+afresh inside the batch's transaction, because the scan's own `stat` can predate the move's
+unlink.
 
 ### Trashing stops the item's work
 
 Trashing an item also removes its pending jobs and cancels its running ones, in the same
 transaction that hides it. Otherwise that work either ran against an item in the bin or failed
-on the missing file after the move. A transcode could run for an hour on a deleted file, and
+on the missing file after the purge. A transcode could run for an hour on a deleted file, and
 each failed attempt counted against the item's stages, so a restored item came back marked as
 unprocessable.
 
@@ -5129,30 +5130,62 @@ whether by the app or by a scan, then forgets the failed stages and the failed o
 recorded since the delete. They describe a file that was out of its library, not the one coming
 back. Anything settled before the delete is kept.
 
-### A move that is owed is a move that is found again
+### The file stays where it is until purge (2026-11-13)
 
-Trashing hides the item first and moves the bytes second, so a lost move leaves a file sitting
-in a media root that the app believes it emptied — invisible in the library, present on disk,
-reported to nobody. `TrashEntry.movedAt` is what makes that state visible: an open entry
-without it is work still owed, and housekeeping re-queues it.
+**Trashing used to copy the file into `/data/trash`, fsync, and unlink the original** — copy
+rather than rename because `/data` and `/media` are separate mounts, and `rename()` across mount
+points fails with `EXDEV` even on one filesystem. On the NAS they are one filesystem: the same
+four-disk volume holds both. So the copy read and wrote every byte on the same spindles, freed
+nothing until purge, and needed as much free space again just to delete something. Deleting 120
+videos (45 GB) was 45 GB of reads and 45 GB of writes, and the web process stalled behind its own
+reads while it ran (§18.1). It also needed the free-space check, a progress-reporting job, the
+"Moving" state in the trash view, and a guard on every purge path against an entry whose move
+had not landed.
 
-This is not only for crashes. The job queue permits one live job per (kind, file), so a file
-trashed, restored and trashed again while the first move is still queued has its second move
-refused — quietly, because a refused enqueue must never turn a delete request into an error.
-The sweep is what makes that safe rather than silent.
+Now trashing is a catalogue change alone, and **the purge unlinks the file at its path**. What
+the copy bought was undo of the bytes, and leaving them in place keeps that for free.
+
+Considered and rejected:
+
+- **A trash folder inside each writable mount**, reached by `rename()`. Instant too, and it
+  takes deleted files out of their folders at once. But it adds a rename inside a media root,
+  which §18.1 forbids, and the folder has to sit inside the same `:rw` mount as the file — a
+  library can span several — and be hidden from the scanner.
+- **No byte bin at all**: unlink at once, keep only the catalogue limbo. §10e already does this
+  for identical copies, whose content survives in the twin. For everything else it removes the
+  undo for an accidental delete, which is the reason the bin exists when several people can
+  delete.
+- QNAP's own `@Recycle` catches deletions made through SMB or File Station, not an `unlink`
+  from the container.
+
+**The cost: for the retention window a deleted file is still visible over SMB**, in its folder,
+to anyone browsing the share outside the app. Accepted.
+
+Entries made before the change keep their bytes in `dataDir/trash` (`movedAt` and
+`trashRelPath` set), and their restore and purge act there until the last drains, which is one
+retention window. The migration cleared `trashRelPath` on entries whose move never happened:
+their file was at its path, which is what every entry looks like now.
+
+**An identical copy's delete is still a job, and is still found again if lost.** It is the one
+entry that is out of the bin's list, so a lost job leaves a file sitting in a media root that the
+app believes it removed — invisible in the library, present on disk, reported to nobody.
+Housekeeping re-queues any open entry with a twin and no live job. This is not only for crashes:
+the job queue permits one live job per (kind, file), so a file trashed, restored and trashed
+again while the first job is still queued has its second refused — quietly, because a refused
+enqueue must never turn a delete request into an error.
 
 ### What this has to get right
 
-- **The scanner must not overwrite `'trashed'`.** A trashed file is genuinely gone from its
-  root, so the next scan will want to call it `'missing'`. If it does, the library loses the
+- **The scanner must not overwrite `'trashed'`**, whether the file is still at its path (revive
+  it and the deletion is undone) or gone (call it `'missing'` and the library loses the
   difference between "someone deleted this" and "the share was unplugged" — and any future
-  reaper of missing files becomes an unannounced purge of things people meant to keep.
-- **Restore can find its old path occupied** by a different file. Needs a decided policy, not
-  whatever the copy happens to do.
+  reaper of missing files becomes an unannounced purge of things people meant to keep).
+- **A purge can find a different file at the path.** It refuses, and the scan's revival of the
+  row as the new bytes is what settles it.
 - **Trashing a duplicate must drop it from its group**, or review offers deletions of files
   that are already deleted.
-- **Trashed bytes sit on `/data`**, beside the database. A retention window is a disk
-  commitment, which is the argument for 7 days rather than 30 on a NAS.
+- **Trashed bytes keep their space until purge.** A retention window is a disk commitment,
+  which is the argument for 7 days rather than 30 on a NAS.
 
 ### The band index guarantees D < B, not D < bits-per-band
 
@@ -5573,12 +5606,6 @@ they free, every group where the reviewer overrode the recommendation (in the se
 cost-of-keeping words), every group ticked past a caution, and the clips purging would destroy.
 The full list of paths is one press away inside it.
 
-**The free-space check counts what the bin already owes.** Each copy is refused if `/data`
-could not hold it — but free space only shrinks once a move lands, and moves are queued. Checked
-against free space alone, two hundred 3 GB copies against 50 GB free would each pass and then
-fill the volume holding the database. So the check subtracts `trashRepo.unmovedBytes()`, the
-bytes of entries accepted and not yet moved. The library's own bulk delete had the same hole.
-
 **Partial success is the expected outcome, and is reported per group.** Copies are trashed one
 at a time, like every other multi-item deletion (§14b); a refusal is recorded against its copy
 and named afterwards rather than ending the run.
@@ -5728,16 +5755,16 @@ twin is not the bin's:
   is the whole-group case below. Purging takes the item, its file row, its artifacts and every job
   it still has; the entry stays only as the audit row.
 - **If the twin cannot vouch for the bytes** (changed on disk, gone), deleting outright could lose
-  the content. The entry clears its twin and is copied into the bin as an ordinary, restorable
-  entry. That is the one way an identical copy ever reaches the trash page.
+  the content. The entry clears its twin and stays in the bin as an ordinary, restorable entry,
+  its file in place. That is the one way an identical copy ever reaches the trash page.
 - **It is never listed, counted, emptied or restorable.** The trash list, its count, the scheduled
-  purge, "Empty trash", `heldBytes` and `unmovedBytes` all leave twin entries out. The restore and
+  purge, "Empty trash" and `heldBytes` all leave twin entries out. The restore and
   purge endpoints refuse them.
 
 **Deleting a whole group of identical copies keeps one in the bin.** The viewer deletes ticked
 copies worst first and best last (§10d), and each prefers the merge's heir as its twin, which is
 the best copy still waiting its turn. Every copy but the last therefore goes outright, and the last
-has no identical file left, so it is trashed with its own bytes. The content stays restorable
+has no identical file left, so it is trashed with its own bytes, which stay at its path. The content stays restorable
 until that entry is purged, and the confirmation says so.
 
 ### Work for an item that has gone
@@ -5748,8 +5775,8 @@ purging deletes the item, which takes every `Job` row it has: the table cascades
 heartbeat and stops as a lost claim, not a failure.
 
 That left one gap: **a job that reaches its handler after the item has left**. Examples are a job
-enqueued by a scan or a finished stage between the trash and the move, or one claimed in the
-instant before the cancel. It then failed on the missing file and counted as a failure: retried
+enqueued by a scan or a finished stage after the trash, or one claimed in the instant before the
+cancel. It then ran on an item in the bin, or failed on the missing file and counted as a failure: retried
 with backoff, dead-lettered, and recorded as a failed stage of an item in the bin. The runner now
 asks `subjectGone` before starting a job, after it finishes, and when it fails. If the item has
 been deleted, or its original is in the bin, the job is closed as `cancelled` with a line in the
@@ -5818,7 +5845,8 @@ batch after it. Failures are reported by reason and count, and their groups stay
 and the web process gives up on the lock after three seconds (§4). The trash path's write
 transactions are now `immediate`, so they take the lock at `BEGIN`, where the timeout applies,
 instead of upgrading from a read midway, where SQLite refuses outright if the other process has
-committed in between. The trash entry and its move job are also written in one transaction. If
+committed in between. The trash entry and an identical copy's delete job are also written in one
+transaction. If
 the lock is still busy, the step is tried again after an `await`ed backoff, which leaves the rest
 of the web process running. Every step it retries is safe to repeat.
 
@@ -5845,9 +5873,9 @@ before anything is deleted. Groups under "Needs a look" are still left for a per
   (`contextFor`). Turning it on needs `admin` and `delete`, as the button does. When either scope
   is withdrawn or the account is disabled, the run stops and the tab says why.
 - **In the web process, not the worker.** The worker owns every other schedule, but the trash path
-  (the merge, the entry, the move job, the caches it clears) lives in the web services. A worker
+  (the merge, the entry, the delete job, the caches it clears) lives in the web services. A worker
   copy would be a second deletion path to keep in step. The bytes are still removed by the
-  worker's trash job, the only code that writes inside a media root. The clock starts from
+  worker's trash jobs, the only code that writes inside a media root. The clock starts from
   `instrumentation.ts`.
 - **What it did** is kept as the setting's `lastRun` and shown under the switch: when it ran, the
   copies deleted, the ones that failed, and why it stopped if it did.
@@ -5948,11 +5976,10 @@ the list exists to give space back. Each row has no picture to show — that is 
 carries the file name, its library and folder, its size, and what ffprobe said: the line that
 names the damage, not the command line or the closing summary.
 
-**Two lists, because reclaiming the space is two steps.** Moving a file to the trash copies it to
-`/data` and removes it from the media root, so the media volume gets its space back at once and
-`/data` holds it until the entry is purged. "In the library" moves ticked files to the trash
-through the ordinary bulk action, so it needs the `delete` permission and a writable library and
-gets the free-space check and per-item reasons every deletion gets. The trash's **Unreadable
+**Two lists, because reclaiming the space is two steps.** Moving a file to the trash hides it and
+leaves it at its path (§10), so the space comes back only when the entry is purged. "In the
+library" moves ticked files to the trash through the ordinary bulk action, so it needs the
+`delete` permission and a writable library and gets the per-item reasons every deletion gets. The trash's **Unreadable
 only** filter purges the ticked ones now rather than when the bin's window closes. Only
 unreadable entries are listed there, so the rest of the bin keeps its retention window — this is
 not a second "empty trash". It was a second tab on this page, a copy of the trash reached from
@@ -5963,24 +5990,15 @@ elsewhere. Here the evidence is error text, and §7 records a match that settled
 damaged-but-decodable files as unreadable; a truncated download can also sometimes be repaired.
 The bin is the safety net, and the filter makes using it one more click rather than a week.
 
-**On a NAS where `/data` and `/media` are one volume, the trash frees nothing until the purge.**
-The two-step account above assumes two volumes, which is the documented layout and not the one
-the production NAS has: a single volume holds both. There, moving a file to the trash copies it
-onto the same disks and then removes the original, so for the length of the copy it takes twice
-its size, and afterwards exactly what it took before. The space comes back at the purge, which
-is why the **Unreadable only** purge matters more there than the bin's window suggests -- and
-why a large unreadable file needs its own size free to be trashed at all (the free-space check
-every deletion gets refuses it otherwise). Not changed in the app: skipping the bin was rejected
-above for reasons that do not depend on the volume layout.
+**The trash frees nothing until the purge**, which is why the **Unreadable only** purge matters
+more than the bin's window suggests. (Until 2026-11-13 trashing copied the file into `/data`,
+which on the production NAS is the same volume, so for the length of the copy it took twice its
+size, and a large unreadable file needed its own size free to be trashed at all.)
 
 **Processing › Activity does not list these files' failures** (§12c). It counts them, with what
 they hold, and links here.
 
-**A row that cannot be acted on has no tick**: a read-only library in the library list, an entry
-still being copied in on the second. A purge of an entry whose move has not finished is refused
-— its original is still in the media root, and purging would delete the catalogue row and leave
-the file for the next scan to adopt as something new. Emptying the bin always had that guard;
-purging one entry from the Trash page did not, and has it now.
+**A row that cannot be acted on has no tick**: a read-only library in the library list.
 
 **A failure that does not name damage is not called corrupt.** A probe that ran out of attempts
 on timeouts during a first import, or on a share that dropped, says nothing about the file. Those
@@ -6721,9 +6739,9 @@ relative path.
 
 So a repoint marks every file `unverified`, which hides its items (only `active` is listable)
 without asserting anything, and queues a scan of that library immediately. Rows, tags and
-ratings are untouched; this is a curtain, not a deletion. Trashed files are left alone: they
-sit in `/data/trash` rather than in the library, and their state is a decision rather than an
-observation.
+ratings are untouched; this is a curtain, not a deletion. Trashed files are left alone: their state is a decision rather than an
+observation, and the purge unlinks one at its path only if its size and mtime still match the
+catalogue (§10).
 
 `unverified` is a fifth state rather than reusing `missing` because `missing` is a claim about
 the filesystem, and after a repoint no such claim has been earned. That distinction is the
@@ -11140,7 +11158,7 @@ schema-shaping omissions. Resolved here so the first migration does not need ame
 
 ### 18.1 Contradiction — read-only mounts vs. trash
 
-§12 mounts media roots `:ro`; §10 moves deleted files to `/data/trash`. Both cannot be true.
+§12 mounts media roots `:ro`; §10 deletes files from them. Both cannot be true.
 
 Resolution: **`MediaRoot.writable`**, plus a hard narrowing of what "writable" permits.
 
@@ -11168,20 +11186,20 @@ decision.
 
 Because several people can now delete, deletion needs an audit trail and an undo:
 
-- **TrashEntry** — `id, mediaId, rootId, relPath, bytes, deletedById, deletedAt, trashPath,
+- **TrashEntry** — `id, mediaId, rootId, relPath, bytes, deletedById, deletedAt,
 restoredAt, purgeAfter`. Admins see who deleted what and can restore until purge. This
   section originally scoped restore to the _file_; §10 extends it to the catalog entry, which
   is where the retention window and the `'trashed'` file state come from.
-- `/data` and `/media` are different volumes, so `rename()` across them fails with `EXDEV`.
-  Trashing is therefore **copy + fsync + unlink**, which for a 10 GB file is slow and runs as
-  a job with progress, never in a request handler.
-- **The app's own deletions do not wake the watcher** (2026-10-09). The trash job records the
-  removal in the catalogue as it goes, so it tells the watcher (`expectRemoval`) and the event
+- **Trashing leaves the file where it is; the purge unlinks it** (2026-11-13, §10). It used to
+  be copy + fsync + unlink into `/data/trash`, because `/data` and `/media` are separate mounts
+  and `rename()` across them fails with `EXDEV`. On the NAS both are one volume, so that copy
+  freed nothing and doubled the I/O of every deletion. The unlink runs in a worker job, never
+  in a request handler.
+- **The app's own deletions do not wake the watcher** (2026-10-09). The trash jobs record the
+  removal in the catalogue as they go, so it tells the watcher (`expectRemoval`) and the event
   queues nothing. Before, each removed file queued a scan of its directory: deleting 120 videos
   (45 GB) at the top of a 13k-item library was 120 full walks, on the same four disks the copies
   were saturating, and the web process stalled behind its own reads for minutes at a time.
-- Free space on `/data` is checked before trashing, or cleaning up duplicates fills the
-  volume holding the database.
 - Purge and restore are admin-only even though deletion is not.
 
 ### 18.2 Identifiers

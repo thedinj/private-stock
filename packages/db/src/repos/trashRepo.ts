@@ -19,7 +19,12 @@ export interface TrashEntryRow {
     fileId: string | null;
     rootId: string;
     relPath: string;
-    trashRelPath: string;
+    /**
+     * Where the bytes went in `dataDir/trash`, with `movedAt` beside it, for an entry made while
+     * trashing still copied files into the bin. Null since 2026-11-13: the file stays at its
+     * path until the purge unlinks it there (§10).
+     */
+    trashRelPath: string | null;
     bytes: number;
     deletedById: string;
     deletedAt: string;
@@ -40,7 +45,6 @@ export interface CreateTrashEntryInput {
     fileId: string;
     rootId: string;
     relPath: string;
-    trashRelPath: string;
     bytes: number;
     deletedById: string;
     retentionDays: number;
@@ -55,8 +59,8 @@ export const findById = (id: string): TrashEntryRow | undefined =>
  * Records the deletion and takes the item out of the library, in one transaction.
  *
  * Both halves or neither. A TrashEntry without the state change leaves an item visible that
- * the app believes it deleted, and the state change without the entry leaves bytes in
- * /data/trash that nothing will ever purge or restore — an orphan that shows up only as disk
+ * the app believes it deleted, and the state change without the entry leaves a file hidden in
+ * its library that nothing will ever purge or restore — an orphan that shows up only as disk
  * quietly disappearing.
  *
  * The state change is all the hiding that is needed: `Media.listable` is derived by trigger
@@ -78,16 +82,15 @@ export const create = (input: CreateTrashEntryInput): TrashEntryRow =>
 
             db.prepare(
                 `INSERT INTO "TrashEntry"
-                ("id", "mediaId", "fileId", "rootId", "relPath", "trashRelPath", "bytes",
+                ("id", "mediaId", "fileId", "rootId", "relPath", "bytes",
                  "deletedById", "purgeAfter", "twinFileId")
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?), ?)`
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', ?), ?)`
             ).run(
                 id,
                 input.mediaId,
                 input.fileId,
                 input.rootId,
                 input.relPath,
-                input.trashRelPath,
                 input.bytes,
                 input.deletedById,
                 `+${input.retentionDays} days`,
@@ -112,9 +115,9 @@ const BIN_KINDS = `('trash', 'restore', 'purge')`;
  * Stops the processing queued or running against an item that has just been trashed.
  *
  * Nothing else would. The backfill already ignores unlisted items, but a probe, sprite or
- * transcode queued before the delete still ran: before the move it spent the NAS on an item in
- * the bin, and after it failed on the missing file — three times each, with every failure
- * counted against the item's stages, so a restored item came back settled as unprocessable.
+ * transcode queued before the delete still ran: it spent the NAS on an item in the bin, and
+ * once the file was gone it failed — three times each, with every failure counted against the
+ * item's stages, so a restored item came back settled as unprocessable.
  *
  * Pending rows are deleted rather than cancelled. Nothing reads a job that never started, and a
  * `cancelled` row is not neutral: `settledMediaIds` treats it as somebody deciding the item
@@ -216,10 +219,11 @@ export const listPending = (rootIds: string[], limit: number, offset: number): T
         .all(JSON.stringify(rootIds), limit, offset) as TrashListRow[];
 
 /**
- * Bytes the bin is holding on /data, which is what decides whether to purge early.
+ * Bytes the bin is holding, which is what decides whether to purge early. They are still in
+ * the libraries, at their own paths, until the purge unlinks them (§10).
  *
- * Not an entry with a twin (§10e): its bytes are deleted outright, never copied into the bin,
- * so counting them would put a figure on the trash page that emptying it could not free.
+ * Not an entry with a twin (§10e): its bytes are deleted outright, never held by the bin, so
+ * counting them would put a figure on the trash page that emptying it could not free.
  */
 export const heldBytes = (rootIds: string[]): number =>
     (
@@ -230,28 +234,6 @@ export const heldBytes = (rootIds: string[]): number =>
                     AND "rootId" IN (SELECT value FROM json_each(?))`
             )
             .get(JSON.stringify(rootIds)) as { n: number }
-    ).n;
-
-/**
- * Bytes the bin owes /data: entries accepted whose files have not been copied across yet.
- *
- * What the free-space check has to add to the file it is asked about. The volume's free space
- * only shrinks once a move lands, so a bulk deletion that checked each file against it alone
- * would pass every one — two hundred 3 GB copies against 50 GB free — and then fill the volume
- * holding the database while the queue drained. A move half-way through is counted in full as
- * well as in what it has already written, which errs towards refusing, the safe side.
- *
- * An entry with a twin owes nothing: its original is deleted outright (§10e).
- */
-export const unmovedBytes = (): number =>
-    (
-        db
-            .prepare(
-                `SELECT COALESCE(sum("bytes"), 0) AS n FROM "TrashEntry"
-                  WHERE "movedAt" IS NULL AND "restoredAt" IS NULL AND "purgedAt" IS NULL
-                    AND "twinFileId" IS NULL`
-            )
-            .get() as { n: number }
     ).n;
 
 export const countPending = (rootIds: string[]): number =>
@@ -338,9 +320,9 @@ export const markRestored = (id: string): void => {
  * it revives the file, rather than leaving the contradiction for the destructive step to
  * discover.
  *
- * Whether the file really is back is `mediaFileRepo.upsertSeen`'s decision, not this one's: an
- * original still waiting for its move is at the old path too, and only that function has what
- * it takes to tell the two apart. Call this only when it reports `revivedFromTrash`.
+ * Whether the file really is back is `mediaFileRepo.upsertSeen`'s decision, not this one's: a
+ * trashed file stays at its old path until purge, and only that function has what it takes to
+ * tell the two apart. Call this only when it reports `revivedFromTrash`.
  */
 export const markRestoredByFile = (fileId: string): boolean =>
     db
@@ -411,7 +393,8 @@ export const purge = (id: string): void => {
 };
 
 /**
- * Queues the byte movement for an entry.
+ * Queues the file work for an entry: an identical copy's outright delete, a restore, or a
+ * purge.
  *
  * The entry id rides in `payloadJson` because the queue deduplicates on
  * (kind, mediaId, fileId) and those are not enough on their own: a file trashed, restored and
@@ -419,15 +402,15 @@ export const purge = (id: string): void => {
  * on.
  *
  * Priority 30 puts these ahead of ordinary processing. Someone is waiting, the work is I/O
- * rather than CPU, and a deletion that visibly has not happened yet is the kind of thing
+ * rather than CPU, and a restore that visibly has not happened yet is the kind of thing
  * people click twice.
  *
  * Refusing quietly is deliberate, and there are two ways it happens: this entry already has a
  * live job, or the queue's own unique index already holds one for this file. The second is
- * the interesting one — a file trashed, restored and trashed again while the first move is
- * still queued — and it must not turn a delete request into an error. `sweepUnmovedTrash`
- * picks the entry up once the queue is clear, which is also what recovers a move lost to a
- * killed container.
+ * the interesting one — a file trashed, restored and trashed again while the first job is
+ * still queued — and it must not turn a request into an error. `sweepOwedOutrightDeletes`
+ * picks an identical copy's entry up once the queue is clear, which is also what recovers a
+ * delete lost to a killed container; the purge sweep does the same for a purge.
  */
 export const enqueueMove = (
     kind: "trash" | "restore" | "purge",
@@ -456,24 +439,20 @@ export const enqueueMove = (
     );
 };
 
-/** The bytes are in the bin; the entry is settled until someone restores or purges it. */
-export const markMoved = (id: string): void => {
-    db.prepare(`UPDATE "TrashEntry" SET "movedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`).run(id);
-};
-
 /**
- * Open entries whose bytes have not moved yet.
+ * Open entries for identical copies (§10e) whose outright delete has not happened.
  *
- * The self-healing half of trashing. A move can be lost — a killed container, or an enqueue
+ * The self-healing half of that delete. Its job can be lost — a killed container, or an enqueue
  * the queue refused because another job for that file was still live — and the entry is the
- * only record that the file is still sitting in a media root the app believes it emptied.
- * Nothing else would ever notice.
+ * only record that the file is still sitting in a media root, hidden from the library and out of
+ * the bin's list. Nothing else would ever notice. An ordinary entry needs no job until its
+ * purge, which the expiry sweep queues.
  */
-export const listAwaitingMove = (limit: number): TrashEntryRow[] =>
+export const listOwedOutrightDeletes = (limit: number): TrashEntryRow[] =>
     db
         .prepare(
             `SELECT t.* FROM "TrashEntry" t
-              WHERE t."movedAt" IS NULL
+              WHERE t."twinFileId" IS NOT NULL
                 AND t."restoredAt" IS NULL AND t."purgedAt" IS NULL
                 AND NOT EXISTS (
                     SELECT 1 FROM "Job" j
@@ -554,9 +533,8 @@ export const findIdenticalActiveFile = (
  * The entry becomes an ordinary one after all (§10e).
  *
  * The trash job's way out when the twin can no longer vouch for the bytes -- changed on disk,
- * or gone -- so deleting the original outright could lose the content. It is copied into the
- * bin instead, and from here it is listed, counted and restorable like any other entry.
- * Cleared before the copy, so the bin's accounting counts the bytes it is about to receive.
+ * or gone -- so deleting the original outright could lose the content. The file stays at its
+ * path instead, and from here it is listed, counted and restorable like any other entry.
  */
 export const clearTwin = (id: string): void => {
     db.prepare(`UPDATE "TrashEntry" SET "twinFileId" = NULL WHERE "id" = ?`).run(id);
@@ -564,21 +542,17 @@ export const clearTwin = (id: string): void => {
 
 export type OpenEntryRow = Pick<
     TrashEntryRow,
-    "id" | "mediaId" | "fileId" | "movedAt" | "bytes" | "twinFileId"
+    "id" | "mediaId" | "fileId" | "bytes" | "twinFileId"
 >;
 
 /**
  * Every open entry in the bin, oldest first, for emptying it at once. Not an identical copy's
  * (§10e), which is deleted by its own job and was never the bin's to empty.
- *
- * `movedAt` comes back because an entry whose original is still in the media root must not be
- * purged: that would delete the catalogue row and leave the file for the next scan to adopt as
- * something new. The caller leaves those for their move to finish.
  */
 export const listOpen = (rootIds: string[]): OpenEntryRow[] =>
     db
         .prepare(
-            `SELECT "id", "mediaId", "fileId", "movedAt", "bytes", "twinFileId"
+            `SELECT "id", "mediaId", "fileId", "bytes", "twinFileId"
                FROM "TrashEntry"
               WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL AND "twinFileId" IS NULL
                 AND "rootId" IN (SELECT value FROM json_each(?))

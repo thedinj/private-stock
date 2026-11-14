@@ -250,7 +250,7 @@ export const startHeartbeat = (db: Db, jobId: string): JobLifetime => {
     };
 };
 
-/** The jobs whose subject is *meant* to be in the bin: they move its bytes (§10). */
+/** The jobs whose subject is *meant* to be in the bin: they act on its file (§10). */
 const BIN_KINDS = new Set(["trash", "restore", "purge"]);
 
 /**
@@ -259,7 +259,8 @@ const BIN_KINDS = new Set(["trash", "restore", "purge"]);
  * Deleted outright (an identical copy, §10e, is purged seconds after it is trashed), or in the
  * bin. Trashing deletes the item's queued work and cancels its running work, but a job can
  * still reach a handler afterwards -- enqueued in between by a scan or a stage that finished, or
- * claimed in the instant before the cancel landed -- and then fails on a file that is not there.
+ * claimed in the instant before the cancel landed -- and then spends the NAS on an item in the
+ * bin, or fails on a file its purge has taken.
  * Counted as a failure it is retried with backoff, dead-lettered, and recorded against a stage
  * of an item that no longer exists.
  *

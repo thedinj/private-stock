@@ -78,7 +78,6 @@ const toItem = (row: stageRepo.SettledFailureRow): UnreadableItem => ({
     corrupt: row.detail !== null && describesUnreadableSource(row.detail),
     failedAt: row.at,
     writable: row.writable === 1,
-    moving: row.moving === 1,
 });
 
 export const listUnreadable = (query: UnreadableQuery, auth: AuthContext): UnreadablePage => {
@@ -106,10 +105,6 @@ export const listUnreadable = (query: UnreadableQuery, auth: AuthContext): Unrea
  * Only those -- the selection is re-read with the list's own rules, so an id for an item that
  * was restored, purged, or never unreadable is passed over rather than trusted. The rest of
  * the bin keeps its window; this is not a second "empty trash".
- *
- * **An entry whose move has not finished is left**, as `emptyTrash` leaves one: its original is
- * still in the media root, and purging it would delete the catalogue row and leave the file
- * for the next scan to adopt as something new. Those are counted as waiting.
  */
 export const purgeUnreadable = (
     input: PurgeUnreadableInput,
@@ -125,12 +120,10 @@ export const purgeUnreadable = (
     );
 
     let queued = 0;
-    let waiting = 0;
     let freedBytes = 0;
 
     for (const row of rows) {
-        if (row.moving === 1 || !row.entryId) {
-            waiting += 1;
+        if (!row.entryId) {
             continue;
         }
 
@@ -139,5 +132,5 @@ export const purgeUnreadable = (
         freedBytes += row.bytes;
     }
 
-    return { queued, waiting, freedBytes };
+    return { queued, freedBytes };
 };

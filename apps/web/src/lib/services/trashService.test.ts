@@ -20,6 +20,7 @@ let entries: string[] = [];
 let jobs: string[] = [];
 let changes: { entityId: string; op: string }[] = [];
 let entry: Record<string, unknown> | undefined;
+let twin: string | null = "f-twin";
 
 vi.mock("@private-stock/db", () => ({
     isBusyError: (error: unknown) => (error as { code?: string } | null)?.code === "SQLITE_BUSY",
@@ -43,8 +44,7 @@ vi.mock("@private-stock/db", () => ({
     mediaRepo: { findDetail: () => ({}) },
     settingRepo: { get: (_key: string, fallback: unknown) => fallback },
     trashRepo: {
-        findIdenticalActiveFile: () => "f-twin",
-        unmovedBytes: () => 0,
+        findIdenticalActiveFile: () => twin,
         create: (input: { mediaId: string }) => {
             createAttempts += 1;
 
@@ -60,11 +60,6 @@ vi.mock("@private-stock/db", () => ({
         enqueueMove: (_kind: string, entryId: string) => jobs.push(entryId),
         findById: () => entry,
     },
-}));
-
-vi.mock("@private-stock/core/server", () => ({
-    loadConfig: () => ({ dataDir: "/data" }),
-    freeBytes: async () => null,
 }));
 
 vi.mock("./artService", () => ({ coverUrl: () => null }));
@@ -101,6 +96,7 @@ beforeEach(() => {
     jobs = [];
     changes = [];
     entry = undefined;
+    twin = "f-twin";
 });
 
 /** Runs a trash to completion, letting the backoff timers fire. */
@@ -134,6 +130,16 @@ describe("trashing while the database is busy", () => {
         expect(createAttempts).toBe(3);
         expect(entries).toEqual(["m1"]);
         expect(jobs).toEqual(["e-m1"]);
+    });
+
+    /** Its file stays at its path until purge (§10): the entry is the whole of it. */
+    it("queues no job for an item without an identical copy", async () => {
+        twin = null;
+
+        await settle(trashMedia("m1", auth));
+
+        expect(entries).toEqual(["m1"]);
+        expect(jobs).toEqual([]);
     });
 
     it("waits out a busy merge too, which is safe to repeat", async () => {
@@ -170,28 +176,17 @@ describe("purging one entry", () => {
 
     /** The bin is the room's own (§21): an entry from another room's library is not found. */
     it("does not find an entry in another room's library", () => {
-        entry = { ...open, rootId: "elsewhere", movedAt: "2026-10-01 00:00:00" };
+        entry = { ...open, rootId: "elsewhere", movedAt: null };
 
         expect(() => purgeEntry("e1", auth)).toThrow(/not found/);
         expect(jobs).toEqual([]);
     });
 
     it("queues the purge of an entry that is in the bin", () => {
-        entry = { ...open, movedAt: "2026-10-01 00:00:00" };
+        entry = { ...open, movedAt: null };
 
         purgeEntry("e1", auth);
 
         expect(jobs).toEqual(["e1"]);
-    });
-
-    /**
-     * The guard emptying the bin already had. The original is still in the media root, and
-     * purging now would delete the catalogue row and leave the file for the next scan to adopt.
-     */
-    it("refuses an entry whose move has not finished", () => {
-        entry = { ...open, movedAt: null };
-
-        expect(() => purgeEntry("e1", auth)).toThrow(/still being moved/);
-        expect(jobs).toEqual([]);
     });
 });

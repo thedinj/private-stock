@@ -83,7 +83,8 @@ const walk = async (root: string, prefix = ""): Promise<string[]> => {
  *    directory in the value: `"art/19/<id>/cover.webp"`. Every consumer resolves them with
  *    `path.resolve(config.dataDir, relPath)`.
  *  - `TrashEntry.trashRelPath` is **trash-relative** and carries no prefix, because the trash
- *    job resolves it against `dataPaths(config).trash`.
+ *    jobs resolve it against `dataPaths(config).trash`. Null for an entry whose file stayed at
+ *    its path, which is every one since 2026-11-13.
  *
  * The walk yields paths relative to the directory it walked, so art and variants need their
  * prefix put back before the comparison means anything.
@@ -599,6 +600,9 @@ export const runOrphanSweep = async (): Promise<void> => {
     /**
      * Trashed bytes no open entry is holding.
      *
+     * Only entries from before 2026-11-13 hold any: trashing has since left the file at its
+     * path (§10), so once those drain this directory stays empty and the sweep finds nothing.
+     *
      * Only reachable through an open `TrashEntry`, so any other file in the bin can never be
      * restored or purged by anything else — it is disk that would be lost for good. One way to
      * get one is forgetting a library, which cascades its trash entries away and leaves the
@@ -616,7 +620,8 @@ export const runOrphanSweep = async (): Promise<void> => {
                 db
                     .prepare(
                         `SELECT "trashRelPath" FROM "TrashEntry"
-                          WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL`
+                          WHERE "restoredAt" IS NULL AND "purgedAt" IS NULL
+                            AND "trashRelPath" IS NOT NULL`
                     )
                     .all() as { trashRelPath: string }[]
             ).flatMap((row) => {

@@ -65,7 +65,7 @@ interface UnreadableSheetProps {
  * read rather than inviting a deletion.
  *
  * A row that cannot be acted on has no tick rather than a disabled one: a read-only library in
- * the library list, a file still being copied into the bin in the trash.
+ * the library list.
  */
 export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
     const { hasScope } = useAuth();
@@ -87,7 +87,7 @@ export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
      */
     const canAct = tab === "trash" || hasScope("delete");
     const actionable = (item: UnreadableItem): boolean =>
-        canAct && (tab === "library" ? item.writable : !item.moving);
+        canAct && (tab !== "library" || item.writable);
 
     // Only what is still on screen: a row that left the list since it was ticked is not acted on.
     const tickedItems = rows.filter((item) => ticked.has(item.mediaId) && actionable(item));
@@ -126,11 +126,8 @@ export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
                     done(
                         `${plural(result.queued, "file is", "files are")} being deleted for good` +
                             (result.freedBytes > 0
-                                ? `; ${formatBytes(result.freedBytes)} goes back to the data volume as the purges run.`
-                                : ".") +
-                            (result.waiting > 0
-                                ? ` ${plural(result.waiting, "was", "were")} still being moved into the trash and left.`
-                                : "")
+                                ? `; ${formatBytes(result.freedBytes)} comes back as the purges run.`
+                                : ".")
                     ),
                 onError: failed,
             });
@@ -145,7 +142,7 @@ export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
                 <Text size="sm" c="dimmed">
                     {tab === "library"
                         ? `${plural(summary.count, "file", "files")} the probe cannot read, ${formatBytes(summary.bytes)} on the media volume. Largest first.`
-                        : `${plural(summary.count, "unreadable file", "unreadable files")} in the trash, ${formatBytes(summary.bytes)} held on the data volume until purged.`}
+                        : `${plural(summary.count, "unreadable file", "unreadable files")} in the trash, ${formatBytes(summary.bytes)} held until purged.`}
                 </Text>
             )}
 
@@ -275,12 +272,6 @@ export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
                                             </Tooltip>
                                         )}
 
-                                        {tab === "trash" && item.moving && (
-                                            <Badge color="brass" variant="light">
-                                                Moving to the trash
-                                            </Badge>
-                                        )}
-
                                         {tab === "library" && !item.corrupt && (
                                             <Button
                                                 size="compact-sm"
@@ -352,17 +343,16 @@ export const UnreadableSheet: React.FC<UnreadableSheetProps> = ({ tab }) => {
                     {tab === "library" ? (
                         <Text size="sm">
                             {plural(tickedItems.length, "file", "files")} (
-                            {formatBytes(tickedBytes)}) will be moved off the media volume into the
-                            trash on the data volume. The media volume gets the space back now; the
-                            data volume holds it until the files are purged, which you can do from
-                            the trash. Until then they can be restored.
+                            {formatBytes(tickedBytes)}) will be moved to the trash. They keep their
+                            space until they are purged, which you can do from the trash. Until then
+                            they can be restored.
                         </Text>
                     ) : (
                         <>
                             <Text size="sm">
                                 {plural(tickedItems.length, "file", "files")} will be removed from
                                 disk with everything recorded about them, and{" "}
-                                {formatBytes(tickedBytes)} goes back to the data volume.
+                                {formatBytes(tickedBytes)} comes back.
                             </Text>
                             <Text size="sm" fw={600}>
                                 Nothing can be restored afterwards.

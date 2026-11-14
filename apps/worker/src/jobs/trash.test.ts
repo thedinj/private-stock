@@ -13,12 +13,13 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Deleting an identical copy outright (§10e).
+ * The bin's jobs (§10, §10e).
  *
- * This is the one place an original is unlinked with no copy of it in the bin, so every test
- * here asks the same question from a different side: does the same content survive somewhere?
- * The twin has to be present *and* unchanged since it was hashed before the original goes; when
- * it is not, the entry must fall back to an ordinary trash, bytes and all.
+ * A trashed file stays at its path until purge, so the questions here are about the two
+ * moments a file is unlinked: an identical copy deleted outright, which must find the same
+ * content surviving somewhere first, and a purge, which must find the file it was asked to
+ * destroy. Entries from before 2026-11-13 still have their bytes in `dataDir/trash`, and their
+ * restore and purge act there.
  */
 
 interface FileRow {
@@ -36,7 +37,7 @@ interface EntryRow {
     fileId: string | null;
     rootId: string;
     relPath: string;
-    trashRelPath: string;
+    trashRelPath: string | null;
     bytes: number;
     deletedAt: string;
     movedAt: string | null;
@@ -63,11 +64,12 @@ vi.mock("@private-stock/db", () => ({
             Object.values(entries).find(
                 (entry) => entry.fileId === fileId && !entry.restoredAt && !entry.purgedAt
             ),
-        markMoved: (id: string) => {
-            entries[id]!.movedAt = "now";
-        },
+        fileStateOf: (fileId: string) => files[fileId]?.state ?? null,
         markRestored: (id: string) => {
-            entries[id]!.restoredAt = "now";
+            const entry = entries[id]!;
+
+            entry.restoredAt = "now";
+            if (entry.fileId) files[entry.fileId]!.state = "active";
         },
         clearTwin: (id: string) => {
             entries[id]!.twinFileId = null;
@@ -81,7 +83,7 @@ vi.mock("@private-stock/db", () => ({
     },
 }));
 
-const { runTrash } = await import("./trash.js");
+const { runPurge, runRestore, runTrash } = await import("./trash.js");
 
 const job = (entryId: string) =>
     ({ payloadJson: JSON.stringify({ entryId }) }) as Parameters<typeof runTrash>[0];
@@ -117,7 +119,7 @@ const givenEntry = (fileId: string, twinFileId: string | null): EntryRow => {
         fileId,
         rootId: "root",
         relPath: file.relPath,
-        trashRelPath: `2026-09-30/${fileId}.mp4`,
+        trashRelPath: null,
         bytes: file.size,
         deletedAt: "2026-09-30 00:00:00",
         movedAt: null,
@@ -131,7 +133,22 @@ const givenEntry = (fileId: string, twinFileId: string | null): EntryRow => {
     return entry;
 };
 
-const inBin = (entry: EntryRow) => path.join(dataDir, "trash", entry.trashRelPath);
+/** An entry made before 2026-11-13: its bytes were copied into the bin and the original went. */
+const givenMovedEntry = (fileId: string): { entry: EntryRow; binPath: string } => {
+    const entry = givenEntry(fileId, null);
+    const original = path.join(libraryDir, entry.relPath);
+
+    entry.trashRelPath = `2026-09-30/${fileId}.mp4`;
+    entry.movedAt = "2026-09-30 00:00:01";
+
+    const binPath = path.join(dataDir, "trash", entry.trashRelPath);
+
+    mkdirSync(path.dirname(binPath), { recursive: true });
+    writeFileSync(binPath, readFileSync(original));
+    rmSync(original);
+
+    return { entry, binPath };
+};
 
 beforeEach(() => {
     dataDir = mkdtempSync(path.join(tmpdir(), "ps-trash-data-"));
@@ -148,8 +165,20 @@ afterEach(() => {
     rmSync(libraryDir, { recursive: true, force: true });
 });
 
+describe("trashing", () => {
+    it("leaves an ordinary entry's file where it is", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        await runTrash(job(entry.id));
+
+        expect(readFileSync(original, "utf8")).toBe("bytes");
+        expect(entry.purgedAt).toBeNull();
+    });
+});
+
 describe("deleting an identical copy", () => {
-    it("deletes the original and purges the item, with nothing in the bin", async () => {
+    it("deletes the original and purges the item", async () => {
         const original = givenFile("dup", "same bytes");
         const twin = givenFile("keep", "same bytes");
         const entry = givenEntry("dup", "keep");
@@ -157,13 +186,12 @@ describe("deleting an identical copy", () => {
         await runTrash(job(entry.id));
 
         expect(existsSync(original)).toBe(false);
-        expect(existsSync(inBin(entry))).toBe(false);
         expect(readFileSync(twin, "utf8")).toBe("same bytes");
         expect(entry.purgedAt).not.toBeNull();
         expect(files.dup).toBeUndefined();
     });
 
-    it("is trashed like any other when the twin has changed since it was hashed", async () => {
+    it("stays in the bin like any other when the twin has changed since it was hashed", async () => {
         const original = givenFile("dup", "same bytes");
         const twin = givenFile("keep", "same bytes");
         const entry = givenEntry("dup", "keep");
@@ -174,12 +202,11 @@ describe("deleting an identical copy", () => {
 
         expect(entry.twinFileId).toBeNull();
         expect(entry.purgedAt).toBeNull();
-        expect(readFileSync(inBin(entry), "utf8")).toBe("same bytes");
-        expect(existsSync(original)).toBe(false);
+        expect(readFileSync(original, "utf8")).toBe("same bytes");
     });
 
-    it("is trashed like any other when the twin has gone", async () => {
-        givenFile("dup", "same bytes");
+    it("stays in the bin like any other when the twin has gone", async () => {
+        const original = givenFile("dup", "same bytes");
         const twin = givenFile("keep", "same bytes");
         const entry = givenEntry("dup", "keep");
 
@@ -189,41 +216,133 @@ describe("deleting an identical copy", () => {
 
         expect(entry.twinFileId).toBeNull();
         expect(entry.purgedAt).toBeNull();
-        expect(readFileSync(inBin(entry), "utf8")).toBe("same bytes");
+        expect(readFileSync(original, "utf8")).toBe("same bytes");
     });
 
-    /** The whole-group case (§10d): the last copy keeps the content in the bin. */
+    /** The whole-group case (§10d): the last copy keeps the content, at its own path. */
     it("trusts a twin that is in the bin with its own bytes", async () => {
         const original = givenFile("dup", "same bytes");
-        givenFile("keep", "same bytes");
-        const keepEntry = givenEntry("keep", null);
-
-        await runTrash(job(keepEntry.id));
-
+        const kept = givenFile("keep", "same bytes");
+        givenEntry("keep", null);
         const entry = givenEntry("dup", "keep");
 
         await runTrash(job(entry.id));
 
         expect(existsSync(original)).toBe(false);
-        expect(existsSync(inBin(entry))).toBe(false);
         expect(entry.purgedAt).not.toBeNull();
-        expect(readFileSync(inBin(keepEntry), "utf8")).toBe("same bytes");
+        expect(readFileSync(kept, "utf8")).toBe("same bytes");
+    });
+
+    it("trusts a twin whose bytes were moved into the old bin", async () => {
+        const original = givenFile("dup", "same bytes");
+        givenFile("keep", "same bytes");
+        givenMovedEntry("keep");
+        const entry = givenEntry("dup", "keep");
+
+        await runTrash(job(entry.id));
+
+        expect(existsSync(original)).toBe(false);
+        expect(entry.purgedAt).not.toBeNull();
     });
 
     it("does not trust a twin that was itself deleted outright", async () => {
-        givenFile("dup", "same bytes");
+        const original = givenFile("dup", "same bytes");
         givenFile("gone", "same bytes");
         givenFile("keep", "same bytes");
-        const goneEntry = givenEntry("gone", "keep");
+        givenEntry("gone", "keep");
         const entry = givenEntry("dup", "gone");
 
         // "gone" was deleted against "keep", which then vanished too: nothing vouches now.
-        goneEntry.movedAt = "now";
         rmSync(path.join(libraryDir, "gone.mp4"));
 
         await runTrash(job(entry.id));
 
         expect(entry.twinFileId).toBeNull();
-        expect(readFileSync(inBin(entry), "utf8")).toBe("same bytes");
+        expect(readFileSync(original, "utf8")).toBe("same bytes");
+    });
+});
+
+describe("purging", () => {
+    it("unlinks the file at its path and purges the item", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        await runPurge(job(entry.id));
+
+        expect(existsSync(original)).toBe(false);
+        expect(entry.purgedAt).not.toBeNull();
+    });
+
+    it("refuses a file that is not the one that was trashed", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        writeFileSync(original, "somebody else's file, put here since");
+
+        await expect(runPurge(job(entry.id))).rejects.toThrow(/not the one that was catalogued/);
+
+        expect(readFileSync(original, "utf8")).toBe("somebody else's file, put here since");
+        expect(entry.purgedAt).toBeNull();
+    });
+
+    it("refuses a file the scan has revived", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        files.one!.state = "active";
+
+        await expect(runPurge(job(entry.id))).rejects.toThrow(/not trashed/);
+
+        expect(existsSync(original)).toBe(true);
+    });
+
+    it("purges a file that has already gone", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        rmSync(original);
+
+        await runPurge(job(entry.id));
+
+        expect(entry.purgedAt).not.toBeNull();
+    });
+
+    it("removes an old entry's bytes from the bin, not the library path", async () => {
+        givenFile("one", "bytes");
+        const { entry, binPath } = givenMovedEntry("one");
+
+        // Something new at the old path since: it is not the entry's to delete.
+        const newcomer = path.join(libraryDir, entry.relPath);
+        writeFileSync(newcomer, "a different file");
+
+        await runPurge(job(entry.id));
+
+        expect(existsSync(binPath)).toBe(false);
+        expect(readFileSync(newcomer, "utf8")).toBe("a different file");
+        expect(entry.purgedAt).not.toBeNull();
+    });
+});
+
+describe("restoring", () => {
+    it("returns the item without touching its file", async () => {
+        const original = givenFile("one", "bytes");
+        const entry = givenEntry("one", null);
+
+        await runRestore(job(entry.id));
+
+        expect(entry.restoredAt).not.toBeNull();
+        expect(files.one!.state).toBe("active");
+        expect(readFileSync(original, "utf8")).toBe("bytes");
+    });
+
+    it("copies an old entry's bytes back from the bin first", async () => {
+        givenFile("one", "bytes");
+        const { entry, binPath } = givenMovedEntry("one");
+
+        await runRestore(job(entry.id));
+
+        expect(readFileSync(path.join(libraryDir, entry.relPath), "utf8")).toBe("bytes");
+        expect(existsSync(binPath)).toBe(false);
+        expect(entry.restoredAt).not.toBeNull();
     });
 });

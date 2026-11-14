@@ -277,28 +277,3 @@ export const VIDEO_EXTENSIONS = [
 /** Files that attach to a sibling media item rather than becoming one (§18.5). */
 export const SUBTITLE_EXTENSIONS = [".srt", ".ass", ".ssa", ".vtt", ".sub"] as const;
 export const COMPANION_EXTENSIONS = [...SUBTITLE_EXTENSIONS, ".nfo"] as const;
-
-/**
- * Where a trashed file lives, relative to the trash directory (§10).
- *
- * Dated so a person can find a deletion by when it happened, and prefixed with the entry id
- * so two files of the same name deleted on the same day cannot collide. The basename is kept
- * only because a bin full of bare uuids is useless to whoever has to search it.
- *
- * Lives here rather than beside the code that moves the bytes because both sides need it: the
- * web app writes the path into the entry, and the worker reads it back to find the file. Two
- * implementations of one naming scheme would drift into a bin whose contents cannot be found.
- *
- * The basename is rewritten rather than trusted. It comes from a media root, so it can hold
- * anything a filesystem allows, and this value becomes a path on a different volume.
- */
-export const trashRelPathFor = (entryId: string, relPath: string, at: Date): string => {
-    const date = at.toISOString().slice(0, 10);
-    const lastSeparator = Math.max(relPath.lastIndexOf("/"), relPath.lastIndexOf("\\"));
-    const base = relPath
-        .slice(lastSeparator + 1)
-        .replace(/[^\w.-]+/g, "_")
-        .slice(-100);
-
-    return `${date}/${entryId}-${base || "file"}`;
-};

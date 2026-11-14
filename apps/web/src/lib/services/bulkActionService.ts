@@ -229,10 +229,10 @@ export const applyBulkAction = async (
     /**
      * Trashing, one at a time and on purpose.
      *
-     * Each one copies bytes to `/data`, fsyncs and unlinks (§10), so there is no transaction
-     * that could cover the set — and batching them would only make a mid-run failure harder
-     * to describe. Sequential rather than concurrent because the free-space check each
-     * performs is only meaningful if the previous copy has already landed.
+     * Each one merges what was recorded about the item into a surviving copy and writes its own
+     * entry (§10, §10c), so there is no transaction that could cover the set — and batching
+     * them would only make a mid-run failure harder to describe. Sequential because each
+     * merge has to see the ones before it: a group deleted best-last hands everything on.
      */
     for (const mediaId of targets) {
         if (await attempt(mediaId, () => trashMedia(mediaId, auth), failed)) {

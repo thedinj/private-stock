@@ -177,10 +177,13 @@ The guards adapted to the switch automatically:
 
 **Deletion is the only write the app ever performs on a media root.** No renames, no moves,
 no in-place metadata, no re-encoding originals. Everything the app produces goes to
-`dataDir`. Deletion requires the `delete` scope _and_ a root flagged `writable`, moves the
-file to `dataDir/trash` (copy + fsync + unlink — `/data` and `/media` are different volumes,
-so `rename` fails with `EXDEV`), and records a `TrashEntry`. The one exception: a file with a
-byte-identical twin that stays bypasses the bin — deleted outright and purged, with no restore (§10e).
+`dataDir`. Deletion requires the `delete` scope _and_ a root flagged `writable`, hides the item
+and records a `TrashEntry`; **the file stays at its path** through the retention window, and
+the purge unlinks it there (§10). Nothing is copied: `/data` and `/media` are separate mounts
+(`rename` fails with `EXDEV`) but one volume on the NAS, so a copy freed nothing. Entries from
+before 2026-11-13 still have their bytes in `dataDir/trash` and are restored and purged from
+there. The one exception: a file with a byte-identical twin that stays bypasses the bin —
+deleted outright and purged, with no restore (§10e).
 
 Every path goes through `assertSafeRelativePath()` from `@private-stock/core`, including
 paths read back out of the database.

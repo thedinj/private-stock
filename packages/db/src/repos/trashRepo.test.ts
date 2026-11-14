@@ -65,12 +65,20 @@ const trash = (
         fileId,
         rootId: ROOT,
         relPath: `${mediaId}.mp4`,
-        trashRelPath: `2026-01-01/${mediaId}`,
         bytes: 1024,
         deletedById: USER,
         retentionDays,
         twinFileId,
     });
+
+/** An entry from before 2026-11-13, whose bytes were copied into `dataDir/trash` (§10). */
+const movedIntoOldBin = (entryId: string): void => {
+    db.prepare(
+        `UPDATE "TrashEntry"
+            SET "movedAt" = CURRENT_TIMESTAMP, "trashRelPath" = '2026-01-01/' || "id"
+          WHERE "id" = ?`
+    ).run(entryId);
+};
 
 /** A scan seeing `m1.mp4` exactly as `addMedia` catalogued it. */
 const sighting = {
@@ -220,7 +228,7 @@ describe("restoring", () => {
     it("closes the entry when the file reappears on its own", () => {
         const { fileId } = addMedia("m1");
         const entry = trash("m1", fileId);
-        trashRepo.markMoved(entry.id);
+        movedIntoOldBin(entry.id);
 
         const result = mediaFileRepo.upsertSeen({
             scanId: "scan-1",
@@ -238,13 +246,10 @@ describe("restoring", () => {
     });
 
     /**
-     * The race this guards against.
-     *
-     * Trashing hides the row at once and moves the bytes later, so for a while the original is
-     * still at its path. A scan that walked past it used to revive the row and close the entry,
-     * and the move job then did nothing: the deletion quietly undone.
+     * Trashing leaves the file at its path until purge, so every scan walks past it. Reading
+     * that as a file put back by hand would undo the deletion without anyone asking.
      */
-    it("does not revive a file whose move has not happened yet", () => {
+    it("does not revive a trashed file that is still at its path", () => {
         const { fileId } = addMedia("m1");
         trash("m1", fileId);
 
@@ -256,13 +261,13 @@ describe("restoring", () => {
     });
 
     /**
-     * The scan's `stat` came before the move copied and unlinked the file; its batch commits
-     * after. Looking again at commit time is what stops a stale sighting reviving the row.
+     * An entry from the old bin: the scan's `stat` came before the move copied and unlinked the
+     * file; its batch commits after. Looking again at commit time is what stops a stale sighting reviving the row.
      */
     it("does not revive a moved file from a sighting taken before it moved", () => {
         const { fileId } = addMedia("m1");
         const entry = trash("m1", fileId);
-        trashRepo.markMoved(entry.id);
+        movedIntoOldBin(entry.id);
 
         const result = mediaFileRepo.upsertSeen({ ...sighting, isOnDiskNow: () => false });
 
@@ -271,10 +276,10 @@ describe("restoring", () => {
     });
 
     /**
-     * What the move job's refusal asks for: "rescan the library and try again". Different
-     * bytes at the path are not the original waiting to move, so they come back as the item.
+     * What the purge's refusal asks for: "rescan the library and try again". Different bytes at
+     * the path are not the file that was trashed, so they come back as the item.
      */
-    it("revives an unmoved file whose bytes are no longer the ones catalogued", () => {
+    it("revives a trashed file whose bytes are no longer the ones catalogued", () => {
         const { fileId } = addMedia("m1");
         trash("m1", fileId);
 
@@ -405,7 +410,7 @@ describe("purging", () => {
     it("reports a revived file as no longer trashed, so the purge can refuse", () => {
         const { fileId } = addMedia("m1");
         const entry = trash("m1", fileId, 0);
-        trashRepo.markMoved(entry.id);
+        movedIntoOldBin(entry.id);
 
         mediaFileRepo.upsertSeen({
             scanId: "scan-1",
@@ -422,29 +427,6 @@ describe("purging", () => {
 });
 
 describe("the queue", () => {
-    /**
-     * What the free-space check adds to each file it is asked about. Free space only shrinks
-     * once a move lands, so a bulk resolve checked against it alone passes every file and then
-     * fills the volume holding the database.
-     */
-    it("counts the bytes accepted into the bin and not yet moved", () => {
-        const a = addMedia("m1");
-        const b = addMedia("m2");
-        const c = addMedia("m3");
-
-        const moved = trash("m1", a.fileId);
-        trash("m2", b.fileId);
-        const restored = trash("m3", c.fileId);
-
-        expect(trashRepo.unmovedBytes()).toBe(3 * 1024);
-
-        trashRepo.markMoved(moved.id);
-        trashRepo.markRestored(restored.id);
-
-        // Moved bytes are already off the free figure; restored ones are not going anywhere.
-        expect(trashRepo.unmovedBytes()).toBe(1024);
-    });
-
     it("does not queue the same move twice", () => {
         const { fileId } = addMedia("m1");
         const entry = trash("m1", fileId);
@@ -476,33 +458,33 @@ describe("the queue", () => {
         expect(() => trashRepo.enqueueMove("trash", second.id, "m1", fileId)).not.toThrow();
     });
 
-    it("finds the refused move again once the queue is clear", () => {
+    it("finds a refused outright delete again once the queue is clear", () => {
         const { fileId } = addMedia("m1");
-        const first = trash("m1", fileId);
+        const { fileId: twin } = addMedia("m2");
+        const first = trash("m1", fileId, 7, twin);
 
         trashRepo.enqueueMove("trash", first.id, "m1", fileId);
         trashRepo.markRestored(first.id);
 
-        const second = trash("m1", fileId);
+        const second = trash("m1", fileId, 7, twin);
         trashRepo.enqueueMove("trash", second.id, "m1", fileId);
 
         // Hidden from the sweep while the first job still holds the slot: queueing a second
-        // move for the same file is exactly what the queue refuses.
-        expect(trashRepo.listAwaitingMove(10)).toEqual([]);
+        // delete for the same file is exactly what the queue refuses.
+        expect(trashRepo.listOwedOutrightDeletes(10)).toEqual([]);
 
         db.prepare(`UPDATE "Job" SET "state" = 'done'`).run();
 
-        // And found the moment the slot is free, which is what stops the move being lost.
-        expect(trashRepo.listAwaitingMove(10).map((row) => row.id)).toEqual([second.id]);
+        // And found the moment the slot is free, which is what stops the delete being lost.
+        expect(trashRepo.listOwedOutrightDeletes(10).map((row) => row.id)).toEqual([second.id]);
     });
 
-    it("stops owing a move once the bytes are in the bin", () => {
+    /** Its file stays at its path until purge: there is nothing for a trash job to do. */
+    it("owes nothing for an ordinary entry", () => {
         const { fileId } = addMedia("m1");
-        const entry = trash("m1", fileId);
+        trash("m1", fileId);
 
-        trashRepo.markMoved(entry.id);
-
-        expect(trashRepo.listAwaitingMove(10)).toEqual([]);
+        expect(trashRepo.listOwedOutrightDeletes(10)).toEqual([]);
     });
 });
 
@@ -566,10 +548,10 @@ describe("identical copies (§10e)", () => {
     });
 
     /**
-     * The point of the feature: the bin holds no bytes for a copy it can restore from its twin,
-     * so neither the space the trash page reports nor the free-space check counts them.
+     * The point of the feature: the bin holds no bytes for a copy whose content survives in its
+     * twin, so the space the trash page reports does not count them.
      */
-    it("holds and owes no bytes for an entry with a twin", () => {
+    it("holds no bytes for an entry with a twin", () => {
         const { fileId: a } = addMedia("a");
         const { fileId: b } = addMedia("b");
         const { fileId: c } = addMedia("c");
@@ -578,7 +560,6 @@ describe("identical copies (§10e)", () => {
         trash("c", c);
 
         expect(trashRepo.heldBytes([ROOT])).toBe(1024);
-        expect(trashRepo.unmovedBytes()).toBe(1024);
     });
 
     it("counts the bytes again once the twin can no longer vouch for them", () => {
@@ -593,21 +574,20 @@ describe("identical copies (§10e)", () => {
 });
 
 describe("emptying the bin", () => {
-    it("lists every open entry, and says which have finished moving", () => {
+    it("lists every open entry, old bin or in place", () => {
         const { fileId: a } = addMedia("a");
         const { fileId: b } = addMedia("b");
         const { fileId: c } = addMedia("c");
         const moved = trash("a", a);
-        const waiting = trash("b", b);
+        const inPlace = trash("b", b);
         const restored = trash("c", c);
 
-        trashRepo.markMoved(moved.id);
+        movedIntoOldBin(moved.id);
         trashRepo.markRestored(restored.id);
 
         const open = trashRepo.listOpen([ROOT]);
 
-        expect(open.map((row) => row.id).sort()).toEqual([moved.id, waiting.id].sort());
-        expect(open.find((row) => row.id === waiting.id)?.movedAt).toBeNull();
+        expect(open.map((row) => row.id).sort()).toEqual([moved.id, inPlace.id].sort());
     });
 });
 
@@ -702,7 +682,7 @@ describe("a duplicate that comes back (§10e)", () => {
         const group = reviewedGroupOf("kept", "copy");
         const entry = trash("copy", fileId);
 
-        trashRepo.markMoved(entry.id);
+        movedIntoOldBin(entry.id);
         expect(reviewed(group)).toBe(1);
 
         trashRepo.markRestoredByFile(fileId);

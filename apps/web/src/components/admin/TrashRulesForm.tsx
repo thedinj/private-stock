@@ -9,7 +9,7 @@ import { SaveRow } from "./SaveRow";
 /**
  * How long a deleted item stays recoverable (§10). In the Trash queue's Rules drawer.
  *
- * Its bytes sit on the data volume for the whole window, so this is a disk commitment as well as
+ * A trashed file keeps its space for the whole window, so this is a disk commitment as well as
  * a grace period.
  */
 export const TrashRulesForm: React.FC = () => {
@@ -22,7 +22,7 @@ export const TrashRulesForm: React.FC = () => {
             <NumberInput
                 label="Keep deleted items for"
                 suffix=" days"
-                description="Their space on the data volume is held for as long. 0 purges on the next hourly sweep."
+                description="Their space is held for as long. 0 purges on the next hourly sweep."
                 min={0}
                 max={365}
                 value={trash?.retentionDays ?? 7}

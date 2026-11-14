@@ -14,7 +14,6 @@ import {
     SegmentedControl,
     Stack,
     Text,
-    Tooltip,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -144,14 +143,6 @@ const TrashRow: React.FC<{
                 </Group>
 
                 <Group gap="xs" wrap="nowrap">
-                    {entry.pending && (
-                        <Tooltip label="The file is still being moved into the trash">
-                            <Badge color="brass" variant="light">
-                                Moving
-                            </Badge>
-                        </Tooltip>
-                    )}
-
                     {/* The palette's own warning colours: oxblood for a clock that is nearly
                         out, oak for one that is not. Mantine's red and grey were the only
                         off-palette hues in the app. */}
@@ -222,8 +213,7 @@ const TrashQueue: React.FC = () => {
      *
      * One confirmation for the lot, stating the count, the space and that nothing comes back --
      * the same weight as deleting one item forever, because it is that decision taken for every
-     * item at once. What it reports afterwards is what was queued: purges are jobs, and an
-     * entry still being moved in is left for a later empty rather than orphaning its file.
+     * item at once. What it reports afterwards is what was queued: purges are jobs.
      */
     const [emptying, setEmptying] = useState(false);
     const empty = useMutation({
@@ -266,7 +256,7 @@ const TrashQueue: React.FC = () => {
             title="Trash"
             lede={
                 data && total > 0
-                    ? `${formatBytes(data.heldBytes ?? 0)} on the data volume, waiting to be purged or restored.`
+                    ? `${formatBytes(data.heldBytes ?? 0)} still in the libraries, waiting to be purged or restored.`
                     : undefined
             }
             actions={
@@ -336,8 +326,8 @@ const TrashQueue: React.FC = () => {
             />
 
             {/* What the last empty started. Purges run as jobs, so the list catches up as
-                they land; an entry still moving in was left, and saying so is what makes
-                "empty" not look broken when a few rows remain. */}
+                they land, and saying so is what makes "empty" not look broken when a few rows
+                remain for a moment. */}
             {empty.data && (
                 <Alert
                     color="brass"
@@ -347,9 +337,7 @@ const TrashQueue: React.FC = () => {
                     title={`${empty.data.queued.toLocaleString()} ${empty.data.queued === 1 ? "item is" : "items are"} being deleted for good`}
                 >
                     {empty.data.freedBytes > 0 &&
-                        `${formatBytes(empty.data.freedBytes)} goes back to the data volume as the purges run. `}
-                    {empty.data.waiting > 0 &&
-                        `${empty.data.waiting.toLocaleString()} ${empty.data.waiting === 1 ? "is" : "are"} still being moved into the trash and ${empty.data.waiting === 1 ? "was" : "were"} left; empty again once ${empty.data.waiting === 1 ? "it lands" : "they land"}.`}
+                        `${formatBytes(empty.data.freedBytes)} comes back as the purges run.`}
                 </Alert>
             )}
 
@@ -453,7 +441,7 @@ const TrashQueue: React.FC = () => {
                             : `All ${total.toLocaleString()} items in the trash will be removed from disk, with everything recorded about them`}{" "}
                         — tags, ratings, notes, clips and history.
                         {data && data.heldBytes > 0
-                            ? ` ${formatBytes(data.heldBytes)} goes back to the data volume.`
+                            ? ` ${formatBytes(data.heldBytes)} comes back.`
                             : ""}
                     </Text>
                     <Text size="sm" fw={600}>

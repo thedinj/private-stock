@@ -90,7 +90,7 @@ export interface UpsertFileInput {
     classification: "media" | "companion" | "ignored";
     /**
      * Whether the path is occupied at this moment, asked only of a trashed row whose bytes
-     * have already gone to the bin. See `hasComeBackFromTrash` for why the scan's own `stat`
+     * were moved into `dataDir/trash` (entries from before 2026-11-13). See `hasComeBackFromTrash` for why the scan's own `stat`
      * is not enough. Must be synchronous: it is called inside the batch's transaction.
      */
     isOnDiskNow?: () => boolean;
@@ -111,23 +111,22 @@ export interface UpsertResult {
 }
 
 /**
- * Whether a trashed file the scan has just seen is genuinely back, rather than not yet gone.
+ * Whether a trashed file the scan has just seen is genuinely back, rather than never gone.
  *
- * Trashing hides the row at once and moves the bytes later, in a job (§10). Until that job
- * lands, the file is still at its old path, and a scan walking past it used to read that as
- * somebody restoring it by hand: the row went back to `active`, the scanner closed the trash
- * entry, and the move job then found a restored entry and did nothing. The deletion was undone
- * without anyone asking, after its ratings and tags had already been merged away (§10c).
+ * Trashing hides the row and leaves the file at its path until purge (§10), so a scan walks
+ * past every file in the bin. Reading that as somebody restoring it by hand would undo the
+ * deletion without anyone asking, after its ratings and tags had already been merged away
+ * (§10c).
  *
- * So an entry whose bytes have not moved answers no — unless the file at the path is no longer
- * the one catalogued. That is the case the move job refuses to touch ("rescan the library and
- * try again"), and reviving the row is exactly the rescan it asks for: the new bytes come back
- * as the item, and the entry is closed rather than retried for ever. One whose bytes have moved still asks the
- * filesystem again, because the scan's `stat` came before this transaction: the move can have
- * copied and unlinked the file in between, and the stale sighting would then revive a row whose
- * file is in the bin. The worker is single-threaded and this runs synchronously, so `movedAt`
- * cannot be written while it runs, and it is only written after the unlink has completed —
- * which makes a fresh look at the path, taken here, the truth.
+ * So an entry whose bytes are at the path answers no — unless the file there is no longer the
+ * one catalogued. That is the case the purge refuses to touch ("rescan the library and try
+ * again"), and reviving the row is exactly the rescan it asks for: the new bytes come back as
+ * the item, and the entry is closed rather than retried for ever.
+ *
+ * An entry from before 2026-11-13, whose bytes were moved into `dataDir/trash`, is back when
+ * its path is occupied again. That still asks the filesystem afresh, because the scan's `stat`
+ * came before this transaction: the move could have unlinked the file in between, and the
+ * stale sighting would then revive a row whose file is in the bin.
  *
  * A trashed row with no open entry is revived as before: nothing is waiting on it.
  */

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import {
     AuthorizationError,
     ConflictError,
@@ -7,14 +5,12 @@ import {
     NotFoundError,
     ReadOnlyRootError,
     SETTING_KEYS,
-    trashRelPathFor,
     trashSettingsSchema,
     type EmptyTrashResponse,
     type TrashEntry,
     type TrashListResponse,
     type TrashSettings,
 } from "@private-stock/core";
-import { freeBytes, loadConfig } from "@private-stock/core/server";
 import { changeLogRepo, db, mediaRepo, settingRepo, trashRepo } from "@private-stock/db";
 
 import type { AuthContext } from "../auth/withAuth";
@@ -80,8 +76,6 @@ const loadDeletable = (mediaId: string): DeletableRow | undefined =>
 
 export interface TrashResult {
     entryId: string;
-    /** The job that will move the bytes; the row is already hidden either way. */
-    queued: boolean;
     /**
      * Where this item's ratings, tags and playlist slots went, when it was a duplicate of
      * something still in the library (§10c). Null when it was not.
@@ -92,10 +86,10 @@ export interface TrashResult {
 /**
  * Moves an item to the bin.
  *
- * The item leaves the library inside `trashRepo.create`'s transaction, before any byte has
- * moved. That ordering is deliberate: a 10 GB file takes minutes to copy, and an item that
- * stays visible and playable for those minutes after someone deleted it looks broken — worse,
- * it invites a second deletion of something already being deleted.
+ * A catalogue change only: the item leaves the library inside `trashRepo.create`'s
+ * transaction, and its file stays at its path until the purge unlinks it there (§10). Nothing
+ * is copied, so there is no space to check and no job to wait for -- except for an identical
+ * copy, whose outright delete is a job (§10e).
  */
 export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<TrashResult> => {
     if (!auth.scopes.includes("delete")) {
@@ -125,24 +119,9 @@ export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<Tr
 
     /**
      * Whether an identical file stays (§10e). If one does, this copy bypasses the bin: the trash
-     * job deletes it outright and purges the item, so there is no space to check for.
+     * job deletes it outright and purges the item.
      */
     const hasTwin = trashRepo.findIdenticalActiveFile(target.fileId, null) !== null;
-
-    const config = loadConfig();
-    const available = hasTwin ? null : await freeBytes(config.dataDir);
-
-    // Less what the bin has already accepted and not yet copied: free space only shrinks once
-    // a move lands, so without this every file in a bulk resolve passes against the same
-    // untouched figure. See `trashRepo.unmovedBytes`.
-    if (available !== null && available - trashRepo.unmovedBytes() < target.size) {
-        // Deleting consumes space on /data until the window closes, so a bulk cleanup can fill
-        // the volume holding the database. Refusing is far better than a half-copied file and
-        // a database with nowhere to write.
-        throw new ConflictError(
-            "Not enough free space on the data volume to hold this file in the trash"
-        );
-    }
 
     /**
      * Before anything is trashed, so a failure here leaves the library untouched rather than
@@ -153,19 +132,16 @@ export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<Tr
     const merged = await whenNotBusy(() => mergeIntoSurvivingCopy(mediaId));
 
     // The heir's file when it is one of the identical ones: everything recorded about the item
-    // went there, and when a whole group goes best-last it is the copy whose bytes go to the
+    // went there, and when a whole group goes best-last it is the copy whose bytes stay in the
     // bin, so the content survives there (§10d).
     const twinFileId = hasTwin
         ? trashRepo.findIdenticalActiveFile(target.fileId, merged?.heirId ?? null)
         : null;
 
-    const entryId = randomUUID();
-    const trashRelPath = trashRelPathFor(entryId, target.relPath, new Date());
-
     const retentionDays = loadTrashSettings().retentionDays;
 
-    // The entry and its move job in one lock: both or neither, so a retry can never write a
-    // second entry for a first that landed without its job.
+    // The entry and an identical copy's delete job in one lock: both or neither, so a retry can
+    // never write a second entry for a first that landed without its job.
     const entry = await whenNotBusy(() =>
         db
             .transaction(() => {
@@ -174,14 +150,15 @@ export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<Tr
                     fileId: target.fileId,
                     rootId: target.rootId,
                     relPath: target.relPath,
-                    trashRelPath,
                     bytes: target.size,
                     deletedById: auth.userId,
                     retentionDays,
                     twinFileId,
                 });
 
-                trashRepo.enqueueMove("trash", created.id, mediaId, target.fileId);
+                if (twinFileId) {
+                    trashRepo.enqueueMove("trash", created.id, mediaId, target.fileId);
+                }
 
                 // In the same transaction (§13b): it is what tells another tab, or another
                 // person, that this tile has left the library -- their grid drops it.
@@ -202,17 +179,9 @@ export const trashMedia = async (mediaId: string, auth: AuthContext): Promise<Tr
     // it is looking at the number that should go down (§20).
     clearLibraryCaches();
 
-    return { entryId: entry.id, queued: true, merged };
+    return { entryId: entry.id, merged };
 };
 
-/**
- * Brings an item back, bytes and catalog entry together.
- *
- * Unlike trashing, the catalog side waits for the job. Hiding an item before its bytes have
- * moved is safe — the worst case is an item that looks deleted and is not. Showing one before
- * its bytes are back is not: the grid would carry a tile whose file does not exist, and
- * whoever clicked restore would conclude the restore worked.
- */
 /**
  * An entry in the bin of the request's room (§21). Another room's reads as not found, as the
  * bin's own list never shows it.
@@ -223,6 +192,14 @@ const entryInRoom = (entryId: string, auth: AuthContext): trashRepo.TrashEntryRo
     return entry && auth.accessibleRootIds.includes(entry.rootId) ? entry : undefined;
 };
 
+/**
+ * Brings an item back.
+ *
+ * Through a job, like the purge, because entries from before 2026-11-13 have their bytes in
+ * `dataDir/trash` and the catalogue must wait for them to be copied back: showing an item
+ * before its file is there would put a tile in the grid that cannot play. For every other
+ * entry the job is the catalogue alone, and lands in moments.
+ */
 export const restoreEntry = (entryId: string, auth: AuthContext): void => {
     requireAdmin(auth, "restore a deleted item");
 
@@ -253,13 +230,6 @@ export const purgeEntry = (entryId: string, auth: AuthContext): void => {
         throw new NotFoundError("Trash entry not found");
     }
 
-    // The guard `emptyTrash` has: until the move lands the original is still in the media root,
-    // and purging now would delete the catalogue row and leave the file for the next scan to
-    // adopt as something new.
-    if (!entry.movedAt) {
-        throw new ConflictError("This item is still being moved to the trash; try again shortly");
-    }
-
     trashRepo.enqueueMove("purge", entry.id, entry.mediaId, entry.fileId);
 };
 
@@ -267,31 +237,22 @@ export const purgeEntry = (entryId: string, auth: AuthContext): void => {
  * Empties the bin now, instead of waiting for each entry's window (§10).
  *
  * Every entry goes through the same purge job as the sweep and the per-entry button, so this
- * cannot do anything a purge would not. **Except an entry whose move has not happened yet**:
- * its original is still in the media root, and purging it would delete the catalogue row and
- * leave the file for the next scan to adopt as something new. Those are counted and left for
- * their move to finish; emptying again afterwards takes them.
+ * cannot do anything a purge would not.
  */
 export const emptyTrash = (auth: AuthContext): EmptyTrashResponse => {
     requireAdmin(auth, "empty the trash");
 
     let queued = 0;
-    let waiting = 0;
     let freedBytes = 0;
 
     for (const entry of trashRepo.listOpen(auth.accessibleRootIds)) {
-        if (!entry.movedAt) {
-            waiting += 1;
-            continue;
-        }
-
         trashRepo.enqueueMove("purge", entry.id, entry.mediaId, entry.fileId);
         queued += 1;
 
         freedBytes += entry.bytes;
     }
 
-    return { queued, waiting, freedBytes };
+    return { queued, freedBytes };
 };
 
 export const listTrash = (auth: AuthContext, limit: number, offset: number): TrashListResponse => {
@@ -310,7 +271,6 @@ export const listTrash = (auth: AuthContext, limit: number, offset: number): Tra
             deletedBy: row.deletedBy,
             deletedAt: row.deletedAt,
             purgeAfter: row.purgeAfter,
-            pending: row.movedAt === null,
             // Served from the item's own art route, which still resolves: the artifact rows live
             // until purge precisely so the bin can be looked at rather than guessed at.
             coverUrl: row.mediaId

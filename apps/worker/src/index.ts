@@ -411,8 +411,8 @@ const runJob = async (job: JobRow, throttled: boolean): Promise<void> => {
     const polite = throttled && !job.requestedByUserId;
 
     // Every kind, not only the ones with progress to report. A sprite job decodes the whole
-    // source file and a purge copies it between volumes; both run well past the stale-claim
-    // window, and an unheartbeated claim is reclaimed underneath a handler that is still
+    // source file and a restore from the old bin copies it between volumes; both run well past
+    // the stale-claim window, and an unheartbeated claim is reclaimed underneath a handler that is still
     // working.
     const { signal, stop } = startHeartbeat(db, job.id);
 
@@ -730,15 +730,15 @@ const sweepExpiredTrash = (): number => {
 };
 
 /**
- * Re-queue trash moves that were never made (§10).
+ * Re-queue the outright deletes of identical copies that never happened (§10e).
  *
- * An entry whose bytes have not moved means a file the app believes it deleted is still
- * sitting in a media root — invisible in the library, present on disk, and reported to nobody.
- * The queue cannot find these itself: a job lost to a killed container leaves no row, and one
- * the unique index refused never had one.
+ * Such an entry is out of the bin's list, so a lost delete means a file the app believes it
+ * removed is still sitting in a media root — invisible in the library, present on disk, and
+ * reported to nobody. The queue cannot find these itself: a job lost to a killed container
+ * leaves no row, and one the unique index refused never had one.
  */
-const sweepUnmovedTrash = (): number => {
-    const owed = trashRepo.listAwaitingMove(PURGE_BATCH);
+const sweepOwedOutrightDeletes = (): number => {
+    const owed = trashRepo.listOwedOutrightDeletes(PURGE_BATCH);
 
     for (const entry of owed) {
         trashRepo.enqueueMove("trash", entry.id, entry.mediaId, entry.fileId);
@@ -765,8 +765,9 @@ const RETENTION_BATCH = 200;
  * sweeps undo each other for ever.
  *
  * Done here rather than in a job, unlike the purge that follows switching transcoding off.
- * This is a bounded number of unlinks inside `dataDir` — not the cross-volume copy that
- * makes trashing a job (§10), and not the whole-library walk that makes the purge one.
+ * This is a bounded number of unlinks inside `dataDir` — not a write inside a media root, which
+ * is what makes a trash purge a job (§10), and not the whole-library walk that makes the purge
+ * one.
  */
 const sweepExpiredVariants = async (): Promise<number> => {
     const settings = loadTranscodeSettings();
@@ -806,11 +807,13 @@ const housekeeping = (): void => {
     const pruned = changeLogRepo.prune(CHANGE_LOG_RETENTION_MINUTES);
 
     const expiredTrash = sweepExpiredTrash();
-    const owedMoves = sweepUnmovedTrash();
+    const owedDeletes = sweepOwedOutrightDeletes();
 
     if (purged > 0) console.log(`Purged ${purged} expired refresh token(s)`);
     if (expiredTrash > 0) console.log(`Queued ${expiredTrash} expired trash entr(ies) for purge`);
-    if (owedMoves > 0) console.log(`Re-queued ${owedMoves} trash move(s) that never completed`);
+    if (owedDeletes > 0) {
+        console.log(`Re-queued ${owedDeletes} identical-copy delete(s) that never completed`);
+    }
     if (stale > 0) console.log(`Closed ${stale} interrupted scan(s)`);
     if (pruned > 0) console.log(`Pruned ${pruned} change feed row(s)`);
 

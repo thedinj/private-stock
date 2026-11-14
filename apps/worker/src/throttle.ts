@@ -47,8 +47,8 @@ export const CONCURRENCY: Record<string, number> = {
     phash: 2,
     // A sheet decode per hundred tiles, from /data. One slot keeps it behind the work people see.
     tileprint: 1,
-    // One whole MPEG-TS file read per job (§8). I/O, and one at a time for the reason the
-    // trash's copies are: two reads from the same disks halve each other.
+    // One whole MPEG-TS file read per job (§8). I/O, and one at a time: two reads from the same
+    // disks halve each other.
     segments: 1,
     // I/O bound rather than CPU bound, and on a network share the bottleneck is the share
     // itself — more concurrency would slow the same total work down.
@@ -64,9 +64,8 @@ export const CONCURRENCY: Record<string, number> = {
     index: 2,
     // One header read per file, like the probe's.
     metadata: 2,
-    // One at a time, and for a different reason than transcoding: these copy whole files
-    // between volumes, so two at once halve each other's throughput and the second one is
-    // waiting on the same disk either way.
+    // One at a time. Mostly an unlink or a catalogue change now, but a restore from the old
+    // bin copies a whole file between volumes, and two of those halve each other (§10).
     trash: 1,
     restore: 1,
     purge: 1,
@@ -329,10 +328,10 @@ export const claimableKinds = (
 };
 
 /**
- * Kinds that keep running through a pause: the bin's moves.
+ * Kinds that keep running through a pause: the bin's jobs.
  *
- * A trash, restore or purge is a deletion somebody already made, and the item is hidden from
- * the moment it was asked for. Holding the move would leave it neither here nor gone, and
+ * A trash, restore or purge is a decision somebody already made, and the item is hidden from
+ * the moment it was asked for. Holding the job would leave it neither here nor gone, and
  * pausing to tune OCR has no reason to stop it.
  */
 export const PAUSE_EXEMPT: ReadonlySet<string> = new Set(["trash", "restore", "purge"]);

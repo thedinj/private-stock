@@ -976,7 +976,7 @@ describe("settled failures (§10g)", () => {
     };
 
     /** Moves an item to the trash as the service does: the file trashed, an open entry for it. */
-    const trashed = (mediaId: string, options: { moved?: boolean; twin?: boolean } = {}): void => {
+    const trashed = (mediaId: string, options: { twin?: boolean } = {}): void => {
         sharedDb.pragma("foreign_keys = OFF");
         sharedDb
             .prepare(`UPDATE "MediaFile" SET "state" = 'trashed' WHERE "id" = ?`)
@@ -984,9 +984,9 @@ describe("settled failures (§10g)", () => {
         sharedDb
             .prepare(
                 `INSERT INTO "TrashEntry"
-                     ("id", "mediaId", "fileId", "rootId", "relPath", "trashRelPath", "bytes",
-                      "deletedById", "purgeAfter", "movedAt", "twinFileId")
-                 VALUES (?, ?, ?, ?, ?, ?, 1, 'u1', CURRENT_TIMESTAMP, ?, ?)`
+                     ("id", "mediaId", "fileId", "rootId", "relPath", "bytes",
+                      "deletedById", "purgeAfter", "twinFileId")
+                 VALUES (?, ?, ?, ?, ?, 1, 'u1', CURRENT_TIMESTAMP, ?)`
             )
             .run(
                 `t-${mediaId}`,
@@ -994,8 +994,6 @@ describe("settled failures (§10g)", () => {
                 `f-${mediaId}`,
                 ROOT,
                 `${mediaId}.mp4`,
-                `trash/${mediaId}.mp4`,
-                options.moved === false ? null : "2026-10-01 00:00:00",
                 options.twin ? "f-other" : null
             );
         sharedDb.pragma("foreign_keys = ON");
@@ -1042,20 +1040,16 @@ describe("settled failures (§10g)", () => {
     it("splits the library from the trash, and leaves out an identical copy's entry", () => {
         addMedia("kept");
         addMedia("binned");
-        addMedia("moving");
         addMedia("twin");
-        for (const id of ["kept", "binned", "moving", "twin"]) fail(id);
+        for (const id of ["kept", "binned", "twin"]) fail(id);
         trashed("binned");
-        trashed("moving", { moved: false });
         trashed("twin", { twin: true });
 
         expect(ids(library)).toEqual(["kept"]);
-        expect(ids(trash).sort()).toEqual(["binned", "moving"]);
+        expect(ids(trash)).toEqual(["binned"]);
 
         const rows = stageRepo.listSettledFailures(probe, trash, null, 50).rows;
-        expect(rows.find((row) => row.mediaId === "moving")).toMatchObject({ moving: 1 });
         expect(rows.find((row) => row.mediaId === "binned")).toMatchObject({
-            moving: 0,
             entryId: "t-binned",
         });
     });

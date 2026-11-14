@@ -35,8 +35,7 @@ export async function GET(request: Request) {
 /**
  * Empties the bin now: every entry is purged, for good (§10).
  *
- * Admin only, like purging one entry. Entries whose bytes are still being moved in are left
- * for a later empty -- the response says how many.
+ * Admin only, like purging one entry.
  */
 export async function DELETE(request: Request) {
     try {

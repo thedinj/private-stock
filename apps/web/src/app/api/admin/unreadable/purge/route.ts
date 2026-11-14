@@ -15,8 +15,7 @@ export const fetchCache = "force-no-store";
 /**
  * Purges the chosen unreadable files from the trash, for good (§10g).
  *
- * POST, as `api/media/bulk` is: the selection is the subject. Entries still being moved in are
- * left and counted -- the response says how many.
+ * POST, as `api/media/bulk` is: the selection is the subject.
  */
 export async function POST(request: Request) {
     try {

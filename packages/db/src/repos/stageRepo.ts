@@ -574,8 +574,6 @@ export interface SettledFailureRow {
     detail: string | null;
     at: string;
     writable: 1 | null;
-    /** Trash tab only: the open entry's move has not finished. */
-    moving: 0 | 1;
 }
 
 export interface SettledFailureFilter {
@@ -660,9 +658,7 @@ export const listSettledFailures = (
         .prepare(
             `SELECT m."id" AS "mediaId", f."id" AS "fileId", t."id" AS "entryId", m."title",
                     r."label" AS "rootLabel", f."relPath", f."size" AS "bytes", s."detail",
-                    s."at", r."writable",
-                    CASE WHEN t."id" IS NOT NULL AND t."movedAt" IS NULL
-                         THEN 1 ELSE 0 END AS "moving"
+                    s."at", r."writable"
              ${sql}
              ${after ? `AND (f."size" < :afterBytes OR (f."size" = :afterBytes AND m."id" > :afterId))` : ""}
              ORDER BY f."size" DESC, m."id"

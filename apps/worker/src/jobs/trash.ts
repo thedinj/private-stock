@@ -5,30 +5,26 @@ import { assertSafeRelativePath } from "@private-stock/core";
 import { dataPaths, libraryFilePath, loadConfig } from "@private-stock/core/server";
 import { artifactRepo, mediaFileRepo, mediaRootRepo, trashRepo } from "@private-stock/db";
 
-import {
-    moveToTrash,
-    purgeFromTrash,
-    removeOriginal,
-    restoreFromTrash,
-    sizeOf,
-} from "../media/trashMove.js";
+import { purgeFromTrash, removeOriginal, restoreFromTrash, sizeOf } from "../media/trashMove.js";
 import type { JobRow } from "../queue.js";
 import { expectRemoval } from "../scan/watcher.js";
 
 /**
- * The three jobs that move bytes in and out of the recycle bin (§10, §18.1).
+ * The jobs that act on the recycle bin's files (§10, §18.1).
  *
- * They are jobs rather than request handlers because a 10 GB file takes minutes to copy
- * across volumes, and because this is the one place the app writes inside a media root — work
- * that belongs on the process that already owns long file operations, not on the one serving
- * pages.
+ * A trashed file stays at its path until it is purged, so trashing and restoring touch no
+ * bytes. What is left for a job is the deletion itself -- the one write the app makes inside a
+ * media root, which belongs on the process that owns file operations, not the one serving
+ * pages -- and the entries made before 2026-11-13, whose bytes were copied into
+ * `dataDir/trash` and are restored and purged from there until the last of them drains.
  */
 
-/** Both ends of a move, resolved once so no caller builds a path by hand. */
+/** Where an entry's bytes are, resolved once so no caller builds a path by hand. */
 interface Endpoints {
+    /** The original, inside a media root. */
     sourcePath: string;
-    trashPath: string;
-    libraryPath: string;
+    /** In `dataDir/trash`, for an entry whose bytes were moved there. Null otherwise. */
+    trashPath: string | null;
 }
 
 /**
@@ -38,18 +34,20 @@ interface Endpoints {
  * when they go in. A path that became unsafe through a bug is exactly as dangerous as one
  * that arrived that way, and one of these two paths is inside a media root.
  */
-const endpointsFor = (rootId: string, relPath: string, trashRelPath: string): Endpoints => {
+const endpointsFor = (entry: trashRepo.TrashEntryRow): Endpoints => {
     const config = loadConfig();
-    const root = mediaRootRepo.findById(rootId);
+    const root = mediaRootRepo.findById(entry.rootId);
 
     if (!root) {
-        throw new Error(`Root ${rootId} no longer exists`);
+        throw new Error(`Root ${entry.rootId} no longer exists`);
     }
 
     return {
-        sourcePath: libraryFilePath(root.path, relPath),
-        trashPath: path.resolve(dataPaths(config).trash, assertSafeRelativePath(trashRelPath)),
-        libraryPath: root.path,
+        sourcePath: libraryFilePath(root.path, entry.relPath),
+        trashPath:
+            entry.movedAt && entry.trashRelPath
+                ? path.resolve(dataPaths(config).trash, assertSafeRelativePath(entry.trashRelPath))
+                : null,
     };
 };
 
@@ -58,7 +56,7 @@ const endpointsFor = (rootId: string, relPath: string, trashRelPath: string): En
  *
  * Paths are resolved against the library's *current* directory, so a repointed library, or a
  * catalogue that has simply drifted, can point a deletion at a different file that happens to
- * occupy the same relative path. Without this, the app would trash something nobody had ever
+ * occupy the same relative path. Without this, the app would delete something nobody had ever
  * seen and record it under the name of something else.
  *
  * Size and mtime are what the scanner itself treats as identity (§7) — the same bet every
@@ -84,7 +82,7 @@ const assertFileIsTheOneCatalogued = async (
     try {
         stats = await stat(sourcePath);
     } catch {
-        // Already gone. Nothing to destroy, and the move handles a missing original.
+        // Already gone. Nothing to destroy, and removing a missing original is success.
         return;
     }
 
@@ -112,8 +110,8 @@ const entryDescription = (relPath: string): string => `"${relPath}"`;
  * clears the hash when either changes, but only once it has been round, and this is asked in
  * between.
  *
- * A file in the bin with its own bytes holds them too -- at its library path until its move
- * lands, then in the bin. That is the case of a whole group being deleted best-last (§10d):
+ * A file in the bin with its own bytes holds them too -- at its library path, where a trashed
+ * file stays until purge. That is the case of a whole group being deleted best-last (§10d):
  * every copy but the last goes outright, and the last keeps the content in the bin, restorable
  * as usual. A file that was itself deleted outright holds nothing.
  */
@@ -149,91 +147,75 @@ const holdsBytes = async (fileId: string): Promise<boolean> => {
         return false;
     }
 
-    if (!entry.movedAt) {
+    const { trashPath } = endpointsFor(entry);
+
+    if (!trashPath) {
         return unchangedInLibrary();
     }
 
-    // In the bin: the copy was fsynced before the original went, so its size is the check.
-    const { trashPath } = endpointsFor(entry.rootId, entry.relPath, entry.trashRelPath);
-
+    // Moved into dataDir/trash before 2026-11-13: the copy was fsynced before the original
+    // went, so its size is the check.
     return (await sizeOf(trashPath)) === file.size;
 };
 
 /**
- * Copies the original into the bin and removes it from the media root.
+ * Deletes an identical copy outright (§10e) -- the only kind of entry that has a trash job.
  *
- * The catalog side already happened — the item was hidden the moment the request was
- * accepted. This job is only the bytes, which is why it can be retried freely: every step is
- * idempotent, and the entry it works from does not change underneath it.
+ * An ordinary entry needs none: its file stays where it is until the purge. One with a twin
+ * bypasses the bin instead: the original is deleted and the item purged in the same job, so it
+ * never appears in the trash and there is nothing to restore -- the content is the twin's.
+ *
+ * Only once the twin provably still holds the bytes: present, and unchanged since it was
+ * hashed, which the check below says of this file too, so equal hashes still mean equal bytes.
+ * When the twin cannot vouch, deleting outright could lose the content, so the entry becomes an
+ * ordinary one and its file stays in place like any other in the bin.
+ *
+ * Retried freely: every step is idempotent, and the entry it works from does not change
+ * underneath it.
  */
 export const runTrash = async (job: JobRow): Promise<void> => {
     const entry = trashRepo.findForJob(job.payloadJson);
 
-    if (!entry || entry.restoredAt || entry.purgedAt) {
-        // Restored or purged while this sat in the queue. Doing nothing is correct: whatever
-        // closed the entry has already put the bytes where they belong.
+    if (!entry || entry.restoredAt || entry.purgedAt || !entry.twinFileId) {
+        // Restored or purged while this sat in the queue, or an ordinary entry -- one queued
+        // before trashing stopped moving bytes. Nothing to do for any of them.
         return;
     }
 
-    const { sourcePath, trashPath, libraryPath } = endpointsFor(
-        entry.rootId,
-        entry.relPath,
-        entry.trashRelPath
-    );
+    const { sourcePath } = endpointsFor(entry);
 
     await assertFileIsTheOneCatalogued(entry.fileId, sourcePath);
 
-    /**
-     * An identical copy stays (§10e): this one bypasses the bin. The original is deleted and the
-     * item purged in the same job, so it never appears in the trash and there is nothing to
-     * restore -- the content is the twin's.
-     *
-     * Only once the twin provably still holds the bytes: present, and unchanged since it was
-     * hashed. The check above has just said the same of this file, so equal hashes still mean
-     * equal bytes. When the twin cannot vouch, deleting outright could lose the content, so the
-     * entry becomes an ordinary one and the move below copies it into the bin.
-     */
-    if (entry.twinFileId) {
-        if (await holdsBytes(entry.twinFileId)) {
-            await removeOriginal(sourcePath);
-            expectRemoval(sourcePath);
-
-            if (entry.mediaId) {
-                await removeArtifacts(entry.mediaId);
-            }
-
-            // Takes the item, its file row and every job it still has (`trashRepo.purge`).
-            trashRepo.purge(entry.id);
-
-            return;
-        }
-
+    if (!(await holdsBytes(entry.twinFileId))) {
         trashRepo.clearTwin(entry.id);
+
+        return;
     }
 
-    await moveToTrash({
-        sourcePath,
-        trashPath,
-        manifest: {
-            entryId: entry.id,
-            libraryPath,
-            relPath: entry.relPath,
-            bytes: entry.bytes,
-            deletedAt: entry.deletedAt,
-        },
-    });
+    await removeOriginal(sourcePath);
 
-    // Recorded in the catalogue already: the watcher need not walk the directory to learn it.
+    // Recorded in the catalogue below: the watcher need not walk the directory to learn it.
     expectRemoval(sourcePath);
-    trashRepo.markMoved(entry.id);
+
+    if (entry.mediaId) {
+        await removeArtifacts(entry.mediaId);
+    }
+
+    // Takes the item, its file row and every job it still has (`trashRepo.purge`).
+    trashRepo.purge(entry.id);
 };
 
 /**
- * Puts the file back, then returns the item to the library.
+ * Returns the item to the library.
  *
- * In that order, deliberately. The catalog is updated only once the bytes are in place, so a
- * failed copy leaves the item in the bin where someone can try again — rather than in the
- * grid, pointing at a file that is not there.
+ * Its file never left its path, so this is the catalogue alone. An entry whose bytes were
+ * moved into `dataDir/trash` copies them back first, and only then returns the item, so a
+ * failed copy leaves it in the bin where someone can try again -- rather than in the grid,
+ * pointing at a file that is not there.
+ *
+ * A file that changed or vanished while in the bin comes back as whatever the next scan finds:
+ * changed bytes are reprocessed, a missing file is marked missing. Neither is worth refusing a
+ * restore over.
  */
 export const runRestore = async (job: JobRow): Promise<void> => {
     const entry = trashRepo.findForJob(job.payloadJson);
@@ -242,21 +224,24 @@ export const runRestore = async (job: JobRow): Promise<void> => {
         return;
     }
 
-    const { sourcePath, trashPath } = endpointsFor(entry.rootId, entry.relPath, entry.trashRelPath);
+    const { sourcePath, trashPath } = endpointsFor(entry);
 
-    await restoreFromTrash(trashPath, sourcePath);
+    if (trashPath) {
+        await restoreFromTrash(trashPath, sourcePath);
+    }
 
     trashRepo.markRestored(entry.id);
 };
 
 /**
- * The irreversible one.
+ * The irreversible one: unlinks the file at its path, then purges the item.
  *
- * Refuses to act if the file is no longer trashed. That happens when someone puts the file
- * back by hand and a scan revives the row, and the consequence of not checking is destroying
- * an item the library is actively showing — the single outcome this feature must never
- * produce. The scan path resolves such entries itself; this is the second lock on the same
- * door, because it is the only step that cannot be undone.
+ * Refuses to act if the file is no longer trashed. That happens when someone replaces the file
+ * by hand and a scan revives the row, and the consequence of not checking is destroying an
+ * item the library is actively showing — the single outcome this feature must never produce.
+ * The scan path resolves such entries itself; this is the second lock on the same door,
+ * because it is the only step that cannot be undone. The third is the identity check: the
+ * bytes at the path must still be the ones that were trashed.
  */
 export const runPurge = async (job: JobRow): Promise<void> => {
     const entry = trashRepo.findForJob(job.payloadJson);
@@ -275,7 +260,11 @@ export const runPurge = async (job: JobRow): Promise<void> => {
         }
     }
 
-    const { trashPath } = endpointsFor(entry.rootId, entry.relPath, entry.trashRelPath);
+    const { sourcePath, trashPath } = endpointsFor(entry);
+
+    if (!trashPath) {
+        await assertFileIsTheOneCatalogued(entry.fileId, sourcePath);
+    }
 
     // Artifacts first: the rows are about to cascade away with the item, and an artifact file
     // whose row is gone is invisible to every cleanup the app has.
@@ -283,7 +272,14 @@ export const runPurge = async (job: JobRow): Promise<void> => {
         await removeArtifacts(entry.mediaId);
     }
 
-    await purgeFromTrash(trashPath);
+    if (trashPath) {
+        await purgeFromTrash(trashPath);
+    } else {
+        await removeOriginal(sourcePath);
+
+        // Recorded in the catalogue below: the watcher need not walk the directory to learn it.
+        expectRemoval(sourcePath);
+    }
 
     trashRepo.purge(entry.id);
 };

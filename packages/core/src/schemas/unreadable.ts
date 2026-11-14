@@ -44,8 +44,6 @@ export const unreadableItemSchema = z.object({
     failedAt: z.string(),
     /** False on a read-only library, where nothing can be deleted (§18.1). */
     writable: z.boolean(),
-    /** Trash tab only: still being copied into the bin, so it cannot be purged yet. */
-    moving: z.boolean(),
 });
 export type UnreadableItem = z.infer<typeof unreadableItemSchema>;
 

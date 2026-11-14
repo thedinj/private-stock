@@ -2413,14 +2413,16 @@ export function initializeDatabase(db: Database): void {
             "fileId" TEXT,
             "rootId" TEXT NOT NULL,
             "relPath" TEXT NOT NULL CHECK(length("relPath") <= 1024),
-            "trashRelPath" TEXT NOT NULL CHECK(length("trashRelPath") <= 1024),
+            -- Where the bytes went in dataDir/trash, for an entry made while trashing still
+            -- copied files into the bin. Null for every entry since 2026-11-13: the file stays
+            -- at its path until the purge unlinks it there (§10).
+            "trashRelPath" TEXT CHECK(length("trashRelPath") <= 1024),
             "bytes" INTEGER NOT NULL,
             "deletedById" TEXT NOT NULL,
             "deletedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            -- When the bytes finished moving into the bin. Null means the move is still
-            -- owed, which is what lets a lost job be found and re-queued: the queue forgets,
-            -- and an entry whose file is still sitting in the media root is the one thing
-            -- that would never be noticed otherwise.
+            -- When those bytes finished moving into dataDir/trash. Set only beside
+            -- "trashRelPath": an entry with it is one whose bytes are in the bin, and its
+            -- restore and purge act there; an entry without it still has them at its path.
             "movedAt" DATETIME,
             "restoredAt" DATETIME,
             -- Distinct from "restoredAt" on purpose. Closing a purged entry by marking it

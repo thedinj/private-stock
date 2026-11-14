@@ -309,7 +309,7 @@ export const IdenticalPanel: React.FC<{
                             In each group the copy in a read-only library stays, or else the one
                             catalogued first; every other copy is deleted outright. They bypass the
                             trash — the copy that stays has the same bytes — so there is nothing to
-                            restore and nothing waits on the data volume.
+                            restore and nothing waits in the bin.
                         </Text>
                         {summary.attention > 0 && (
                             <Text size="sm" c="dimmed">
