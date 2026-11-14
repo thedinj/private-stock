@@ -93,17 +93,22 @@ export const DomainGate: React.FC<{ children: React.ReactNode }> = ({ children }
     // Asking whether the account has a PIN: a blank cover in the meantime.
     const rackUp = covered && (phase === "leaving" || !isPending);
 
-    // In the capture phase, and nothing else hears the key: a page underneath has shortcuts of
-    // its own on `window` (the viewer's Space plays), and `inert` stops focus, not listeners.
-    // The rack's own listener was added first (a child's effect runs before its parent's).
+    // Under the blank cover, before the rack is up, nothing hears the key: a page underneath has
+    // shortcuts of its own on `window` (the viewer's Space plays), and `inert` stops focus, not
+    // listeners. Once the rack is up it takes the keys and stops them itself. This must stand
+    // down then rather than sit beside it: whichever of two capture listeners on `window` was
+    // added first runs first, and when the PIN status had to be fetched this one was added
+    // before the rack existed and swallowed every key meant for it.
+    const blank = covered && !rackUp;
+
     useEffect(() => {
-        if (!covered) return;
+        if (!blank) return;
 
         const stop = (event: KeyboardEvent) => event.stopImmediatePropagation();
         window.addEventListener("keydown", stop, { capture: true });
 
         return () => window.removeEventListener("keydown", stop, { capture: true });
-    }, [covered]);
+    }, [blank]);
 
     // One shape on every path, so the page is never remounted by the rack coming or going.
     // Nothing is mounted under the rack on the way in, so no query for the guarded room leaves

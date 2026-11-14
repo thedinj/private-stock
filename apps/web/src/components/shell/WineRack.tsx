@@ -266,7 +266,11 @@ export const WineRack: React.FC<WineRackProps> = ({
     useEffect(() => {
         if (!captureKeys) return;
 
+        // The rack is the whole screen, so the key is its alone: nothing listening later on
+        // `window` (the viewer's Space plays) hears it. `inert` stops focus, not listeners.
         const listener = (event: KeyboardEvent) => {
+            event.stopImmediatePropagation();
+
             if (event.repeat && event.key === "Enter") return;
             if (actOnKey(event.key, keyActions.current)) event.preventDefault();
         };
