@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Code, Group, Modal, Select, Stack, Table, Text } from "@mantine/core";
+import {
+    ActionIcon,
+    Alert,
+    Button,
+    Code,
+    Group,
+    Modal,
+    Select,
+    Stack,
+    Table,
+    Text,
+} from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useMutation } from "@tanstack/react-query";
 
@@ -12,11 +23,13 @@ import {
     type ReelExportWarning,
 } from "@private-stock/core";
 
+import { CloseGlyph } from "@/components/media/Glyph";
 import { downloadFile } from "@/lib/api/client";
 import { useReelExportPreview } from "@/lib/api/reels";
 
 /**
- * Taking a reel to Resolve (§14d "Editor export").
+ * Taking a reel -- or the export cart's reels, a timeline each in one file -- to Resolve (§14d
+ * "Editor export").
  *
  * One decision -- the timeline's frame rate -- made knowing what it will do: the reel's watching
  * time at each source rate is laid out beside the choice, and the rate covering the most of it
@@ -37,14 +50,22 @@ const WARNING_TEXT: Record<ReelExportWarning["kind"], (n: number) => string> = {
 const percent = (part: number, whole: number): string =>
     whole === 0 ? "" : `${Math.round((part / whole) * 100)}%`;
 
+/**
+ * One frame rate for every timeline in the file: the reels of one export are going into one
+ * project, which an editor conforms to one rate anyway, so the choice is made once across all
+ * of their footage.
+ */
 export const ReelExportDialog: React.FC<{
-    reelId: string;
-    reelName: string;
+    reelIds: string[];
     opened: boolean;
     onClose: () => void;
-}> = ({ reelId, reelName, opened, onClose }) => {
+    /** From the cart: each reel can be taken out here. */
+    onRemove?: (reelId: string) => void;
+    onExported?: () => void;
+}> = ({ reelIds, opened, onClose, onRemove, onExported }) => {
     const narrow = useMediaQuery("(max-width: 48em)") ?? false;
-    const preview = useReelExportPreview(reelId, opened);
+    const preview = useReelExportPreview(reelIds, opened);
+    const several = reelIds.length > 1 || onRemove !== undefined;
 
     /** The rate somebody chose, or null while the recommendation stands. */
     const [picked, setPicked] = useState<string | null>(null);
@@ -54,10 +75,13 @@ export const ReelExportDialog: React.FC<{
     const download = useMutation({
         mutationFn: (key: string) =>
             downloadFile(
-                `/api/reels/${reelId}/export?rate=${encodeURIComponent(key)}`,
-                `${reelName}.fcpxml`
+                `/api/reels/export?ids=${encodeURIComponent(reelIds.join(","))}&rate=${encodeURIComponent(key)}`,
+                "Timeline.fcpxml"
             ),
-        onSuccess: () => close(),
+        onSuccess: () => {
+            onExported?.();
+            close();
+        },
     });
 
     const close = () => {
@@ -67,6 +91,9 @@ export const ReelExportDialog: React.FC<{
     };
 
     const totalRunMs = data?.rates.reduce((sum, share) => sum + share.runMs, 0) ?? 0;
+    const exported = data?.reels.filter((reel) => reel.clipCount > 0) ?? [];
+    /** Asked for but not returned: deleted, or no longer shared, since it went in the cart. */
+    const gone = data ? reelIds.length - data.reels.length : 0;
     const missing = data?.libraries.filter((library) => !library.networkPath) ?? [];
 
     return (
@@ -80,19 +107,72 @@ export const ReelExportDialog: React.FC<{
         >
             {!data ? (
                 preview.isError ? (
-                    <Alert color="oxblood">Couldn’t read the reel: {preview.error.message}</Alert>
+                    <Alert color="oxblood">
+                        Couldn’t read the {several ? "reels" : "reel"}: {preview.error.message}
+                    </Alert>
                 ) : (
                     <Text size="sm" c="dimmed">
-                        Reading the reel…
+                        Reading the {several ? "reels" : "reel"}…
                     </Text>
                 )
             ) : (
                 <Stack gap="md">
-                    <Text size="sm">
-                        A timeline of {data.clipCount} clip{data.clipCount === 1 ? "" : "s"} that
-                        links to the original files on the share. In Resolve: File → Import →
-                        Timeline.
-                    </Text>
+                    {several ? (
+                        <Text size="sm">
+                            {exported.length} timeline{exported.length === 1 ? "" : "s"} in one
+                            file, all at one frame rate, linking to the original files on the share.
+                            In Resolve, File → Import → Timeline brings in one at a time: import the
+                            file once per reel and pick each by name from the list.
+                        </Text>
+                    ) : (
+                        <Text size="sm">
+                            A timeline of {data.clipCount} clip{data.clipCount === 1 ? "" : "s"}{" "}
+                            that links to the original files on the share. In Resolve: File → Import
+                            → Timeline.
+                        </Text>
+                    )}
+
+                    {several && (
+                        <Stack gap={0}>
+                            {data.reels.map((reel) => (
+                                <Group
+                                    key={reel.id}
+                                    justify="space-between"
+                                    wrap="nowrap"
+                                    gap="xs"
+                                    mih={44}
+                                >
+                                    <Stack gap={0} style={{ minWidth: 0 }}>
+                                        <Text size="sm" lineClamp={1}>
+                                            {reel.name}
+                                        </Text>
+                                        <Text size="xs" c="dimmed">
+                                            {reel.clipCount === 0
+                                                ? "No clips you can open — left out"
+                                                : `${reel.clipCount} clip${reel.clipCount === 1 ? "" : "s"}`}
+                                        </Text>
+                                    </Stack>
+                                    {onRemove && (
+                                        <ActionIcon
+                                            variant="subtle"
+                                            color="gray"
+                                            size={44}
+                                            aria-label={`Take ${reel.name} out of the export`}
+                                            onClick={() => onRemove(reel.id)}
+                                        >
+                                            <CloseGlyph size={16} />
+                                        </ActionIcon>
+                                    )}
+                                </Group>
+                            ))}
+                            {gone > 0 && (
+                                <Text size="xs" c="dimmed" mt="xs">
+                                    {gone === 1 ? "1 reel is" : `${gone} reels are`} no longer there
+                                    for you and {gone === 1 ? "is" : "are"} left out.
+                                </Text>
+                            )}
+                        </Stack>
+                    )}
 
                     {data.unreachableCount > 0 && (
                         <Text size="sm" c="dimmed">
@@ -108,7 +188,9 @@ export const ReelExportDialog: React.FC<{
                                 <Table.Tr>
                                     <Table.Th>Source rate</Table.Th>
                                     <Table.Th ta="right">Clips</Table.Th>
-                                    <Table.Th ta="right">Of the reel</Table.Th>
+                                    <Table.Th ta="right">
+                                        {several ? "Of the reels" : "Of the reel"}
+                                    </Table.Th>
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
@@ -154,6 +236,11 @@ export const ReelExportDialog: React.FC<{
                                 {warning.files.join(", ")}
                                 {warning.clipCount > warning.files.length ? ", …" : ""}
                             </Text>
+                            {several && (
+                                <Text size="xs" c="dimmed">
+                                    In {warning.reels.join(", ")}
+                                </Text>
+                            )}
                         </Alert>
                     ))}
 
@@ -196,7 +283,7 @@ export const ReelExportDialog: React.FC<{
                             loading={download.isPending}
                             onClick={() => rateKey && download.mutate(rateKey)}
                         >
-                            Download timeline
+                            {exported.length > 1 ? "Download timelines" : "Download timeline"}
                         </Button>
                     </Group>
                 </Stack>

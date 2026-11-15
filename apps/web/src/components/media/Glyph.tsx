@@ -196,6 +196,13 @@ export const CheckGlyph: React.FC<GlyphProps> = ({ size }) => (
     </Glyph>
 );
 
+/** Add to a set: the export cart's toggle before the reel is in it. */
+export const PlusGlyph: React.FC<GlyphProps> = ({ size }) => (
+    <Glyph size={size}>
+        <path d="M12 5v14M5 12h14" />
+    </Glyph>
+);
+
 /** More about this: a lowercase i in a ring, for a setting's explanation kept behind a hover. */
 export const InfoGlyph: React.FC<GlyphProps> = ({ size }) => (
     <Glyph size={size}>

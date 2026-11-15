@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/reels";
 import { ArrowDownGlyph, ArrowUpGlyph, CloseGlyph, MoreGlyph } from "@/components/media/Glyph";
 import { useRememberedHref } from "@/lib/rememberedPages";
+import { useExportCart } from "@/lib/exportCart";
 
 /**
  * One reel: watching it, and arranging it (§14d).
@@ -52,6 +53,7 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
     const [arranging, setArranging] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [exporting, setExporting] = useState(false);
+    const cart = useExportCart();
     const [dragging, setDragging] = useState<string | null>(null);
 
     const reel = useReel(id);
@@ -143,6 +145,16 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
                                     onClick={() => setExporting(true)}
                                 >
                                     Export for Resolve…
+                                </Menu.Item>
+                                {/* Several reels go to Resolve as one file from the cart on the
+                                    Reels page; this puts this one in it. */}
+                                <Menu.Item
+                                    disabled={!cart.has(id) && cart.full}
+                                    onClick={() => cart.toggle({ id, name: reel.data.name })}
+                                >
+                                    {cart.has(id)
+                                        ? "Remove from export cart"
+                                        : "Add to export cart"}
                                 </Menu.Item>
                                 {editable && (
                                     <>
@@ -271,8 +283,7 @@ const ReelPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => 
             )}
 
             <ReelExportDialog
-                reelId={id}
-                reelName={reel.data.name}
+                reelIds={[id]}
                 opened={exporting}
                 onClose={() => setExporting(false)}
             />

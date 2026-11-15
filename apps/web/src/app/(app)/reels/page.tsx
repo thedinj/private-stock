@@ -23,7 +23,9 @@ import {
 
 import { LoadFailed } from "@/components/LoadFailed";
 import { FlipWall } from "@/components/FlipWall";
+import { ExportCartToggle } from "@/components/reel/ExportCartToggle";
 import { ReelCard } from "@/components/reel/ReelCard";
+import { ReelExportDialog } from "@/components/reel/ReelExportDialog";
 import {
     defineView,
     enumField,
@@ -36,6 +38,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { PageLoader } from "@/components/shell/PageLoader";
 import { PagePlate } from "@/components/shell/PagePlate";
 import { useCreateReel, useReels } from "@/lib/api/reels";
+import { useExportCart } from "@/lib/exportCart";
 import { settling } from "@/lib/settling";
 import { SearchInput } from "@/components/SearchInput";
 
@@ -83,6 +86,8 @@ const ReelsPage: React.FC = () => {
         apply({ search: settled, page: 0 })
     );
     const [naming, setNaming] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const cart = useExportCart();
     const [name, setName] = useState("");
 
     const { data, isLoading, isPlaceholderData, error, refetch } = useReels({
@@ -112,9 +117,18 @@ const ReelsPage: React.FC = () => {
                 title="Reels"
                 lede="Spans of your library, in an order you chose."
                 actions={
-                    <Button color="brass" onClick={() => setNaming(true)}>
-                        New reel
-                    </Button>
+                    <Group gap="xs" wrap="nowrap">
+                        {/* The export cart (§14d "Editor export"): reels gathered from any page,
+                            filter or search, sent to Resolve as one file. Shown once it holds one. */}
+                        {cart.reels.length > 0 && (
+                            <Button variant="default" onClick={() => setExporting(true)}>
+                                Export {cart.reels.length} for Resolve…
+                            </Button>
+                        )}
+                        <Button color="brass" onClick={() => setNaming(true)}>
+                            New reel
+                        </Button>
+                    </Group>
                 }
             />
 
@@ -167,8 +181,9 @@ const ReelsPage: React.FC = () => {
                     }}
                 >
                     {data?.items.map((reel) => (
-                        <div key={reel.id} data-flip-key={reel.id}>
+                        <div key={reel.id} data-flip-key={reel.id} style={{ position: "relative" }}>
                             <ReelCard reel={reel} />
+                            <ExportCartToggle reel={reel} />
                         </div>
                     ))}
                 </FlipWall>
@@ -186,6 +201,18 @@ const ReelsPage: React.FC = () => {
                     />
                 </Group>
             )}
+
+            <ReelExportDialog
+                reelIds={cart.reels.map((reel) => reel.id)}
+                opened={exporting}
+                onClose={() => setExporting(false)}
+                onRemove={(reelId) => {
+                    // Taking the last one out leaves nothing to export.
+                    if (cart.reels.length === 1) setExporting(false);
+                    cart.remove(reelId);
+                }}
+                onExported={cart.clear}
+            />
 
             <Modal opened={naming} onClose={() => setNaming(false)} title="New reel" centered>
                 <Stack gap="md">

@@ -8054,6 +8054,25 @@ sources (Resolve conforms them, so a cut can land a frame off), and rates read f
 The download is fetched with the bearer token and saved from a blob (`downloadFile` in the API
 client), because a plain link cannot carry the header.
 
+**Several reels, one file: the export cart.** Each reel card carries a toggle, and a reel's ⋯ menu
+an item, that put it in a cart; the Reels page header then offers "Export n for Resolve…". The
+file holds a `<project>` per reel inside one `<event>`, and a source used by several reels is one
+asset. Resolve imports **one timeline per import**: given several, File → Import → Timeline offers
+a list and takes one (tested 2026-11-14 with one event and with an event per project -- the same).
+One file imported once per reel was still preferred to a zip of files: nothing to unpack, the
+list names each reel, and the sources are shared. A cart and not a selection because the index is paged,
+filtered and searched, and a selection does not survive moving between them. The cart is kept in
+`localStorage` per room (`lib/exportCart.ts`): it is a pile on this desk for the editing session
+in hand, not something the household needs to see, and it needs no schema. It holds at most
+`MAX_EXPORT_REELS` (50), because the ids ride the query string and nobody imports more at once.
+
+**One frame rate for every timeline in the file.** The reels of one export are going into one
+Resolve project, which is conformed to one rate anyway, so the choice is made once with every
+reel's footage in the rate table. A single-reel export is the same routes with one id
+(`/api/reels/export?ids=…`). A reel deleted or unshared since it went in the cart is left out and
+said so, rather than failing the rest; a reel with no clips the viewer can open is listed and left
+out. The cart empties when the download succeeds.
+
 ### Designed and not built
 
 - **Rendering and export.** A `reelRender` job concatenating the spans, per §9's

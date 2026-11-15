@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
     AddReelItemsInput,
@@ -83,12 +83,19 @@ export const useReelItems = (reelId: string) =>
         enabled: reelId !== "",
     });
 
-/** What exporting the reel to Resolve will produce (§14d "Editor export"). */
-export const useReelExportPreview = (reelId: string, enabled: boolean) =>
+/**
+ * What exporting these reels to Resolve will produce (§14d "Editor export"). The previous answer
+ * stays up while a reel taken out of the cart is re-read, rather than the dialog blanking.
+ */
+export const useReelExportPreview = (reelIds: string[], enabled: boolean) =>
     useQuery({
-        queryKey: queryKeys.reels.exportPreview(reelId),
-        queryFn: () => api<ReelExportPreview>(`/api/reels/${reelId}/export/preview`),
-        enabled: enabled && reelId !== "",
+        queryKey: queryKeys.reels.exportPreview(reelIds),
+        queryFn: () =>
+            api<ReelExportPreview>(
+                `/api/reels/export/preview?ids=${encodeURIComponent(reelIds.join(","))}`
+            ),
+        enabled: enabled && reelIds.length > 0,
+        placeholderData: keepPreviousData,
     });
 
 /**

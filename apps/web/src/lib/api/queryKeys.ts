@@ -365,8 +365,11 @@ export const queryKeys = {
         list: (params: FilterParams, page: number) => ["reels", "list", params, page],
         detail: (reelId: string) => ["reels", reelId],
         items: (reelId: string) => ["reels", reelId, "items"],
-        /** Under the reel, so every edit to it -- a retime included -- refreshes the preview. */
-        exportPreview: (reelId: string) => ["reels", reelId, "export"],
+        /**
+         * What exporting these reels (one or a cart of them) would produce. Under the reel prefix,
+         * so every edit to any reel -- a retime included -- refreshes the preview.
+         */
+        exportPreview: (reelIds: string[]) => ["reels", "export", ...reelIds],
     },
     /**
      * The clip browser only.

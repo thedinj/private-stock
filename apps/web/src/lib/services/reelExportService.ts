@@ -145,36 +145,97 @@ const gather = (reelId: string, auth: AuthContext): Gathered => {
     };
 };
 
-export const previewReelExport = (reelId: string, auth: AuthContext): ReelExportPreview => {
-    const { entries, sources, unreachableCount, libraries } = gather(reelId, auth);
+/**
+ * Each reel asked for, in order, that this viewer can still open.
+ *
+ * A reel deleted or unshared since it was put in the export cart is left out rather than
+ * failing the rest: the preview lists what remains and the cart drops the others. Only when
+ * none is left is it an error.
+ */
+const gatherAll = (reelIds: string[], auth: AuthContext): Gathered[] => {
+    const gathered = reelIds.flatMap((reelId) => {
+        try {
+            return [gather(reelId, auth)];
+        } catch (error) {
+            if (error instanceof NotFoundError) return [];
+
+            throw error;
+        }
+    });
+
+    if (gathered.length === 0) throw new NotFoundError("Reel not found");
+
+    return gathered;
+};
+
+type Source = Gathered["sources"][number];
+
+export const previewReelsExport = (reelIds: string[], auth: AuthContext): ReelExportPreview => {
+    const gathered = gatherAll(reelIds, auth);
+    const entries = gathered.flatMap((reel) => reel.entries);
+    const sources = [
+        ...new Map(
+            gathered.flatMap((reel) => reel.sources).map((source) => [source.mediaId, source])
+        ).values(),
+    ];
     const rates = rateShares(entries, sources);
-    const byMedia = new Map(sources.map((source) => [source.mediaId, source]));
 
     const warning = (
         kind: ReelExportWarning["kind"],
-        applies: (source: Gathered["sources"][number]) => boolean
+        applies: (source: Source) => boolean
     ): ReelExportWarning[] => {
-        const hit = entries.filter((entry) => {
-            const source = byMedia.get(entry.mediaId);
+        const hits = gathered.map((reel) => {
+            const byMedia = new Map(reel.sources.map((source) => [source.mediaId, source]));
 
-            return source !== undefined && applies(source);
+            return {
+                name: reel.reel.name,
+                sources: reel.entries
+                    .map((entry) => byMedia.get(entry.mediaId))
+                    .filter((source): source is Source => source !== undefined && applies(source)),
+            };
         });
-        const files = [...new Set(hit.map((entry) => byMedia.get(entry.mediaId)!.fileName))];
+        const hit = hits.flatMap((reel) => reel.sources);
+        const files = [...new Set(hit.map((source) => source.fileName))];
 
         return hit.length === 0
             ? []
-            : [{ kind, clipCount: hit.length, files: files.slice(0, WARNING_FILES) }];
+            : [
+                  {
+                      kind,
+                      clipCount: hit.length,
+                      files: files.slice(0, WARNING_FILES),
+                      reels: hits
+                          .filter((reel) => reel.sources.length > 0)
+                          .map((reel) => reel.name),
+                  },
+              ];
     };
+
+    const libraries = new Map<string, ReelExportPreview["libraries"][number]>();
+
+    for (const library of gathered.flatMap((reel) => reel.libraries)) {
+        const known = libraries.get(library.id);
+
+        libraries.set(
+            library.id,
+            known ? { ...known, clipCount: known.clipCount + library.clipCount } : { ...library }
+        );
+    }
 
     const firstReady = sources.find((source) => source.path !== "");
 
     return {
+        reels: gathered.map((reel) => ({
+            id: reel.reel.id,
+            name: reel.reel.name,
+            clipCount: reel.entries.length,
+        })),
         clipCount: entries.length,
-        unreachableCount,
+        unreachableCount: gathered.reduce((sum, reel) => sum + reel.unreachableCount, 0),
         rates,
         recommended: recommendedFrameRate(rates),
         options: [...STANDARD_FRAME_RATES],
-        libraries,
+        libraries: [...libraries.values()],
         warnings: [
             ...warning("mpegts", (source) => source.mpegts),
             ...warning("vfr", (source) => source.vfr),
@@ -187,12 +248,19 @@ export const previewReelExport = (reelId: string, auth: AuthContext): ReelExport
 /** A reel name as a Windows file name: the characters Explorer refuses become `_`. */
 const fileNameFor = (reelName: string): string =>
     reelName
-        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
+        .replace(/[\/:*?"<>|\u0000-\u001f]/g, "_")
         .replace(/[. ]+$/, "")
         .trim() || "Reel";
 
-export const exportReel = (
-    reelId: string,
+/**
+ * The reels as one FCPXML file, a timeline each, all at `rate` (§14d "Editor export").
+ *
+ * One rate for every timeline, chosen once: the reels of one export are going into one
+ * project, and an editor conforms a project to one rate anyway. A reel with nothing this
+ * viewer can reach is left out; the preview has already said so.
+ */
+export const exportReels = (
+    reelIds: string[],
     rate: FrameRate,
     auth: AuthContext
 ): { fileName: string; body: string } => {
@@ -200,22 +268,50 @@ export const exportReel = (
         throw new ValidationError(`A timeline cannot be cut at ${formatFrameRate(rate)} fps`);
     }
 
-    const { reel, entries, sources, libraries } = gather(reelId, auth);
-    const missing = libraries.filter((library) => !library.networkPath);
+    const gathered = gatherAll(reelIds, auth).filter((reel) => reel.entries.length > 0);
+
+    if (gathered.length === 0) throw new ValidationError("There are no clips to export");
+
+    const missing = [
+        ...new Map(
+            gathered
+                .flatMap((reel) => reel.libraries)
+                .filter((library) => !library.networkPath)
+                .map((library) => [library.id, library.label])
+        ).values(),
+    ];
 
     if (missing.length > 0) {
         throw new ValidationError(
-            `No network path is set for ${missing.map((library) => `"${library.label}"`).join(", ")}`
+            `No network path is set for ${missing.map((label) => `"${label}"`).join(", ")}`
         );
     }
 
-    const timeline = buildReelTimeline({
-        name: reel.name,
-        description: reel.description,
-        rate,
-        entries,
-        sources,
-    });
+    const timelines = gathered.map(({ reel, entries, sources }) =>
+        buildReelTimeline({
+            name: reel.name,
+            description: reel.description,
+            rate,
+            entries,
+            sources,
+        })
+    );
 
-    return { fileName: `${fileNameFor(reel.name)}.fcpxml`, body: writeFcpxml(timeline) };
+    if (timelines.length === 1) {
+        const [only] = timelines;
+
+        return {
+            fileName: `${fileNameFor(only.name)}.fcpxml`,
+            body: writeFcpxml(timelines, only.name),
+        };
+    }
+
+    // The server's own calendar day, which on a household server is the household's.
+    const now = new Date();
+    const day = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+        .map((part) => String(part).padStart(2, "0"))
+        .join("-");
+    const name = `${timelines.length} reels ${day}`;
+
+    return { fileName: `${name}.fcpxml`, body: writeFcpxml(timelines, name) };
 };

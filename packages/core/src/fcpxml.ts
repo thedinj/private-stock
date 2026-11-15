@@ -85,13 +85,18 @@ const formatName = (rate: FrameRate, width: number, height: number): string | un
 const keywordValue = (keywords: string[]): string =>
     keywords.map((keyword) => keyword.replace(/,/g, " ").trim()).join(", ");
 
-export const writeFcpxml = (timeline: ReelTimeline): string => {
-    const seqRate = timeline.rate;
+/**
+ * One or more timelines as one file: one `<project>` each, all in one event. A source used by
+ * several timelines is one asset, which Resolve links once.
+ *
+ * Resolve's File → Import → Timeline brings in one timeline per import: given several, it offers
+ * a list to pick from. So a cart of reels is one file imported once per reel, picking each by
+ * name -- which still beats a zip of files, with nothing to unpack and the sources shared.
+ */
+export const writeFcpxml = (timelines: ReelTimeline[], eventName: string): string => {
     const lines: string[] = [];
-    const formats: { id: string; rate: FrameRate; width: number; height: number }[] = [
-        { id: "r1", rate: seqRate, width: timeline.width, height: timeline.height },
-    ];
-    let nextId = 2;
+    const formats: { id: string; rate: FrameRate; width: number; height: number }[] = [];
+    let nextId = 1;
 
     const formatFor = (rate: FrameRate, width: number, height: number): string => {
         const found = formats.find(
@@ -107,39 +112,60 @@ export const writeFcpxml = (timeline: ReelTimeline): string => {
         return id;
     };
 
-    // Per source: its clock, its timecode start and the length of the asset in its own frames.
-    const assets = timeline.sources.map((source: TimelineSource) => {
-        const rate = source.rate ?? seqRate;
+    // Sequence formats first, so a single timeline's is `r1` as an editor expects to see it.
+    const sequenceFormats = timelines.map((timeline) =>
+        formatFor(timeline.rate, timeline.width, timeline.height)
+    );
+
+    const sources = new Map<string, TimelineSource>();
+
+    for (const timeline of timelines) {
+        for (const source of timeline.sources) {
+            if (!sources.has(source.mediaId)) sources.set(source.mediaId, source);
+        }
+    }
+
+    // The first timeline's clock stands in for a source with no rate of its own.
+    const fallbackRate = timelines[0]?.rate ?? { num: 30, den: 1 };
+
+    // Per source: its clock, its timecode start and the length of the asset in its own frames,
+    // long enough for the furthest any timeline reads into it.
+    const assets = [...sources.values()].map((source) => {
+        const rate = source.rate ?? fallbackRate;
         const tcFrames = source.timecode ? (timecodeToFrames(source.timecode, rate) ?? 0) : 0;
         const neededFrames = Math.max(
             0,
-            ...timeline.clips
-                .filter((clip) => clip.mediaId === source.mediaId)
-                .map(
-                    (clip) =>
-                        clip.sourceInFrames +
-                        msToFrames(
-                            (clip.durationFrames * seqRate.den * 1000 * clip.speed) / seqRate.num,
-                            rate
-                        )
-                )
+            ...timelines.flatMap((timeline) =>
+                timeline.clips
+                    .filter((clip) => clip.mediaId === source.mediaId)
+                    .map(
+                        (clip) =>
+                            clip.sourceInFrames +
+                            msToFrames(
+                                (clip.durationFrames * timeline.rate.den * 1000 * clip.speed) /
+                                    timeline.rate.num,
+                                rate
+                            )
+                    )
+            )
         );
         const durationFrames = Math.max(
             source.durationMs ? msToFrames(source.durationMs, rate) : 0,
             neededFrames,
             1
         );
+        const id = `r${nextId++}`;
 
         return {
             source,
-            id: `r${nextId++}`,
+            id,
             rate,
             tcFrames,
             durationFrames,
             format: formatFor(
                 rate,
-                source.width ?? timeline.width,
-                source.height ?? timeline.height
+                source.width ?? timelines[0].width,
+                source.height ?? timelines[0].height
             ),
         };
     });
@@ -189,11 +215,33 @@ export const writeFcpxml = (timeline: ReelTimeline): string => {
 
     lines.push("    </resources>");
     lines.push("    <library>");
-    lines.push(`        <event ${attrs({ name: timeline.name })}>`);
+    lines.push(`        <event ${attrs({ name: eventName })}>`);
+
+    timelines.forEach((timeline, index) => {
+        lines.push(...projectLines(timeline, sequenceFormats[index], assetFor));
+    });
+
+    lines.push("        </event>");
+    lines.push("    </library>");
+    lines.push("</fcpxml>");
+
+    return `${lines.join("\n")}\n`;
+};
+
+type WrittenAsset = { id: string; rate: FrameRate; tcFrames: number; durationFrames: number };
+
+const projectLines = (
+    timeline: ReelTimeline,
+    formatId: string,
+    assetFor: Map<string, WrittenAsset>
+): string[] => {
+    const seqRate = timeline.rate;
+    const lines: string[] = [];
+
     lines.push(`            <project ${attrs({ name: timeline.name })}>`);
     lines.push(
         `                <sequence ${attrs({
-            format: "r1",
+            format: formatId,
             duration: framesAt(timeline.durationFrames, seqRate),
             tcStart: "0s",
             tcFormat: "NDF",
@@ -278,11 +326,8 @@ export const writeFcpxml = (timeline: ReelTimeline): string => {
     lines.push("                    </spine>");
     lines.push("                </sequence>");
     lines.push("            </project>");
-    lines.push("        </event>");
-    lines.push("    </library>");
-    lines.push("</fcpxml>");
 
-    return `${lines.join("\n")}\n`;
+    return lines;
 };
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));

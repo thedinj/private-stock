@@ -176,13 +176,21 @@ export const reelExportWarningSchema = z.object({
     clipCount: z.number().int(),
     /** A few of the file names, enough to find them. */
     files: z.array(z.string()),
+    /** The reels those clips are in, so an export of several says which to look at. */
+    reels: z.array(z.string()),
 });
 export type ReelExportWarning = z.infer<typeof reelExportWarningSchema>;
 
 export const reelExportPreviewSchema = z.object({
+    /**
+     * One row per reel, in the order asked for: each becomes a timeline. A reel with no clips
+     * this viewer can reach is listed at zero and left out of the file.
+     */
+    reels: z.array(z.object({ id: z.string(), name: z.string(), clipCount: z.number().int() })),
     clipCount: z.number().int(),
-    /** Spans in the reel this viewer cannot reach, which the timeline leaves out. */
+    /** Spans in the reels this viewer cannot reach, which the timelines leave out. */
     unreachableCount: z.number().int(),
+    /** Across every reel: one rate is chosen for all the timelines. */
     rates: z.array(rateShareSchema),
     recommended: frameRateSchema,
     /** The rates a timeline may be cut at. */
@@ -201,17 +209,35 @@ export const reelExportPreviewSchema = z.object({
 });
 export type ReelExportPreview = z.infer<typeof reelExportPreviewSchema>;
 
+/**
+ * Most reels one export takes. Each is a timeline an editor scrolls through in a bin, and the
+ * ids ride the query string; fifty is past what anyone imports at once and well inside a URL.
+ */
+export const MAX_EXPORT_REELS = 50;
+
+const frameRateParam = z.string().transform((value, ctx) => {
+    const rate = parseFrameRateKey(value);
+
+    if (!rate) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a frame rate" });
+
+        return z.NEVER;
+    }
+
+    return rate;
+});
+
 /** `?rate=30000/1001` on the download. */
-export const reelExportQuerySchema = z.object({
-    rate: z.string().transform((value, ctx) => {
-        const rate = parseFrameRateKey(value);
+export const reelExportQuerySchema = z.object({ rate: frameRateParam });
 
-        if (!rate) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a frame rate" });
+/** `?ids=a,b,c`: several reels into one file, in that order, each once. */
+export const reelsExportPreviewQuerySchema = z.object({
+    ids: z
+        .string()
+        .transform((value) => [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean))
+        .pipe(z.array(z.string().max(64)).min(1).max(MAX_EXPORT_REELS)),
+});
 
-            return z.NEVER;
-        }
-
-        return rate;
-    }),
+export const reelsExportQuerySchema = reelsExportPreviewQuerySchema.extend({
+    rate: frameRateParam,
 });
