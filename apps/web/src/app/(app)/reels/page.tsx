@@ -211,7 +211,7 @@ const ReelsPage: React.FC = () => {
                     if (cart.reels.length === 1) setExporting(false);
                     cart.remove(reelId);
                 }}
-                onExported={cart.clear}
+                onEmpty={cart.clear}
             />
 
             <Modal opened={naming} onClose={() => setNaming(false)} title="New reel" centered>

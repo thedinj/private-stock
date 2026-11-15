@@ -8008,13 +8008,27 @@ or written to a media root. Built 2026-11-14 from the parked design in
 `docs/design/editor-export.md`, which keeps the research and the roadmap beyond it.
 
 **FCPXML 1.10, not OTIO.** Resolve imports both, but its OTIO import keeps only cuts: a clip's
-speed, its label as a clip name and a marker, and tags as keywords -- three of the four things a
-reel carries -- arrive only through FCPXML. That was checked against Resolve before anything was
+speed and its label as a clip name arrive only through FCPXML. That was checked against Resolve before anything was
 wired up: a test-pattern reel with mixed rates, a 2× and a 0.5× clip, a timecoded source, an
 MPEG-TS file and one file over the SMB share imported online with every one of them intact. The
 writer (`packages/core/src/fcpxml.ts`) is hand-built XML with no dependency; its time maps follow
-auto-editor's, the reference known to import. Media tags travel as keywords; clip tags only to the
-clip's owner, because a shared reel grants the span and not its owner's filing of it.
+auto-editor's, the reference known to import.
+
+**Tags and rating travel as timeline markers, in an EDL beside the timeline.** Resolve's FCPXML
+import drops `<keyword>` wherever it is put (on the cut, on a browser clip in the event) and drops
+clip `<marker>`s too, packed a frame apart or spaced a second apart -- all tested 2026-11-14. Its
+own route for markers does work: "Import → Timeline Markers from EDL" on the imported timeline.
+So each reel has a second download, `<reel> markers.edl` (`packages/core/src/edl.ts`), written
+from the same `buildReelTimeline` at the same rate so every marker lands on its cut: the label
+(blue), one per kind of tag worded as the room names it ("Players: Ann, Bo" green, "Games:
+Chess" yellow, "Keywords: …" cyan), then "Rating: 4/5" (red) for the clip's stars. One frame
+apart, because Resolve keeps one marker per frame; a cut too short for them all gets the rest
+joined on its last frame. Two downloads rather than a zip, so nothing needs unpacking: one reel
+gets "Download timeline" and "Download markers", a cart gets one timeline file and a Markers
+button per reel, since an EDL holds one timeline. A checkbox also writes the same text into the
+clip names, for where markers are not shown. Media tags go as the exporter sees them; clip tags
+only to the clip's owner, because a shared reel grants the span and not its owner's filing of
+it. The rating is the clip's, which is shown to anyone the clip is shown to.
 
 **Frames, not milliseconds, and two clocks.** `packages/core/src/timeline.ts` converts each span's
 in-point on its **source's** own rate and lays every position and length out in whole frames of
@@ -8071,7 +8085,8 @@ Resolve project, which is conformed to one rate anyway, so the choice is made on
 reel's footage in the rate table. A single-reel export is the same routes with one id
 (`/api/reels/export?ids=…`). A reel deleted or unshared since it went in the cart is left out and
 said so, rather than failing the rest; a reel with no clips the viewer can open is listed and left
-out. The cart empties when the download succeeds.
+out. Downloading does not close the dialog or empty the cart -- an export is several files --
+so the dialog ticks off each one saved, and "Empty the cart" is its own button.
 
 ### Designed and not built
 

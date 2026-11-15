@@ -5,6 +5,7 @@ import {
     ActionIcon,
     Alert,
     Button,
+    Checkbox,
     Code,
     Group,
     Modal,
@@ -23,7 +24,7 @@ import {
     type ReelExportWarning,
 } from "@private-stock/core";
 
-import { CloseGlyph } from "@/components/media/Glyph";
+import { CheckGlyph, CloseGlyph } from "@/components/media/Glyph";
 import { downloadFile } from "@/lib/api/client";
 import { useReelExportPreview } from "@/lib/api/reels";
 
@@ -59,10 +60,10 @@ export const ReelExportDialog: React.FC<{
     reelIds: string[];
     opened: boolean;
     onClose: () => void;
-    /** From the cart: each reel can be taken out here. */
+    /** From the cart: each reel can be taken out here, or all of them. */
     onRemove?: (reelId: string) => void;
-    onExported?: () => void;
-}> = ({ reelIds, opened, onClose, onRemove, onExported }) => {
+    onEmpty?: () => void;
+}> = ({ reelIds, opened, onClose, onRemove, onEmpty }) => {
     const narrow = useMediaQuery("(max-width: 48em)") ?? false;
     const preview = useReelExportPreview(reelIds, opened);
     const several = reelIds.length > 1 || onRemove !== undefined;
@@ -72,29 +73,57 @@ export const ReelExportDialog: React.FC<{
     const data = preview.data;
     const rateKey = picked ?? (data ? frameRateKey(data.recommended) : null);
 
+    /** Tags and rating written into each clip's name as well as the markers. */
+    const [inNames, setInNames] = useState(false);
+    /**
+     * What has been saved this time the dialog is open: `"timeline"`, or `"markers:<reel id>"`.
+     * Several files come out of one export, so the dialog stays open and ticks each off.
+     */
+    const [saved, setSaved] = useState<ReadonlySet<string>>(new Set());
+
     const download = useMutation({
-        mutationFn: (key: string) =>
-            downloadFile(
-                `/api/reels/export?ids=${encodeURIComponent(reelIds.join(","))}&rate=${encodeURIComponent(key)}`,
-                "Timeline.fcpxml"
-            ),
-        onSuccess: () => {
-            onExported?.();
-            close();
-        },
+        mutationFn: (file: { key: string; path: string; fallbackName: string }) =>
+            downloadFile(file.path, file.fallbackName),
+        onSuccess: (_, file) => setSaved((done) => new Set(done).add(file.key)),
     });
 
     const close = () => {
         download.reset();
         setPicked(null);
+        setInNames(false);
+        setSaved(new Set());
         onClose();
     };
+
+    /** A marker EDL lands on the frames of a timeline at one rate: a new rate is a fresh start. */
+    const pickRate = (value: string | null) => {
+        setPicked(value && parseFrameRateKey(value) ? value : null);
+        setSaved(new Set());
+    };
+
+    const saveTimeline = (key: string) =>
+        download.mutate({
+            key: "timeline",
+            path: `/api/reels/export?ids=${encodeURIComponent(reelIds.join(","))}&rate=${encodeURIComponent(key)}&names=${inNames ? 1 : 0}`,
+            fallbackName: "Timeline.fcpxml",
+        });
+
+    const saveMarkers = (reel: { id: string; name: string }, key: string) =>
+        download.mutate({
+            key: `markers:${reel.id}`,
+            path: `/api/reels/${reel.id}/export/markers?rate=${encodeURIComponent(key)}`,
+            fallbackName: `${reel.name} markers.edl`,
+        });
+
+    /** Which button is busy: one download at a time, and the one under way says so. */
+    const busy = (key: string) => download.isPending && download.variables?.key === key;
 
     const totalRunMs = data?.rates.reduce((sum, share) => sum + share.runMs, 0) ?? 0;
     const exported = data?.reels.filter((reel) => reel.clipCount > 0) ?? [];
     /** Asked for but not returned: deleted, or no longer shared, since it went in the cart. */
     const gone = data ? reelIds.length - data.reels.length : 0;
     const missing = data?.libraries.filter((library) => !library.networkPath) ?? [];
+    const blocked = !data || missing.length > 0 || data.clipCount === 0 || !rateKey;
 
     return (
         <Modal
@@ -122,13 +151,16 @@ export const ReelExportDialog: React.FC<{
                             {exported.length} timeline{exported.length === 1 ? "" : "s"} in one
                             file, all at one frame rate, linking to the original files on the share.
                             In Resolve, File → Import → Timeline brings in one at a time: import the
-                            file once per reel and pick each by name from the list.
+                            file once per reel and pick each by name from the list. Then right-click
+                            each timeline in the Media Pool → Timelines → Import → Timeline Markers
+                            from EDL, and pick that reel’s markers file.
                         </Text>
                     ) : (
                         <Text size="sm">
                             A timeline of {data.clipCount} clip{data.clipCount === 1 ? "" : "s"}{" "}
                             that links to the original files on the share. In Resolve: File → Import
-                            → Timeline.
+                            → Timeline; then right-click the timeline in the Media Pool → Timelines
+                            → Import → Timeline Markers from EDL, and pick the markers file.
                         </Text>
                     )}
 
@@ -152,17 +184,48 @@ export const ReelExportDialog: React.FC<{
                                                 : `${reel.clipCount} clip${reel.clipCount === 1 ? "" : "s"}`}
                                         </Text>
                                     </Stack>
-                                    {onRemove && (
-                                        <ActionIcon
-                                            variant="subtle"
-                                            color="gray"
-                                            size={44}
-                                            aria-label={`Take ${reel.name} out of the export`}
-                                            onClick={() => onRemove(reel.id)}
-                                        >
-                                            <CloseGlyph size={16} />
-                                        </ActionIcon>
-                                    )}
+                                    <Group gap={0} wrap="nowrap">
+                                        {reel.hasMarkers && reel.clipCount > 0 && (
+                                            <Button
+                                                variant="subtle"
+                                                color={
+                                                    saved.has(`markers:${reel.id}`)
+                                                        ? "brass"
+                                                        : "gray"
+                                                }
+                                                mih={44}
+                                                px="xs"
+                                                disabled={blocked}
+                                                loading={busy(`markers:${reel.id}`)}
+                                                leftSection={
+                                                    saved.has(`markers:${reel.id}`) ? (
+                                                        <CheckGlyph size={14} />
+                                                    ) : undefined
+                                                }
+                                                aria-label={`Download the markers for ${reel.name}`}
+                                                onClick={() =>
+                                                    rateKey && saveMarkers(reel, rateKey)
+                                                }
+                                            >
+                                                Markers
+                                            </Button>
+                                        )}
+                                        {onRemove && (
+                                            <ActionIcon
+                                                variant="subtle"
+                                                color="gray"
+                                                size={44}
+                                                aria-label={`Take ${reel.name} out of the export`}
+                                                onClick={() => {
+                                                    // The timeline file holds other reels now.
+                                                    setSaved(new Set());
+                                                    onRemove(reel.id);
+                                                }}
+                                            >
+                                                <CloseGlyph size={16} />
+                                            </ActionIcon>
+                                        )}
+                                    </Group>
                                 </Group>
                             ))}
                             {gone > 0 && (
@@ -222,9 +285,7 @@ export const ReelExportDialog: React.FC<{
                             };
                         })}
                         value={rateKey}
-                        onChange={(value) =>
-                            setPicked(value && parseFrameRateKey(value) ? value : null)
-                        }
+                        onChange={pickRate}
                         allowDeselect={false}
                         comboboxProps={{ withinPortal: true }}
                     />
@@ -269,22 +330,65 @@ export const ReelExportDialog: React.FC<{
                         )
                     )}
 
+                    <Checkbox
+                        label="Also write tags and rating into clip names"
+                        description="Useful where markers aren’t shown, at the cost of long names."
+                        checked={inNames}
+                        onChange={(event) => setInNames(event.currentTarget.checked)}
+                    />
+
                     {download.isError && (
                         <Alert color="oxblood">Export failed: {download.error.message}</Alert>
                     )}
 
-                    <Group justify="flex-end" gap="sm">
-                        <Button variant="default" onClick={close} mih={44}>
-                            Cancel
-                        </Button>
-                        <Button
-                            mih={44}
-                            disabled={missing.length > 0 || data.clipCount === 0 || !rateKey}
-                            loading={download.isPending}
-                            onClick={() => rateKey && download.mutate(rateKey)}
-                        >
-                            {exported.length > 1 ? "Download timelines" : "Download timeline"}
-                        </Button>
+                    <Group justify="space-between" gap="sm">
+                        {onEmpty ? (
+                            <Button
+                                variant="subtle"
+                                color="gray"
+                                mih={44}
+                                onClick={() => {
+                                    onEmpty();
+                                    close();
+                                }}
+                            >
+                                Empty the cart
+                            </Button>
+                        ) : (
+                            <span />
+                        )}
+                        <Group gap="sm" justify="flex-end">
+                            <Button variant="default" onClick={close} mih={44}>
+                                Close
+                            </Button>
+                            {!several && data.reels[0]?.hasMarkers && (
+                                <Button
+                                    variant="default"
+                                    mih={44}
+                                    disabled={blocked}
+                                    loading={busy(`markers:${data.reels[0].id}`)}
+                                    leftSection={
+                                        saved.has(`markers:${data.reels[0].id}`) ? (
+                                            <CheckGlyph size={14} />
+                                        ) : undefined
+                                    }
+                                    onClick={() => rateKey && saveMarkers(data.reels[0], rateKey)}
+                                >
+                                    Download markers
+                                </Button>
+                            )}
+                            <Button
+                                mih={44}
+                                disabled={blocked}
+                                loading={busy("timeline")}
+                                leftSection={
+                                    saved.has("timeline") ? <CheckGlyph size={14} /> : undefined
+                                }
+                                onClick={() => rateKey && saveTimeline(rateKey)}
+                            >
+                                {exported.length > 1 ? "Download timelines" : "Download timeline"}
+                            </Button>
+                        </Group>
                     </Group>
                 </Stack>
             )}

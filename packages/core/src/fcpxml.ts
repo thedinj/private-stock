@@ -81,10 +81,6 @@ const formatName = (rate: FrameRate, width: number, height: number): string | un
     return line && rateSuffix ? `FFVideoFormat${line}${rateSuffix}` : undefined;
 };
 
-/** Keyword text: FCPXML separates keywords with commas, so a comma inside a tag cannot stay. */
-const keywordValue = (keywords: string[]): string =>
-    keywords.map((keyword) => keyword.replace(/,/g, " ").trim()).join(", ");
-
 /**
  * One or more timelines as one file: one `<project>` each, all in one event. A source used by
  * several timelines is one asset, which Resolve links once.
@@ -304,6 +300,8 @@ const projectLines = (
             lines.push(`${inner}</timeMap>`);
         }
 
+        // The label as a clip marker too. Resolve's FCPXML import has been seen to drop clip markers
+        // (2026-11-14); tags and rating go to Resolve as timeline markers, in an EDL (`edl.ts`).
         if (clip.label) {
             lines.push(
                 `${inner}<marker ${attrs({
@@ -311,12 +309,6 @@ const projectLines = (
                     duration: framesAt(1, seqRate),
                     value: clip.label,
                 })}/>`
-            );
-        }
-
-        if (clip.keywords.length > 0) {
-            lines.push(
-                `${inner}<keyword ${attrs({ start, duration, value: keywordValue(clip.keywords) })}/>`
             );
         }
 

@@ -30,7 +30,7 @@ const fixture = () =>
                 endMs: 5_000,
                 speed: null,
                 label: `A&B <"jump">`,
-                keywords: ["pool", "kids, small"],
+                notes: [{ kind: "performer", text: "People: Ann, Bo" }],
             },
             {
                 mediaId: "camera",
@@ -38,7 +38,7 @@ const fixture = () =>
                 endMs: 12_000,
                 speed: 2,
                 label: null,
-                keywords: [],
+                notes: [],
             },
             {
                 mediaId: "phone",
@@ -46,7 +46,7 @@ const fixture = () =>
                 endMs: 31_000,
                 speed: 0.5,
                 label: null,
-                keywords: [],
+                notes: [],
             },
             {
                 mediaId: "tc",
@@ -54,7 +54,7 @@ const fixture = () =>
                 endMs: 2_000,
                 speed: null,
                 label: "Timecode",
-                keywords: [],
+                notes: [],
             },
         ],
         sources: [
@@ -110,10 +110,6 @@ describe("writeFcpxml", () => {
         );
     });
 
-    it("comma-separates keywords and keeps a comma inside a tag from splitting it", () => {
-        expect(writeFcpxml([fixture()], "Reel")).toContain('value="pool, kids  small"');
-    });
-
     it("writes several timelines into one event, each source once", () => {
         const second = buildReelTimeline({
             name: "Second",
@@ -126,7 +122,7 @@ describe("writeFcpxml", () => {
                     endMs: 70_000,
                     speed: null,
                     label: null,
-                    keywords: [],
+                    notes: [],
                 },
             ],
             sources: [source("phone", { durationMs: 70_000 })],

@@ -186,7 +186,15 @@ export const reelExportPreviewSchema = z.object({
      * One row per reel, in the order asked for: each becomes a timeline. A reel with no clips
      * this viewer can reach is listed at zero and left out of the file.
      */
-    reels: z.array(z.object({ id: z.string(), name: z.string(), clipCount: z.number().int() })),
+    reels: z.array(
+        z.object({
+            id: z.string(),
+            name: z.string(),
+            clipCount: z.number().int(),
+            /** Whether a label, tag or rating gives it a markers EDL to download. */
+            hasMarkers: z.boolean(),
+        })
+    ),
     clipCount: z.number().int(),
     /** Spans in the reels this viewer cannot reach, which the timelines leave out. */
     unreachableCount: z.number().int(),
@@ -227,7 +235,7 @@ const frameRateParam = z.string().transform((value, ctx) => {
     return rate;
 });
 
-/** `?rate=30000/1001` on the download. */
+/** `?rate=30000/1001` on one reel's markers download. */
 export const reelExportQuerySchema = z.object({ rate: frameRateParam });
 
 /** `?ids=a,b,c`: several reels into one file, in that order, each once. */
@@ -240,4 +248,9 @@ export const reelsExportPreviewQuerySchema = z.object({
 
 export const reelsExportQuerySchema = reelsExportPreviewQuerySchema.extend({
     rate: frameRateParam,
+    /** `names=1`: tags and rating written into each clip's name as well as the markers. */
+    names: z
+        .enum(["0", "1"])
+        .optional()
+        .transform((value) => value === "1"),
 });

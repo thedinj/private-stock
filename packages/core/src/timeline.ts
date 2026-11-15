@@ -99,6 +99,10 @@ export const timelineSourceSchema = z.object({
 
 export type TimelineSource = z.infer<typeof timelineSourceSchema>;
 
+export const timelineNoteSchema = z.object({ kind: z.string(), text: z.string() });
+
+export type TimelineNote = z.infer<typeof timelineNoteSchema>;
+
 /** One span in reel order, as the exporter is handed it. */
 export const timelineEntrySchema = z.object({
     mediaId: z.string(),
@@ -106,7 +110,12 @@ export const timelineEntrySchema = z.object({
     endMs: z.number().int().positive(),
     speed: z.number().nullable(),
     label: z.string().nullable(),
-    keywords: z.array(z.string()),
+    /**
+     * What else to say about the span: one line per kind of tag and one for the rating, already
+     * worded for the room ("Players: Ann, Bo"). `kind` is the tag kind or `"rating"`, which is
+     * what a marker's colour is chosen by.
+     */
+    notes: z.array(timelineNoteSchema),
 });
 
 export type TimelineEntry = z.infer<typeof timelineEntrySchema>;
@@ -116,7 +125,7 @@ export const timelineClipSchema = z.object({
     mediaId: z.string(),
     name: z.string(),
     label: z.string().nullable(),
-    keywords: z.array(z.string()),
+    notes: z.array(timelineNoteSchema),
     /** Where it sits, in sequence frames from the start of the timeline. */
     offsetFrames: z.number().int().nonnegative(),
     /** How long it runs on the timeline, in sequence frames -- after speed. */
@@ -279,6 +288,8 @@ export const buildReelTimeline = (input: {
     rate: FrameRate;
     entries: TimelineEntry[];
     sources: TimelineSource[];
+    /** Write each span's notes into its clip name too: "Jump · Players: Ann · Rating: 4/5". */
+    notesInNames?: boolean;
 }): ReelTimeline => {
     const byId = new Map(input.sources.map((source) => [source.mediaId, source]));
     const used = new Map<string, TimelineSource>();
@@ -296,9 +307,14 @@ export const buildReelTimeline = (input: {
 
         clips.push({
             mediaId: entry.mediaId,
-            name: entry.label?.trim() || source.fileName,
+            name: input.notesInNames
+                ? [
+                      entry.label?.trim() || source.fileName,
+                      ...entry.notes.map((note) => note.text),
+                  ].join(NOTE_SEPARATOR)
+                : entry.label?.trim() || source.fileName,
             label: entry.label?.trim() || null,
-            keywords: entry.keywords,
+            notes: entry.notes,
             offsetFrames,
             durationFrames,
             sourceInFrames: msToFrames(entry.startMs, source.rate ?? input.rate),
@@ -319,6 +335,42 @@ export const buildReelTimeline = (input: {
         sources,
     };
 };
+
+const NOTE_SEPARATOR = " · ";
+
+/** A marker on the timeline: where, in sequence frames, what it says and what kind it is. */
+export type TimelineMarker = { frame: number; kind: string; text: string };
+
+/**
+ * Each cut's label and notes as timeline markers, a sequence frame apart from the cut's first.
+ *
+ * Apart because Resolve keeps one marker per frame: two at the same instant arrive as one. A cut
+ * too short for one frame each gets the rest joined onto its last frame, rather than markers
+ * that would land on the next cut.
+ */
+export const timelineMarkers = (timeline: ReelTimeline): TimelineMarker[] =>
+    timeline.clips.flatMap((clip) => {
+        const all = [...(clip.label ? [{ kind: "label", text: clip.label }] : []), ...clip.notes];
+        const room = clip.durationFrames;
+        const fits = all.length <= room ? all : all.slice(0, room - 1);
+        const markers = fits.map((note, index) => ({
+            frame: clip.offsetFrames + index,
+            kind: note.kind,
+            text: note.text,
+        }));
+
+        if (fits.length < all.length) {
+            const rest = all.slice(room - 1);
+
+            markers.push({
+                frame: clip.offsetFrames + room - 1,
+                kind: rest[0].kind,
+                text: rest.map((note) => note.text).join(NOTE_SEPARATOR),
+            });
+        }
+
+        return markers;
+    });
 
 /** The frame size holding the most watching time, so most of the reel is not rescaled. */
 const dominantSize = (

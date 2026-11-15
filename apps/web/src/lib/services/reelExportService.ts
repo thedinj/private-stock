@@ -3,6 +3,9 @@ import { posix } from "node:path";
 import {
     assertSafeRelativePath,
     buildReelTimeline,
+    domainProfiles,
+    tagKinds,
+    type DomainKind,
     formatFrameRate,
     joinNetworkPath,
     NotFoundError,
@@ -13,10 +16,12 @@ import {
     STANDARD_FRAME_RATES,
     ValidationError,
     writeFcpxml,
+    writeMarkerEdl,
     type FrameRate,
     type ReelExportPreview,
     type ReelExportWarning,
     type TimelineEntry,
+    type TimelineNote,
     type TimelineSource,
 } from "@private-stock/core";
 import { clipTagRepo, mediaRepo, mediaRootRepo, reelRepo, tagRepo } from "@private-stock/db";
@@ -38,6 +43,50 @@ import { listReelEntries } from "./reelService";
 
 /** How many file names a warning carries: enough to find them, not a list to read. */
 const WARNING_FILES = 5;
+
+type Tagged = { kind: string; name: string };
+
+/**
+ * A span's tags and rating as text for the markers EDL and, if asked, the clip names: a line per
+ * kind of tag, in the order the library shows them, each named as the room names it ("Players:
+ * Ann, Bo" in the Game Room, "People:" in the Parlour), then the rating.
+ *
+ * Markers in an EDL because Resolve's FCPXML import drops both keywords and clip markers (§14d
+ * "Editor export"), and a marker per kind rather than one for everything so each reads at a
+ * glance on the timeline. The rating is the clip's: the owner's stars for the span, shown to
+ * anyone the clip is shown to, so the file says nothing the reel did not.
+ */
+const notesFor = (
+    tags: Tagged[],
+    rating: number | null,
+    domain: DomainKind | null
+): TimelineNote[] => {
+    const facets: Record<string, { many: string }> = domain ? domainProfiles[domain].facets : {};
+    const byKind = new Map<string, Set<string>>();
+
+    for (const tag of tags) {
+        byKind.set(tag.kind, (byKind.get(tag.kind) ?? new Set()).add(tag.name));
+    }
+
+    const order = (kind: string) => {
+        const known = (tagKinds as readonly string[]).indexOf(kind);
+
+        return known === -1 ? tagKinds.length : known;
+    };
+    const kinds = [...byKind.keys()].sort((a, b) => order(a) - order(b) || a.localeCompare(b));
+
+    return [
+        ...kinds.map((kind) => {
+            const heading = facets[kind]?.many ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+            const names = [...byKind.get(kind)!].sort((a, b) =>
+                a.localeCompare(b, undefined, { sensitivity: "base" })
+            );
+
+            return { kind, text: `${heading}: ${names.join(", ")}` };
+        }),
+        ...(rating ? [{ kind: "rating", text: `Rating: ${rating}/5` }] : []),
+    ];
+};
 
 type Gathered = {
     reel: reelRepo.ReelRow;
@@ -69,10 +118,10 @@ const gather = (reelId: string, auth: AuthContext): Gathered => {
         })
     );
 
-    const mediaTags = new Map<string, string[]>();
+    const mediaTags = new Map<string, Tagged[]>();
 
     for (const row of tagRepo.listForMediaIds(mediaIds, auth.userId)) {
-        mediaTags.set(row.mediaId, [...(mediaTags.get(row.mediaId) ?? []), row.name]);
+        mediaTags.set(row.mediaId, [...(mediaTags.get(row.mediaId) ?? []), row]);
     }
 
     const owned = clipTagRepo.ownedClipIds(
@@ -121,12 +170,14 @@ const gather = (reelId: string, auth: AuthContext): Gathered => {
             endMs: item.clip.endMs,
             speed: item.clip.speed,
             label: item.clip.label,
-            keywords: [
-                ...new Set([
+            notes: notesFor(
+                [
                     ...(mediaTags.get(item.clip.mediaId) ?? []),
-                    ...(clipTags.get(item.clip.id) ?? []).map((tag) => tag.name),
-                ]),
-            ],
+                    ...(clipTags.get(item.clip.id) ?? []),
+                ],
+                item.clip.rating,
+                auth.domain
+            ),
         }));
 
     const libraries = [...roots.values()].map((root) => ({
@@ -229,6 +280,7 @@ export const previewReelsExport = (reelIds: string[], auth: AuthContext): ReelEx
             id: reel.reel.id,
             name: reel.reel.name,
             clipCount: reel.entries.length,
+            hasMarkers: reel.entries.some((entry) => entry.label || entry.notes.length > 0),
         })),
         clipCount: entries.length,
         unreachableCount: gathered.reduce((sum, reel) => sum + reel.unreachableCount, 0),
@@ -262,11 +314,10 @@ const fileNameFor = (reelName: string): string =>
 export const exportReels = (
     reelIds: string[],
     rate: FrameRate,
+    notesInNames: boolean,
     auth: AuthContext
 ): { fileName: string; body: string } => {
-    if (!STANDARD_FRAME_RATES.some((option) => sameRate(option, rate))) {
-        throw new ValidationError(`A timeline cannot be cut at ${formatFrameRate(rate)} fps`);
-    }
+    assertTimelineRate(rate);
 
     const gathered = gatherAll(reelIds, auth).filter((reel) => reel.entries.length > 0);
 
@@ -294,6 +345,7 @@ export const exportReels = (
             rate,
             entries,
             sources,
+            notesInNames,
         })
     );
 
@@ -314,4 +366,35 @@ export const exportReels = (
     const name = `${timelines.length} reels ${day}`;
 
     return { fileName: `${name}.fcpxml`, body: writeFcpxml(timelines, name) };
+};
+
+const assertTimelineRate = (rate: FrameRate) => {
+    if (!STANDARD_FRAME_RATES.some((option) => sameRate(option, rate))) {
+        throw new ValidationError(`A timeline cannot be cut at ${formatFrameRate(rate)} fps`);
+    }
+};
+
+/**
+ * One reel's markers as an EDL, for Resolve's "Import → Timeline Markers from EDL" onto the
+ * timeline the FCPXML made (§14d "Editor export").
+ *
+ * Laid out by the same `buildReelTimeline` at the same rate, so every marker lands on the frame
+ * of the cut it belongs to. A second download rather than a zip with the timeline: an EDL holds
+ * one timeline's markers, and two links beat a file to unpack.
+ */
+export const exportReelMarkers = (
+    reelId: string,
+    rate: FrameRate,
+    auth: AuthContext
+): { fileName: string; body: string } => {
+    assertTimelineRate(rate);
+
+    const { reel, entries, sources } = gather(reelId, auth);
+    const body = writeMarkerEdl(
+        buildReelTimeline({ name: reel.name, description: null, rate, entries, sources })
+    );
+
+    if (!body) throw new ValidationError("This reel has no labels, tags or ratings to mark");
+
+    return { fileName: `${fileNameFor(reel.name)} markers.edl`, body };
 };

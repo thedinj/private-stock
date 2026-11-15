@@ -30,7 +30,7 @@ const source = (mediaId: string, overrides: Partial<TimelineSource> = {}): Timel
 });
 
 const entry = (mediaId: string, startMs: number, endMs: number, speed: number | null = null) =>
-    ({ mediaId, startMs, endMs, speed, label: null, keywords: [] }) satisfies TimelineEntry;
+    ({ mediaId, startMs, endMs, speed, label: null, notes: [] }) satisfies TimelineEntry;
 
 describe("snapFrameRate", () => {
     it("reads a rounded NTSC rate as the rational the camera meant", () => {

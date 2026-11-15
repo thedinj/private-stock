@@ -23,6 +23,7 @@ export * from "./libraryMerge.js";
 export * from "./sourceErrors.js";
 export * from "./stages.js";
 export * from "./embedding.js";
+export * from "./edl.js";
 export * from "./fcpxml.js";
 export * from "./networkPath.js";
 export * from "./timeline.js";
