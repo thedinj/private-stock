@@ -74,6 +74,24 @@ describe("neighbours", () => {
 
         expect(result).toEqual({ previousId: null, nextId: null, position: null });
     });
+
+    it("stands a carried item before the top of its new set", () => {
+        // A screening turned the other way up while a video that suits it plays on (§14h).
+        const result = neighbours({ pageIds: ["a", "b"], page: 0, currentId: "z", carried: true });
+
+        expect(result).toEqual({ previousId: null, nextId: "a", position: null });
+    });
+
+    it("walks a carried item that is in its new set like any other", () => {
+        const result = neighbours({
+            pageIds: ["a", "z", "b"],
+            page: 0,
+            currentId: "z",
+            carried: true,
+        });
+
+        expect(result).toEqual({ previousId: "a", nextId: "b", position: 2 });
+    });
 });
 
 describe("adjacentPagesNeeded", () => {
@@ -187,5 +205,9 @@ describe("upcomingIds", () => {
 
     it("is empty for an item that is not in the page, not the start of the page", () => {
         expect(upcomingIds(["a", "b"], ["c"], "z", 8)).toEqual([]);
+    });
+
+    it("is the start of the page for an item carried in before it", () => {
+        expect(upcomingIds(["a", "b", "c"], undefined, "z", 2, true)).toEqual(["a", "b"]);
     });
 });

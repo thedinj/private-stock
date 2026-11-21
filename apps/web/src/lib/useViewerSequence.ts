@@ -367,23 +367,35 @@ const parseSet = (returnTo: string): ViewerSet | null => {
     };
 };
 
-export const useViewerSequence = (returnTo: string | null, currentId: string): Sequence => {
+/**
+ * `carriedId` is an item put in front of a new set rather than found in it (§14h, "Turning the
+ * screen"): while it is the item on screen and absent from the set, Next is the set's top.
+ */
+export const useViewerSequence = (
+    returnTo: string | null,
+    currentId: string,
+    carriedId: string | null = null
+): Sequence => {
     const queryClient = useQueryClient();
 
     /**
-     * The set, read once from the address the grid was left at.
+     * The set, parsed from the address the grid was left at.
      *
-     * Held in a ref rather than derived each render so that a `returnTo` which somehow
-     * changed — it cannot today, being read once itself — could not move the viewer to a
-     * different set while they are standing in it.
+     * Held in a ref, keyed by the address, so it is parsed once per address rather than every
+     * render. The address changes under a standing viewer only when the viewer means it to: a
+     * private screening putting a new set behind the video playing (§14h).
      */
-    const parsed = useRef<ViewerSet | null>(null);
+    const parsed = useRef<{ returnTo: string | null; set: ViewerSet | null }>({
+        returnTo: null,
+        set: null,
+    });
 
-    if (parsed.current === null && returnTo) {
-        parsed.current = parseSet(returnTo);
+    if (parsed.current.returnTo !== returnTo) {
+        parsed.current = { returnTo, set: returnTo ? parseSet(returnTo) : null };
     }
 
-    const set = parsed.current;
+    const set = parsed.current.set;
+    const carried = carriedId !== null && carriedId === currentId;
     const enabled = set !== null;
     const page = set?.page ?? 0;
 
@@ -399,14 +411,17 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
      * back — and the refetched page no longer contains this item. Recomputing there would
      * delete the next button mid-browse, as a consequence of an unrelated click.
      *
-     * Keyed by the item, so a step that did not remount would still hold afresh.
+     * Keyed by the item and the set, so a step that did not remount would still hold afresh,
+     * and so would a new set put behind the item on screen.
      */
+    const holdKey = `${currentId}
+${returnTo ?? ""}`;
     const held = useRef<{ id: string; current?: HeldPage; previous?: HeldPage; next?: HeldPage }>({
-        id: currentId,
+        id: holdKey,
     });
 
-    if (held.current.id !== currentId) {
-        held.current = { id: currentId };
+    if (held.current.id !== holdKey) {
+        held.current = { id: holdKey };
     }
 
     const hold = held.current;
@@ -504,7 +519,7 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
     const previousPageIds = hold.previous?.ids.filter((id) => !inPage.has(id));
     const nextPageIds = hold.next?.ids.filter((id) => !inPage.has(id));
 
-    const ahead = upcomingIds(pageIds, nextPageIds, currentId, UPCOMING);
+    const ahead = upcomingIds(pageIds, nextPageIds, currentId, UPCOMING, carried);
 
     /**
      * The up-next tiles. A playlist's or a shelf's pages carry them; a library's are ids, so
@@ -538,7 +553,7 @@ export const useViewerSequence = (returnTo: string | null, currentId: string): S
     }
 
     const pages = { pageIds, page, previousPageIds, nextPageIds };
-    const near = neighbours({ ...pages, currentId, pageSize });
+    const near = neighbours({ ...pages, currentId, pageSize, carried });
     const total =
         set.kind === "library" ? (count.data?.total ?? null) : (hold.current.total ?? null);
 

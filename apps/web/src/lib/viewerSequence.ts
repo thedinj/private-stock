@@ -44,6 +44,12 @@ export interface SequenceInput {
      * in two hundreds, and positions counted in sixties there are simply wrong (§14f).
      */
     pageSize?: number;
+    /**
+     * Whether this item was carried into the set rather than found in it (§14h, "Turning the
+     * screen"): a new set put behind the item already playing. Absent from it, it stands before
+     * the top, so Next is the first item instead of nothing.
+     */
+    carried?: boolean;
 }
 
 /**
@@ -64,8 +70,13 @@ export const neighbours = ({
     nextPageIds,
     currentId,
     pageSize = PAGE_SIZE,
+    carried = false,
 }: SequenceInput): Neighbours => {
     const index = pageIds.indexOf(currentId);
+
+    if (index === -1 && carried && page === 0) {
+        return { previousId: null, nextId: pageIds[0] ?? null, position: null };
+    }
 
     /**
      * The item is not in the set.
@@ -175,16 +186,20 @@ export const pickHeldPage = <T extends { ids: string[] }>(
  * The ids after this one, continuing into the next page when it is held.
  *
  * An item that has left the set has nothing after it: slicing from an index of -1 would show
- * the start of the page as though it were what came next.
+ * the start of the page as though it were what came next -- unless it was carried in, when the
+ * start of the page is exactly what comes next.
  */
 export const upcomingIds = (
     pageIds: string[],
     nextPageIds: string[] | undefined,
     currentId: string,
-    count: number
+    count: number,
+    carried = false
 ): string[] => {
     const index = pageIds.indexOf(currentId);
 
+    // Carried in from before the top: everything on the page is still to come.
+    if (index === -1 && carried) return pageIds.slice(0, count);
     if (index === -1) return [];
 
     return [...pageIds.slice(index + 1), ...(nextPageIds ?? [])].slice(0, count);

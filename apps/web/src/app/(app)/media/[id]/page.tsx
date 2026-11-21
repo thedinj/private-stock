@@ -66,7 +66,14 @@ import {
     reviewParam,
     withReview,
 } from "@/lib/reviewMode";
-import { readReturn, rememberReturnTo, returnAtPage, returnLabel } from "@/lib/returnTo";
+import {
+    readCarried,
+    readReturn,
+    rememberCarried,
+    rememberReturnTo,
+    returnAtPage,
+    returnLabel,
+} from "@/lib/returnTo";
 import { leaveViewer } from "@/lib/viewerReturn";
 import { openingPicture } from "@/lib/openItem";
 import { morphOutOfStage } from "@/lib/viewTransitions";
@@ -81,6 +88,7 @@ import { useWarmIntent } from "@/lib/warmMonitor";
 import { useStudyRoom } from "@/lib/useStudyRoom";
 import { getActiveDomain, roomRuns } from "@/lib/activeDomain";
 import { usePlaybackPref, useDwellSeconds } from "@/lib/playbackPrefs";
+import { useScreeningFit } from "@/lib/privateScreening";
 import { DWELL_CHOICES, dwellMs, snapDwellSeconds, stageMode, stillSource } from "@/lib/stageDwell";
 import {
     ratingAfterPressing,
@@ -133,15 +141,27 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
      * Where "back" goes.
      *
      * Read once, on mount, rather than on every render: it is a fact about how this page was
-     * arrived at, and it must not change under the viewer while they are looking at it.
-     * `useState` with an initialiser reads it after hydration, so the server and the client
-     * render the same thing.
+     * arrived at, and nothing outside the viewer may change it under them while they are
+     * looking. `useState` with an initialiser reads it after hydration, so the server and the
+     * client render the same thing.
+     *
+     * The one change is the viewer's own: a private screening putting a new set behind the
+     * video on screen when the screen is turned or "Fits" is pressed (§14h). The item is then
+     * carried -- it stands before the new set's top, so Next is its first item.
      */
-    const [returnTo] = useState<string | null>(() =>
+    const [returnTo, setReturnTo] = useState<string | null>(() =>
         typeof window === "undefined" ? null : readReturn()
     );
+    const [carriedId, setCarriedId] = useState<string | null>(() =>
+        typeof window === "undefined" ? null : readCarried(returnTo)
+    );
+    const carry = useCallback((href: string, itemId: string) => {
+        rememberCarried(href, itemId);
+        setReturnTo(href);
+        setCarriedId(itemId);
+    }, []);
 
-    const sequence = useViewerSequence(returnTo, id);
+    const sequence = useViewerSequence(returnTo, id, carriedId);
 
     /** Opened by a private screening (§14h), which offers "Fits" on the bar. */
     const screening =
@@ -492,6 +512,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         // without a reload. Structural sharing keeps every unchanged field the same object,
         // so the player is not disturbed by a poll that changed nothing it reads.
         refetchInterval: stageWorkInterval,
+    });
+
+    /** "Fits", kept true as the screen is turned (§14h): only for the video on screen. */
+    const screeningFit = useScreeningFit({
+        active: screening,
+        returnTo,
+        item: data && data.id === id && data.kind === "video" ? data : null,
+        carry,
     });
 
     /**
@@ -1364,7 +1392,14 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             steps={steps}
                             menuItems={stageMenu}
                             cast={castControl}
-                            setControl={screening ? <ScreeningFitChip /> : undefined}
+                            setControl={
+                                screening ? (
+                                    <ScreeningFitChip
+                                        fit={screeningFit.fit}
+                                        onToggle={screeningFit.toggle}
+                                    />
+                                ) : undefined
+                            }
                             caption={{ title: data.title, tags: data.tags }}
                         />
                     ) : (

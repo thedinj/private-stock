@@ -30,6 +30,18 @@ export const fetchLibraryPage = (filter: URLSearchParams, page: number) => {
 };
 
 /**
+ * The address a set's viewer records to return to: the set's grid at page one, marked as a
+ * private screening's when it is one (§14h).
+ */
+export const setAddress = (view: LibraryView, screening: boolean): string => {
+    const address = viewToParams({ ...view, page: 0 });
+
+    if (screening) address.set(SCREENING_PARAM, "1");
+
+    return `/?${address.toString()}`;
+};
+
+/**
  * Play from the top: the first item of a set, opened in the viewer with the set behind it
  * (`PlayMenu`). Shared by every page that offers it, so "the top" is one answer.
  *
@@ -68,10 +80,7 @@ export const usePlayFromTop = (): ((
 
         if (!target) return false;
 
-        const address = viewToParams({ ...view, page: 0 });
-
-        if (screening) address.set(SCREENING_PARAM, "1");
-        rememberReturnTo(`/?${address.toString()}`);
+        rememberReturnTo(setAddress(view, screening));
 
         const href = withReview(`/media/${encodeURIComponent(target.id)}`, review);
         const inViewer = screening && window.location.pathname.startsWith("/media/");

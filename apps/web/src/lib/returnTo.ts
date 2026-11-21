@@ -24,6 +24,7 @@ import { mediaListItemSchema, type MediaListItem } from "@private-stock/core";
 
 const KEY = "ps:returnTo";
 const SHELF_KEY = "ps:returnShelf";
+const CARRIED_KEY = "ps:returnCarried";
 
 /** Called as an item is opened, by whatever is doing the opening. */
 export const rememberReturn = (): void =>
@@ -44,6 +45,7 @@ export const rememberReturnTo = (href: string): void => {
     try {
         sessionStorage.setItem(KEY, href);
         sessionStorage.removeItem(SHELF_KEY);
+        sessionStorage.removeItem(CARRIED_KEY);
     } catch {
         // Private mode, or storage disabled. The back link falls back to the room, which is
         // never wrong — only less helpful.
@@ -68,6 +70,41 @@ export const rememberShelf = (items: MediaListItem[]): void => {
         sessionStorage.setItem(SHELF_KEY, JSON.stringify({ href, items }));
     } catch {
         // The item still opens, and Back still works; it simply stands alone.
+    }
+};
+
+/**
+ * A new set put behind the item already on screen, which is not in it (§14h, "Turning the
+ * screen"): a private screening turned the other way up, or told to keep to what fits, while a
+ * video that still suits it plays on.
+ *
+ * The item stands just before the top of the new set, so Next is the set's first item. Recorded
+ * beside the address like the shelf, and matched against it the same way, so a reload of the
+ * viewer keeps the way on and any later recording forgets it.
+ */
+export const rememberCarried = (href: string, itemId: string): void => {
+    rememberReturnTo(href);
+
+    try {
+        sessionStorage.setItem(CARRIED_KEY, JSON.stringify({ href, itemId }));
+    } catch {
+        // The item plays on; it simply has no next until the next deal.
+    }
+};
+
+const carriedSchema = z.object({ href: z.string(), itemId: z.string() });
+
+/** The item carried into `returnTo`'s set, or null when the recording carried none. */
+export const readCarried = (returnTo: string | null): string | null => {
+    if (!returnTo) return null;
+
+    try {
+        const raw = sessionStorage.getItem(CARRIED_KEY);
+        const parsed = raw ? carriedSchema.safeParse(JSON.parse(raw)) : null;
+
+        return parsed?.success && parsed.data.href === returnTo ? parsed.data.itemId : null;
+    } catch {
+        return null;
     }
 };
 

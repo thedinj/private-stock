@@ -11051,13 +11051,26 @@ Play › From the top -- a shortcut to a path that already existed, not a new mo
   included. It follows the screen, not the page, so the press still means one thing. `fits` is
   its own query field rather than `orientation` with two values: it asks whether a picture fills
   a screen, not which way up it is. It is in the address like any filter, so the grid Back lands
-  on shows it as a chip. Turning the phone mid-screening keeps the deal; the next press reads
-  the new way up.
+  on shows it as a chip.
+- **Turning the screen** (2026-11-20). The screening follows the screen, not just the press: it
+  read the way up once, so a tablet turned mid-screening kept dealing the old way up until the
+  next press. Now the set behind the viewer is made to agree with the screen when it is turned
+  and has settled (700 ms, so a wobble on a lap is not a turn), on each arrival in case a turn
+  fell between items, and when "Fits" is pressed. Agreeing never stops a video that suits the
+  new set: the new set -- a fresh shuffle -- is put behind it and it plays on, **carried**: it
+  stands before the new set's top, so Next is that set's first item (`rememberCarried`, beside
+  the return address like the shelf, so a reload keeps it). Only a video the wrong way up for a
+  screen just turned is moved on from, to the first that fits, since that is what the turn
+  asked for. Rejected: one unfiltered set, skipping what does not fit while advancing. The
+  viewer holds ids, not sizes, so every skip is a lookup -- dozens in a room mostly one way up
+  -- and the up-next strip, the warmed next video, Previous and the count would all show
+  videos that are then skipped; a filtered set keeps all of them honest for nothing.
 - **Nothing that fits is the whole room**, not an empty one: a room whose videos are all one
   way up, like the Game Room, plays everything on a screen held the other way.
 - **"Fits" is the room's choice, set from the viewer.** A toggle on the player's bar during a
-  screening (on the bar so it is there in full screen) turns the rule off or on and deals again
-  at once. Its icon is the screen as it is held, tall or wide, ticked while on, so it says what
+  screening (on the bar so it is there in full screen) turns the rule off or on and puts the
+  matching set behind the video at once -- which plays on unless it is the wrong way up for the
+  new set (above). It used to deal again on every press, stopping a video that already fit. Its icon is the screen as it is held, tall or wide, ticked while on, so it says what
   "fits" is measured against without a tooltip a phone cannot show. The caption was "This way
   up" first, which was long for the bar and read as an instruction. Remembered per room in this browser (`roomKey`), like the reel target -- losing
   it costs a tap -- and on until a room is told otherwise. In the viewer rather than in a setting
