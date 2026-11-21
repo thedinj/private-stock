@@ -36,6 +36,7 @@ import type { WarmGate, WarmSource } from "@/lib/warmMonitor";
 
 import {
     CheckGlyph,
+    CloseGlyph,
     FullscreenGlyph,
     Glyph,
     MoreGlyph,
@@ -933,6 +934,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     remoteRef.current = remote;
 
     const casting = remote !== null;
+    /*
+     * While casting the bar is the TV's remote, and drawn as one (§11): the jumps and play in a
+     * row of their own, large enough to hit without looking from a sofa, the rest below them.
+     */
+    const stepSize = casting ? 52 : iconSize;
+    const stepGlyph = casting ? 26 : undefined;
+    const stepClass = casting ? classes.remoteStep : undefined;
     /** Set when casting is stopped from here, so the film carries on here once it has. */
     const resumeHereRef = useRef(false);
 
@@ -2121,16 +2129,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         if (!target.closest("button, [data-cast-strip]")) remote.togglePlay();
                     }}
                 >
-                    <Group
-                        gap="xs"
-                        justify="center"
-                        wrap="nowrap"
-                        style={{ pointerEvents: "none" }}
-                    >
-                        <CastGlyph size={spriteVttUrl ? 20 : 40} />
-                        <Text size="sm">
-                            {cast.message ?? `Playing on ${cast.deviceName ?? "the TV"}`}
+                    <Group gap="sm" wrap="nowrap" className={classes.castLine}>
+                        <CastGlyph size={22} />
+                        <Text size="sm" className={classes.castWho}>
+                            {cast.message ?? (
+                                <>
+                                    Playing on{" "}
+                                    <Text span fw={600} c="brass.4" inherit>
+                                        {cast.deviceName ?? "the TV"}
+                                    </Text>
+                                </>
+                            )}
                         </Text>
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size={44}
+                            onClick={toggleCast}
+                            aria-label={castLabel}
+                            title={castLabel}
+                        >
+                            <CloseGlyph />
+                        </ActionIcon>
                     </Group>
                     {spriteVttUrl && (
                         <CastRibbon
@@ -2229,142 +2249,155 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         scrubber
                     )}
 
-                    <Group gap={compact ? 4 : "xs"} wrap="nowrap" align="center">
-                        {steps &&
-                            keyTip(
-                                "previous",
-                                "Previous item",
-                                <ActionIcon
-                                    variant="subtle"
-                                    color="brass"
-                                    size={iconSize}
-                                    className={classes.step}
-                                    disabled={!steps.previous}
-                                    onClick={steps.previous ?? undefined}
-                                    aria-label="Previous item"
-                                >
-                                    <PreviousGlyph />
-                                </ActionIcon>
-                            )}
-
-                        <SkipButton
-                            direction="back"
-                            seconds={backSeconds}
-                            choices={SKIP_BACK_CHOICES}
-                            onChoose={setBackSeconds}
-                            hotkey="j"
-                            size={iconSize}
-                            coarse={coarse}
-                            onSkip={() => {
-                                const by = backSeconds * 1000;
-
-                                // A reel seeks in reel time, so going back can cross into the
-                                // previous span rather than stopping at this one's start.
-                                if (timeline) {
-                                    timeline.onSeek(Math.max(0, reelPositionMs - by));
-
-                                    return;
-                                }
-
-                                if (remote) {
-                                    remote.seekTo(Math.max(0, remote.positionMs - by));
-
-                                    return;
-                                }
-
-                                const video = videoRef.current;
-                                if (video) seekTo(Math.max(0, video.currentTime * 1000 - by));
-                            }}
-                        />
-
-                        {/* Play between the two jumps, so the button that leaves the item is
-                            never the one beside it. */}
-                        {keyTip(
-                            "play",
-                            shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play",
-                            <ActionIcon
-                                variant="subtle"
-                                color="brass"
-                                size={iconSize}
-                                onClick={remote ? remote.togglePlay : togglePlay}
-                                aria-label={
-                                    shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play"
-                                }
-                            >
-                                {shownAtEnd ? (
-                                    <ReplayGlyph />
-                                ) : shownPlaying ? (
-                                    <PauseGlyph />
-                                ) : (
-                                    <PlayGlyph />
+                    <Group
+                        gap={compact ? 4 : "xs"}
+                        wrap="nowrap"
+                        align="center"
+                        className={casting ? classes.remoteRows : undefined}
+                    >
+                        <Box className={casting ? classes.remoteTransport : classes.inline}>
+                            {steps &&
+                                keyTip(
+                                    "previous",
+                                    "Previous item",
+                                    <ActionIcon
+                                        variant="subtle"
+                                        color="brass"
+                                        size={stepSize}
+                                        className={casting ? stepClass : classes.step}
+                                        disabled={!steps.previous}
+                                        onClick={steps.previous ?? undefined}
+                                        aria-label="Previous item"
+                                    >
+                                        <PreviousGlyph size={stepGlyph} />
+                                    </ActionIcon>
                                 )}
-                            </ActionIcon>
-                        )}
 
-                        <SkipButton
-                            direction="forward"
-                            seconds={forwardSeconds}
-                            choices={SKIP_FORWARD_CHOICES}
-                            onChoose={setForwardSeconds}
-                            hotkey="l"
-                            size={iconSize}
-                            coarse={coarse}
-                            onSkip={() => {
-                                const by = forwardSeconds * 1000;
+                            <SkipButton
+                                direction="back"
+                                seconds={backSeconds}
+                                choices={SKIP_BACK_CHOICES}
+                                onChoose={setBackSeconds}
+                                hotkey="j"
+                                size={stepSize}
+                                coarse={coarse}
+                                className={stepClass}
+                                glyphSize={stepGlyph}
+                                onSkip={() => {
+                                    const by = backSeconds * 1000;
 
-                                // In reel time too, so it can cross into the next span.
-                                if (timeline) {
-                                    timeline.onSeek(
-                                        Math.min(timeline.totalMs, reelPositionMs + by)
-                                    );
+                                    // A reel seeks in reel time, so going back can cross into the
+                                    // previous span rather than stopping at this one's start.
+                                    if (timeline) {
+                                        timeline.onSeek(Math.max(0, reelPositionMs - by));
 
-                                    return;
-                                }
+                                        return;
+                                    }
 
-                                if (remote) {
-                                    remote.seekTo(
-                                        Math.min(remote.durationMs, remote.positionMs + by)
-                                    );
+                                    if (remote) {
+                                        remote.seekTo(Math.max(0, remote.positionMs - by));
 
-                                    return;
-                                }
+                                        return;
+                                    }
 
-                                const video = videoRef.current;
-                                if (video) {
-                                    seekTo(
-                                        Math.min(
-                                            (video.duration || 0) * 1000,
-                                            video.currentTime * 1000 + by
-                                        )
-                                    );
-                                }
-                            }}
-                        />
+                                    const video = videoRef.current;
+                                    if (video) seekTo(Math.max(0, video.currentTime * 1000 - by));
+                                }}
+                            />
 
-                        {steps &&
-                            keyTip(
-                                "next",
-                                "Next item",
+                            {/* Play between the two jumps, so the button that leaves the item is
+                            never the one beside it. */}
+                            {keyTip(
+                                "play",
+                                shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play",
                                 <ActionIcon
-                                    variant="subtle"
+                                    variant={casting ? "filled" : "subtle"}
                                     color="brass"
-                                    size={iconSize}
-                                    className={classes.step}
-                                    disabled={!steps.next}
-                                    onClick={steps.next ?? undefined}
-                                    aria-label="Next item"
+                                    size={casting ? 64 : iconSize}
+                                    radius={casting ? "xl" : undefined}
+                                    onClick={remote ? remote.togglePlay : togglePlay}
+                                    aria-label={
+                                        shownAtEnd ? "Play again" : shownPlaying ? "Pause" : "Play"
+                                    }
                                 >
-                                    <NextGlyph />
+                                    {shownAtEnd ? (
+                                        <ReplayGlyph />
+                                    ) : shownPlaying ? (
+                                        <PauseGlyph size={casting ? 30 : undefined} />
+                                    ) : (
+                                        <PlayGlyph size={casting ? 30 : undefined} />
+                                    )}
                                 </ActionIcon>
                             )}
 
-                        {!compact && (
+                            <SkipButton
+                                direction="forward"
+                                seconds={forwardSeconds}
+                                choices={SKIP_FORWARD_CHOICES}
+                                onChoose={setForwardSeconds}
+                                hotkey="l"
+                                size={stepSize}
+                                coarse={coarse}
+                                className={stepClass}
+                                glyphSize={stepGlyph}
+                                onSkip={() => {
+                                    const by = forwardSeconds * 1000;
+
+                                    // In reel time too, so it can cross into the next span.
+                                    if (timeline) {
+                                        timeline.onSeek(
+                                            Math.min(timeline.totalMs, reelPositionMs + by)
+                                        );
+
+                                        return;
+                                    }
+
+                                    if (remote) {
+                                        remote.seekTo(
+                                            Math.min(remote.durationMs, remote.positionMs + by)
+                                        );
+
+                                        return;
+                                    }
+
+                                    const video = videoRef.current;
+                                    if (video) {
+                                        seekTo(
+                                            Math.min(
+                                                (video.duration || 0) * 1000,
+                                                video.currentTime * 1000 + by
+                                            )
+                                        );
+                                    }
+                                }}
+                            />
+
+                            {steps &&
+                                keyTip(
+                                    "next",
+                                    "Next item",
+                                    <ActionIcon
+                                        variant="subtle"
+                                        color="brass"
+                                        size={stepSize}
+                                        className={casting ? stepClass : classes.step}
+                                        disabled={!steps.next}
+                                        onClick={steps.next ?? undefined}
+                                        aria-label="Next item"
+                                    >
+                                        <NextGlyph size={stepGlyph} />
+                                    </ActionIcon>
+                                )}
+                        </Box>
+
+                        {/* While casting the clock on the cover says it, larger. */}
+                        {!compact && !casting && (
                             <Text size="xs" c="dimmed" className={classes.time}>
                                 {formatTime(shownPositionMs)} / {formatTime(shownDurationMs)}
                             </Text>
                         )}
 
-                        <Box style={{ flex: 1 }} />
+                        {!casting && <Box style={{ flex: 1 }} />}
 
                         {/* Capturing belongs with the picture, not under it (§13). The title
                         row below the player is off-screen at ordinary window heights, which

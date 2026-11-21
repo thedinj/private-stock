@@ -288,11 +288,63 @@
     position: relative;
     inset: auto;
     min-height: 9rem;
-    padding-block: var(--mantine-spacing-md) var(--mantine-spacing-sm);
+    justify-content: flex-start;
+    padding-block: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
     padding-inline: 0;
     gap: var(--mantine-spacing-sm);
 }
 
 .player[data-casting][data-fullscreen] .castCover {
     flex: 1 1 auto;
+}
+
+/** The transport, outside casting: no box of its own, its buttons sit in the bar's one row. */
+.inline {
+    display: contents;
+}
+
+/**
+ * Casting: the bar is the TV's remote (§11). The jumps and play take a centred row of their own,
+ * at sofa size; what is left -- mute, the cast button, fullscreen, the menu -- centres below it.
+ */
+.remoteRows {
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.remoteTransport {
+    display: flex;
+    flex-basis: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: var(--mantine-spacing-md);
+    padding-block: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+}
+
+@media (max-width: 48em) {
+    .remoteTransport {
+        justify-content: space-between;
+        gap: var(--mantine-spacing-xs);
+        padding-inline: var(--mantine-spacing-xs);
+    }
+}
+
+.remoteStep {
+    border-radius: 50%;
+    background: rgba(var(--ps-accent-rgb), 0.12);
+}
+
+/** Which TV, and the way out of it, across the top of the cover. */
+.castLine {
+    align-self: stretch;
+    padding-inline: var(--mantine-spacing-md) var(--mantine-spacing-xs);
+    padding-block-end: var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--ps-hairline);
+    text-align: start;
+}
+
+.castWho {
+    flex: 1;
+    min-width: 0;
+    color: var(--mantine-color-text);
 }

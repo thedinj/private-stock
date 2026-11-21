@@ -2,16 +2,32 @@
 
 .ribbon {
     width: 100%;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: var(--mantine-spacing-xs);
+}
+
+/** On a wide screen the clock stands beside the strip, which leaves the strip its full height. */
+@media (min-width: 48em) {
+    .ribbon {
+        grid-template-columns: 13.75rem minmax(0, 1fr);
+        padding-inline-end: var(--mantine-spacing-lg);
+    }
+}
+
+.clockBlock {
+    text-align: center;
+}
+
+.strip {
+    min-width: 0;
 }
 
 /** Big enough to read at arm's length on a sofa; brass while it says where a drag would land. */
 .clock {
     font-family: var(--mantine-font-family-headings);
-    font-size: 2rem;
+    font-size: 2.6rem;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
     color: var(--mantine-color-text);
@@ -21,9 +37,41 @@
     color: var(--mantine-color-brass-4);
 }
 
-.total {
-    font-size: 1rem;
+/** What a drag would do, or what the last one did -- brass once the TV has been sent. */
+.hint {
+    min-height: 1.4em;
+    margin-top: var(--mantine-spacing-xs);
+    font-size: var(--mantine-font-size-xs);
+    text-align: center;
     color: var(--mantine-color-dimmed);
+}
+
+.hint[data-sent] {
+    color: var(--mantine-color-brass-4);
+}
+
+.legend {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+}
+
+.legendClip,
+.legendPin {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.legendClip {
+    border-radius: 1px;
+    background: var(--mantine-color-oxblood-6);
+}
+
+.legendPin {
+    border-radius: 50%;
+    background: var(--mantine-color-brass-4);
 }
 
 .box {

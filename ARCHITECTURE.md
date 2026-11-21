@@ -6225,6 +6225,15 @@ below folds to one line while casting -- its captures are on the ribbon, and cho
 not navigation. Chosen over a seek wall (every tile at once), a remote-first page and a sticky
 mini-remote, from a round of mockups: precise placement on phone and desktop alike.
 
+The strip is **two strip-widths long, whatever the film's length**. One tile per sprite cue made
+it as long as the film -- a hundred tiles for twenty minutes, a dozen swipes to reach the middle
+-- so a long film shows every second, fifth or tenth cue at the same size instead. Any moment is a
+swipe or two away; a tap is still exact to its tile; the bar's jumps take the small steps.
+Rejected for now: an overview strip above the ribbon (a second thing to explain), zoom levels
+(pinch inside a sideways scroller is unreliable on Android) and drag acceleration (unpredictable
+when landing on a frame). The bar under it is drawn as the TV's remote while casting: the jumps
+and play in a centred row of their own, play a 64px brass disc, the rest of the bar below.
+
 **What plays on the TV counts as it would here** (§14b). The thirty-second watched run is
 counted off the TV's reported clock while the phone is awake, with the element's rules: a seek or
 a pause starts it again. A finish is reported when the queue moves past an item -- and on waking,

@@ -31,11 +31,12 @@ const HOLD_MS = 500;
 const CENTRE_Y = 13.25;
 const fontSize = (seconds: number): number => (seconds < 10 ? 8.5 : 7.5);
 
-const SkipGlyph: React.FC<{ direction: "back" | "forward"; seconds: number }> = ({
+const SkipGlyph: React.FC<{ direction: "back" | "forward"; seconds: number; size?: number }> = ({
     direction,
     seconds,
+    size,
 }) => (
-    <Glyph>
+    <Glyph size={size}>
         {direction === "back" ? (
             <>
                 <path d="M5.5 9.5A7.5 7.5 0 1 1 4.5 13" />
@@ -71,6 +72,9 @@ interface SkipButtonProps<T extends number> {
     hotkey: string;
     size: ActionIconProps["size"];
     coarse: boolean;
+    /** The TV's remote draws its buttons larger, on a ground of their own (§11). */
+    className?: string;
+    glyphSize?: number;
 }
 
 export const SkipButton = <T extends number>({
@@ -82,6 +86,8 @@ export const SkipButton = <T extends number>({
     hotkey,
     size,
     coarse,
+    className,
+    glyphSize,
 }: SkipButtonProps<T>): React.ReactElement => {
     const [choosing, setChoosing] = useState(false);
     const holdRef = useRef<number | null>(null);
@@ -124,7 +130,7 @@ export const SkipButton = <T extends number>({
                     variant="subtle"
                     color="brass"
                     size={size}
-                    className={classes.skip}
+                    className={className ? `${classes.skip} ${className}` : classes.skip}
                     onPointerDown={(event) => {
                         heldRef.current = false;
                         if (event.button !== 0) return;
@@ -150,7 +156,7 @@ export const SkipButton = <T extends number>({
                     aria-label={label}
                     title={label}
                 >
-                    <SkipGlyph direction={direction} seconds={seconds} />
+                    <SkipGlyph direction={direction} seconds={seconds} size={glyphSize} />
                 </ActionIcon>
             </Popover.Target>
             <Popover.Dropdown p={6}>

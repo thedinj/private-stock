@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Box, Text, UnstyledButton } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Box, Group, Text, UnstyledButton } from "@mantine/core";
+import { useElementSize, useMediaQuery } from "@mantine/hooks";
 
 import type { SpriteCue } from "@private-stock/core";
 
@@ -45,6 +45,16 @@ const SETTLE_MS = 220;
 const ARRIVED_WITHIN_MS = 3_000;
 const HOLD_SENT_MS = 5_000;
 
+/**
+ * The whole film is this many strip-widths long, however long the film is.
+ *
+ * One tile per sprite cue made the strip as long as the film -- a hundred tiles for twenty
+ * minutes -- so getting halfway in was a dozen swipes. Long films show every second, fifth,
+ * tenth cue instead, at the same size: any moment is a swipe or two away, a tap on a tile is
+ * still exact to that tile, and the bar's jumps are there for the small steps.
+ */
+const VIEWS_PER_FILM = 2;
+
 /** A pointer that moves less than this is a tap, not a drag. */
 const TAP_SLOP_PX = 6;
 
@@ -85,13 +95,28 @@ const Ribbon: React.FC<Omit<CastRibbonProps, "vttUrl"> & { cues: SpriteCue[] }> 
     onSeek,
 }) => {
     const isPhone = useMediaQuery("(max-width: 48em)");
-    const height = isPhone ? 84 : 112;
+    const height = isPhone ? 112 : 132;
     const first = cues[0];
     const width = Math.round((height * first.width) / first.height);
     const step = width + GAP;
-    const span = cues.length * step - GAP;
     // The strip's own length of time: the TV's duration can arrive late, or not at all.
     const totalMs = Math.max(cues[cues.length - 1].endMs, 1);
+
+    // Before the box is measured, the window stands in for it.
+    const { ref: boxRef, width: boxWidth } = useElementSize();
+    const viewWidth = boxWidth || (typeof window === "undefined" ? 1024 : window.innerWidth);
+    const tiles = useMemo(() => {
+        const fit = Math.max(1, Math.floor((viewWidth * VIEWS_PER_FILM) / step));
+        const every = Math.max(1, Math.ceil(cues.length / fit));
+        const kept = cues.filter((_, index) => index % every === 0);
+
+        // Each tile stands for the stretch up to the next one it shows.
+        return kept.map((cue, index) => ({
+            cue,
+            endMs: index + 1 < kept.length ? kept[index + 1].startMs : totalMs,
+        }));
+    }, [cues, viewWidth, step, totalMs]);
+    const span = tiles.length * step - GAP;
 
     const xOf = useCallback(
         (ms: number) => (Math.min(Math.max(ms, 0), totalMs) / totalMs) * span,
@@ -256,88 +281,122 @@ const Ribbon: React.FC<Omit<CastRibbonProps, "vttUrl"> & { cues: SpriteCue[] }> 
         send(ms);
     };
 
+    const hint =
+        steering !== null
+            ? "Let go to send the TV here"
+            : holding && sent
+              ? `Sent the TV to ${formatTimecode(sent.ms)}`
+              : "Drag the frames. Let go to send the TV there.";
+
     return (
         <Box className={classes.ribbon}>
-            <Text
-                className={classes.clock}
-                data-steering={steering !== null || undefined}
-                aria-live="off"
-            >
-                {formatTimecode(shownMs)}
-                <Text span className={classes.total}>
-                    {" / "}
-                    {formatTimecode(durationMs > 0 ? durationMs : totalMs)}
-                </Text>
-            </Text>
-
-            <Box className={classes.box}>
-                <div
-                    ref={scroller}
-                    className={classes.scroller}
-                    // The cover around this plays and pauses on a click; the strip is for moving.
-                    data-cast-strip
-                    onScroll={onScroll}
-                    onTouchStart={() => {
-                        touching.current = true;
-                    }}
-                    onTouchEnd={() => {
-                        touching.current = false;
-                        // The strip may still be coasting; it is sent when it stops.
-                        settle();
-                    }}
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    onPointerCancel={onPointerUp}
-                    // The bar's scrubber below is the slider, keys included; this is the
-                    // same thing to the eye and the finger.
-                    role="group"
-                    aria-label="The film's frames: drag, or tap one, to move the TV there"
+            <Box className={classes.clockBlock}>
+                <Text
+                    className={classes.clock}
+                    data-steering={steering !== null || undefined}
+                    aria-live="off"
                 >
-                    <div className={classes.track} style={{ width: span }}>
-                        <div className={classes.lane}>
-                            {clips.map((clip) => (
-                                <UnstyledButton
-                                    key={clip.id}
-                                    className={classes.clip}
-                                    style={{
-                                        left: xOf(clip.startMs),
-                                        width: Math.max(xOf(clip.endMs) - xOf(clip.startMs), 4),
-                                    }}
-                                    onClick={() => jump(clip.startMs)}
-                                    aria-label={`Clip at ${formatTimecode(clip.startMs)}`}
-                                />
-                            ))}
-                            {captures.map((atMs) => (
-                                <UnstyledButton
-                                    key={atMs}
-                                    className={classes.pin}
-                                    style={{ left: xOf(atMs) }}
-                                    onClick={() => jump(atMs)}
-                                    aria-label={`Capture at ${formatTimecode(atMs)}`}
-                                />
-                            ))}
-                        </div>
-                        <div className={classes.frames} style={{ gap: GAP }}>
-                            {cues.map((cue) => (
-                                <UnstyledButton
-                                    key={cueKey(cue)}
-                                    onClick={() => jump(cue.startMs)}
-                                    aria-label={`Go to ${formatTimecode(cue.startMs)}`}
-                                    tabIndex={-1}
-                                >
-                                    <Frame
-                                        cue={cue}
-                                        width={width}
-                                        height={height}
-                                        played={cue.endMs <= shownMs}
+                    {formatTimecode(shownMs)}
+                </Text>
+                <Text size="sm" c="dimmed">
+                    of {formatTimecode(durationMs > 0 ? durationMs : totalMs)}
+                </Text>
+            </Box>
+
+            <Box className={classes.strip}>
+                <Box ref={boxRef} className={classes.box}>
+                    <div
+                        ref={scroller}
+                        className={classes.scroller}
+                        // The cover around this plays and pauses on a click; the strip is for moving.
+                        data-cast-strip
+                        onScroll={onScroll}
+                        onTouchStart={() => {
+                            touching.current = true;
+                        }}
+                        onTouchEnd={() => {
+                            touching.current = false;
+                            // The strip may still be coasting; it is sent when it stops.
+                            settle();
+                        }}
+                        onPointerDown={onPointerDown}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                        onPointerCancel={onPointerUp}
+                        // The bar's scrubber below is the slider, keys included; this is the
+                        // same thing to the eye and the finger.
+                        role="group"
+                        aria-label="The film's frames: drag, or tap one, to move the TV there"
+                    >
+                        <div className={classes.track} style={{ width: span }}>
+                            <div className={classes.lane}>
+                                {clips.map((clip) => (
+                                    <UnstyledButton
+                                        key={clip.id}
+                                        className={classes.clip}
+                                        style={{
+                                            left: xOf(clip.startMs),
+                                            width: Math.max(xOf(clip.endMs) - xOf(clip.startMs), 4),
+                                        }}
+                                        onClick={() => jump(clip.startMs)}
+                                        aria-label={`Clip at ${formatTimecode(clip.startMs)}`}
                                     />
-                                </UnstyledButton>
-                            ))}
+                                ))}
+                                {captures.map((atMs) => (
+                                    <UnstyledButton
+                                        key={atMs}
+                                        className={classes.pin}
+                                        style={{ left: xOf(atMs) }}
+                                        onClick={() => jump(atMs)}
+                                        aria-label={`Capture at ${formatTimecode(atMs)}`}
+                                    />
+                                ))}
+                            </div>
+                            <div className={classes.frames} style={{ gap: GAP }}>
+                                {tiles.map(({ cue, endMs }) => (
+                                    <UnstyledButton
+                                        key={cueKey(cue)}
+                                        onClick={() => jump(cue.startMs)}
+                                        aria-label={`Go to ${formatTimecode(cue.startMs)}`}
+                                        tabIndex={-1}
+                                    >
+                                        <Frame
+                                            cue={cue}
+                                            width={width}
+                                            height={height}
+                                            played={endMs <= shownMs}
+                                        />
+                                    </UnstyledButton>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div className={classes.needle} aria-hidden />
+                    <div className={classes.needle} aria-hidden />
+                </Box>
+
+                <Text
+                    className={classes.hint}
+                    data-sent={(holding && steering === null) || undefined}
+                >
+                    {hint}
+                </Text>
+
+                {(clips.length > 0 || captures.length > 0) && (
+                    <Group gap="md" justify="center" className={classes.legend} aria-hidden>
+                        {clips.length > 0 && (
+                            <span>
+                                <i className={classes.legendClip} />
+                                clip
+                            </span>
+                        )}
+                        {captures.length > 0 && (
+                            <span>
+                                <i className={classes.legendPin} />
+                                capture
+                            </span>
+                        )}
+                    </Group>
+                )}
             </Box>
         </Box>
     );
