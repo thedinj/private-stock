@@ -6203,6 +6203,28 @@ moved -- the page by Next, or the TV by its queue -- is decided in `lib/cast/cas
 the item both last agreed on. Videos only; a picture in a TV's queue would never end. An item
 with nothing playable says so instead of casting (`requireCastReady`, §12d).
 
+**The queue reaches about a page ahead** (2026-11-21). It was the up-next strip's eight, and a
+sleeping phone adds nothing, so a cast ran dry after a dozen or so items. While casting, the viewer
+holds the set's next page from the start and the queue is built to sixty ahead in batches of
+twenty (the cast-link request's limit; a queue message also has a size limit), topped up below
+forty whenever the page is awake -- including the moment it comes back into view. **Only the Cast
+button, or play on a TV with nothing loaded, starts a queue.** A page with no agreement with the TV
+-- a tab Android discarded and reloaded, or bookkeeping a dropped connection cleared -- that finds
+the TV on its item or on nothing adopts its item as agreed and sends nothing. It used to load, and
+that sent a TV whose queue had run out back to the item the phone fell asleep on: the cast looped.
+
+**While casting, the picture's box is a timeline ribbon** (2026-11-21, `CastRibbon`). The box
+held a frozen frame at the film's aspect for the length of the cast -- a portrait video stood a
+screen and more tall to say "Playing on the TV". Now the element leaves the flow and the cover
+takes the box at its own height: the TV's name, a large clock, and the film's sprite tiles in a
+strip that scrolls under a fixed needle, with clips (oxblood bars) and captures (brass pins) in a
+lane above. Dragging moves the clock; letting go sends the TV there **once**, since a Cast seek
+takes about a second and a stream of them leaves the TV behind the finger. A tap on a frame or a
+mark goes straight there. A film without sprites yet keeps the plain cover. The Frames section
+below folds to one line while casting -- its captures are on the ribbon, and choosing a cover is
+not navigation. Chosen over a seek wall (every tile at once), a remote-first page and a sticky
+mini-remote, from a round of mockups: precise placement on phone and desktop alike.
+
 **What plays on the TV counts as it would here** (§14b). The thirty-second watched run is
 counted off the TV's reported clock while the phone is awake, with the element's rules: a seek or
 a pause starts it again. A finish is reported when the queue moves past an item -- and on waking,

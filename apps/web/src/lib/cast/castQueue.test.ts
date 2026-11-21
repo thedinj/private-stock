@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { castSync, idsToQueue, playedThrough, QUEUE_LOW_WATER } from "./castQueue";
+import { castSync, idsToQueue, playedThrough, QUEUE_BATCH, QUEUE_LOW_WATER } from "./castQueue";
 
 describe("castSync", () => {
-    it("loads the page's item at the start of a session", () => {
-        expect(castSync("a", null, null)).toEqual({ kind: "load" });
+    /**
+     * A reloaded tab, or bookkeeping cleared by a dropped connection, meeting a TV that has run
+     * out or has not reported yet. Loading here restarted the queue from the item the phone fell
+     * asleep on.
+     */
+    it("adopts the page's item, sending nothing, when there is no agreement yet", () => {
+        expect(castSync("a", null, null)).toEqual({ kind: "adopt" });
+        expect(castSync("a", "a", null)).toEqual({ kind: "adopt" });
+    });
+
+    it("sends the TV the page's item once the two have agreed on one", () => {
+        expect(castSync("b", null, "a")).toEqual({ kind: "load" });
     });
 
     it("sends the TV to the page when the page moved", () => {
@@ -44,6 +54,12 @@ describe("idsToQueue", () => {
         const queued = ["a", ...Array.from({ length: QUEUE_LOW_WATER }, (_, i) => `q${i}`)];
 
         expect(idsToQueue(["z"], queued, "a", none)).toEqual([]);
+    });
+
+    it("adds at most a batch at a time", () => {
+        const upcoming = Array.from({ length: QUEUE_BATCH + 5 }, (_, i) => `u${i}`);
+
+        expect(idsToQueue(upcoming, ["a"], "a", none)).toEqual(upcoming.slice(0, QUEUE_BATCH));
     });
 
     it("skips what the server already refused", () => {

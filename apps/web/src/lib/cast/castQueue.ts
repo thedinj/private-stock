@@ -9,8 +9,17 @@
  * agreed on, and it is what tells the two cases apart.
  */
 
-/** What to do to bring the page and the TV back into step. */
-export type CastSync = { kind: "none" } | { kind: "load" } | { kind: "follow"; mediaId: string };
+import { MEDIA_TOKENS_MAX } from "@private-stock/core";
+
+/**
+ * What to do to bring the page and the TV back into step.
+ *
+ * `adopt` is a page that has no agreement with the TV yet -- a tab Android reloaded, or one whose
+ * bookkeeping a dropped connection cleared -- finding the TV on its item or on nothing. It takes
+ * its own item as agreed and sends nothing.
+ */
+export type CastSync =
+    { kind: "none" } | { kind: "load" } | { kind: "adopt" } | { kind: "follow"; mediaId: string };
 
 /**
  * @param pageId  the item the page is showing
@@ -22,6 +31,14 @@ export const castSync = (
     tvId: string | null,
     agreedId: string | null
 ): CastSync => {
+    // No agreement, and nothing on the TV to disagree with. Never a load: starting a queue is the
+    // Cast button's job (or play on an idle TV), not something a page decides on arrival. It was
+    // a load, and a reloaded tab -- or the TV reporting nothing for a moment while a session was
+    // rejoined -- sent the TV back to the item the phone had fallen asleep on: the queue looped.
+    if (agreedId === null && (tvId === null || tvId === pageId)) {
+        return { kind: "adopt" };
+    }
+
     // The page moved -- Next, Prev, a link -- and the TV is still where they agreed, or has
     // nothing. The TV is sent to the page.
     if (pageId !== agreedId && (tvId === null || tvId === agreedId)) {
@@ -39,11 +56,27 @@ export const castSync = (
     return { kind: "none" };
 };
 
+/**
+ * How far ahead the TV's queue reaches: about a page of the set.
+ *
+ * Deep because the phone is usually asleep and a sleeping page cannot add anything -- the TV
+ * plays what it was given and then stops. It was the up-next strip's eight, and a cast ran dry
+ * after a dozen or so items.
+ */
+export const CAST_AHEAD = 60;
+
 /** Below this many items after the one playing, the queue is topped up. */
-export const QUEUE_LOW_WATER = 3;
+export const QUEUE_LOW_WATER = 40;
 
 /**
- * Which upcoming items to add to the TV's queue, in order -- none while it still has enough.
+ * The most added in one go: the cast-link request's own limit, and a message the TV takes
+ * comfortably (a queue message has a size limit, and each item carries a signed URL).
+ */
+export const QUEUE_BATCH = MEDIA_TOKENS_MAX;
+
+/**
+ * Which upcoming items to add to the TV's queue, in order -- none while it still has enough, and
+ * at most a batch, so a queue is built up over several calls.
  *
  * `queuedIds` is the queue as this tab built it, in order. `refused` is what the server has
  * already declined to cast (not playable yet, or not visible), so it is not asked again on every
@@ -64,7 +97,9 @@ export const idsToQueue = (
 
     const queued = new Set(queuedIds);
 
-    return upcomingIds.filter((id) => id !== currentId && !queued.has(id) && !refused.has(id));
+    return upcomingIds
+        .filter((id) => id !== currentId && !queued.has(id) && !refused.has(id))
+        .slice(0, QUEUE_BATCH);
 };
 
 /**

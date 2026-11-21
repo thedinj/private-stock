@@ -265,3 +265,34 @@
     color: var(--mantine-color-brass-4);
     cursor: pointer;
 }
+
+/**
+ * While casting the box is the cover's, not the film's (§11).
+ *
+ * The picture-shaped box held a frozen frame for the length of the cast, at the film's aspect --
+ * a portrait phone video stood two screens tall to say "Playing on the TV". The element leaves
+ * the flow, parked as the warming one is (still mounted: the swap and its handlers depend on it),
+ * and the cover takes its place at the height of what it shows: the TV's name and the frames.
+ */
+.player[data-casting] .video {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.player[data-casting] .castCover {
+    position: relative;
+    inset: auto;
+    min-height: 9rem;
+    padding-block: var(--mantine-spacing-md) var(--mantine-spacing-sm);
+    padding-inline: 0;
+    gap: var(--mantine-spacing-sm);
+}
+
+.player[data-casting][data-fullscreen] .castCover {
+    flex: 1 1 auto;
+}

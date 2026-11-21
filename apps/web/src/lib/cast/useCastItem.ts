@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api/client";
 import { useCastLinks } from "@/lib/api/media";
 
-import { castSync, idsToQueue, playedThrough } from "./castQueue";
+import { castSync, idsToQueue, playedThrough, QUEUE_BATCH } from "./castQueue";
 import { useCast, type CastBook } from "./CastProvider";
 
 /** The TV, as the player bar drives it. */
@@ -127,8 +127,11 @@ export const useCastItem = ({
                 return;
             }
 
-            const ids = page.autoplayNext ? [page.mediaId, ...page.upcomingIds] : [page.mediaId];
-            const { links: minted } = await links.mutateAsync(ids.slice(0, 20));
+            // A batch to start with; the top-up below builds the rest of the queue behind it.
+            const ids = page.autoplayNext
+                ? [page.mediaId, ...page.upcomingIds].slice(0, QUEUE_BATCH)
+                : [page.mediaId];
+            const { links: minted } = await links.mutateAsync(ids);
             const granted = new Set(minted.map((link) => link.mediaId));
 
             ids.filter((id) => !granted.has(id)).forEach((id) => book.refused.add(id));
@@ -167,7 +170,9 @@ export const useCastItem = ({
 
         const action = castSync(mediaId, tvId, book.agreedId);
 
-        if (action.kind === "load") {
+        if (action.kind === "adopt") {
+            book.agreedId = mediaId;
+        } else if (action.kind === "load") {
             void load(0);
         } else if (action.kind === "follow" && action.mediaId !== book.leaving) {
             // The queue moved on, so what it passed was played through -- including whatever
@@ -194,8 +199,20 @@ export const useCastItem = ({
         }
     }, [connected, tvFinished, tvId]);
 
-    // Keep enough queued that the TV carries on while the phone sleeps.
+    // Keep enough queued that the TV carries on while the phone sleeps -- checked again whenever
+    // the page comes back into view, so a phone woken for a moment refills the queue then.
     const upcomingKey = upcomingIds.join(",");
+    const [shownAt, setShownAt] = useState(0);
+
+    useEffect(() => {
+        const onShow = () => {
+            if (document.visibilityState === "visible") setShownAt(Date.now());
+        };
+
+        document.addEventListener("visibilitychange", onShow);
+
+        return () => document.removeEventListener("visibilitychange", onShow);
+    }, []);
 
     useEffect(() => {
         const session = latest.current.cast;
@@ -220,7 +237,7 @@ export const useCastItem = ({
             // again.
             .catch(() => undefined)
             .finally(() => session.setBusy(false));
-    }, [connected, busy, autoplayNext, tvId, mediaId, upcomingKey]);
+    }, [connected, busy, autoplayNext, tvId, mediaId, upcomingKey, shownAt]);
 
     // Continuous play switched off mid-cast: the TV stops after the item it is on.
     useEffect(() => {
@@ -264,7 +281,12 @@ export const useCastItem = ({
             positionMs: cast.tv.positionMs,
             durationMs: cast.tv.durationMs,
             muted: cast.tv.muted,
-            togglePlay: cast.togglePlay,
+            // A TV with nothing loaded -- its queue ran out, or the session was picked up idle --
+            // is given this item, since nothing else starts one now (`castSync`'s `adopt`).
+            togglePlay: () => {
+                if (cast.tv.mediaId !== null) cast.togglePlay();
+                else if (!cast.busy) void load(0);
+            },
             seekTo: cast.seekTo,
             toggleMute: cast.toggleMute,
         },

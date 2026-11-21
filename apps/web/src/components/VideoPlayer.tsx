@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
+import { CastRibbon } from "@/components/CastRibbon";
 import { ViewerKeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { StageCaption, type StageCaptionContent } from "@/components/media/StageCaption";
@@ -303,6 +304,8 @@ interface VideoPlayerProps {
      * where it went.
      */
     cast?: CastControl | null;
+    /** Where somebody captured a still, in ms: pins on the frames shown while casting. */
+    captureMarks?: number[];
     /**
      * A control about the set rather than the item, on its own row at the top of the bar: the
      * private screening's "Fits" (§14h). On the bar so it is there in fullscreen, where
@@ -446,6 +449,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     steps = null,
     menuItems,
     cast = null,
+    captureMarks,
     setControl,
     caption = null,
 }) => {
@@ -2079,6 +2083,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             // The pointer goes with the bar: a cursor sitting over a film is the same
             // interruption the bar was, and every player people know hides both together.
             data-idle={controlsIdle || undefined}
+            // The picture is on the TV: the box gives up the film's shape for the cover's own.
+            data-casting={(casting && !bare) || undefined}
         >
             {/*
              * Two elements, one of them playing (§8b).
@@ -2103,12 +2109,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
             {/* Casting: the picture is on the TV, and this says which -- or what went wrong on
                 the way. A tap on it is play and pause, as a tap on the picture is here. */}
-            {cast && casting && !bare && (
-                <Box className={classes.castCover} onClick={remote?.togglePlay}>
-                    <CastGlyph size={40} />
-                    <Text size="sm">
-                        {cast.message ?? `Playing on ${cast.deviceName ?? "the TV"}`}
-                    </Text>
+            {/* The frames are the rest of it: the film under a needle, to move the TV by
+                (`CastRibbon`). A tap on a frame is a jump, so only the cover's own ground
+                plays and pauses. */}
+            {cast && remote && !bare && (
+                <Box
+                    className={classes.castCover}
+                    onClick={(event) => {
+                        const target = event.target as Element;
+
+                        if (!target.closest("button, [data-cast-strip]")) remote.togglePlay();
+                    }}
+                >
+                    <Group
+                        gap="xs"
+                        justify="center"
+                        wrap="nowrap"
+                        style={{ pointerEvents: "none" }}
+                    >
+                        <CastGlyph size={spriteVttUrl ? 20 : 40} />
+                        <Text size="sm">
+                            {cast.message ?? `Playing on ${cast.deviceName ?? "the TV"}`}
+                        </Text>
+                    </Group>
+                    {spriteVttUrl && (
+                        <CastRibbon
+                            vttUrl={spriteVttUrl}
+                            positionMs={remote.positionMs}
+                            durationMs={remote.durationMs}
+                            clips={clipMarks ?? []}
+                            captures={captureMarks ?? []}
+                            onSeek={remote.seekTo}
+                        />
+                    )}
                 </Box>
             )}
 

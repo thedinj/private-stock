@@ -25,6 +25,7 @@ import {
     type Neighbours,
 } from "./viewerSequence";
 import { queryKeys } from "@/lib/api/queryKeys";
+import { CAST_AHEAD } from "@/lib/cast/castQueue";
 import {
     SHOWCASE_PAGE_SIZE,
     walksShowcaseSet,
@@ -64,6 +65,13 @@ interface Sequence extends Neighbours {
      */
     upcomingIds: string[];
     /**
+     * What comes after this item as far as a TV's queue reaches (`CAST_AHEAD`): the rest of this
+     * page, and the next once it is held -- from the start with `deep`. Not held back until a
+     * session is up: the Cast button loads the queue the moment it connects, before the page has
+     * drawn again.
+     */
+    castAheadIds: string[];
+    /**
      * The same items as tiles, for drawing them. A library's pages are ids alone, so these are
      * looked up — only the ones no cache already holds — and may trail `upcomingIds` briefly.
      */
@@ -91,6 +99,7 @@ const EMPTY: Sequence = {
     position: null,
     total: null,
     upcomingIds: [],
+    castAheadIds: [],
     upcoming: [],
     page: null,
     pageOf: () => null,
@@ -370,11 +379,15 @@ const parseSet = (returnTo: string): ViewerSet | null => {
 /**
  * `carriedId` is an item put in front of a new set rather than found in it (§14h, "Turning the
  * screen"): while it is the item on screen and absent from the set, Next is the set's top.
+ *
+ * `deep` is a TV queue being fed from this set (§11): the next page is held from the start
+ * rather than only on the last item of this one, so the queue reaches about a page ahead.
  */
 export const useViewerSequence = (
     returnTo: string | null,
     currentId: string,
-    carriedId: string | null = null
+    carriedId: string | null = null,
+    deep = false
 ): Sequence => {
     const queryClient = useQueryClient();
 
@@ -456,6 +469,7 @@ ${returnTo ?? ""}`;
     const needed = hold.current
         ? adjacentPagesNeeded(hold.current.ids, page, currentId, hold.current.hasMore)
         : { previous: false, next: false };
+    const wantNext = needed.next || (deep && hold.current?.hasMore === true);
 
     const previousPage = pageQuery(set, page - 1, queryClient);
     const previous = useQuery({
@@ -469,7 +483,7 @@ ${returnTo ?? ""}`;
     const next = useQuery({
         ...nextPage,
         select: toHeld,
-        enabled: fetched && needed.next,
+        enabled: fetched && wantNext,
         meta: BACKGROUND,
     });
 
@@ -483,7 +497,7 @@ ${returnTo ?? ""}`;
         remember(previousPage.queryKey, previous.data);
     }
 
-    if (!hold.next && needed.next && next.data && !next.isFetching) {
+    if (!hold.next && wantNext && next.data && !next.isFetching) {
         hold.next = next.data;
         remember(nextPage.queryKey, next.data);
     }
@@ -569,6 +583,7 @@ ${returnTo ?? ""}`;
                 : near.position,
         total,
         upcomingIds: ahead,
+        castAheadIds: upcomingIds(pageIds, nextPageIds, currentId, CAST_AHEAD, carried),
         upcoming: ahead
             .map((id) => tiles.get(id))
             .filter((item): item is MediaListItem => item !== undefined),

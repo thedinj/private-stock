@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -79,6 +79,7 @@ import { openingPicture } from "@/lib/openItem";
 import { morphOutOfStage } from "@/lib/viewTransitions";
 import { useViewerSequence } from "@/lib/useViewerSequence";
 import { castBlocked } from "@/lib/cast/castBlocked";
+import { useCast } from "@/lib/cast/CastProvider";
 import { useCastItem } from "@/lib/cast/useCastItem";
 import { parseAtParam, resumeTarget, visitPosition } from "@/lib/resumePoint";
 import { isTypingTarget } from "@/lib/typingTarget";
@@ -161,7 +162,9 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
         setCarriedId(itemId);
     }, []);
 
-    const sequence = useViewerSequence(returnTo, id, carriedId);
+    /** While casting, the set is held a page ahead, for the TV's queue (§11). */
+    const casting = useCast()?.connected ?? false;
+    const sequence = useViewerSequence(returnTo, id, carriedId, casting);
 
     /** Opened by a private screening (§14h), which offers "Fits" on the bar. */
     const screening =
@@ -1031,10 +1034,21 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
     const castControl = useCastItem({
         mediaId: id,
         blocked: castBlocked(data?.playbackSource),
-        upcomingIds: sequence.upcomingIds,
+        upcomingIds: sequence.castAheadIds,
         autoplayNext: rollOn,
         follow: go,
     });
+
+    /** Captures, as pins on the frames the TV is moved by while casting. */
+    const captureMarks = useMemo(
+        () =>
+            (data?.frames ?? []).flatMap((frame) =>
+                frame.kind === "capture" && frame.atMs !== null ? [frame.atMs] : []
+            ),
+        [data?.frames]
+    );
+    /** The Frames section, folded while casting until it is asked for. */
+    const [framesOpen, setFramesOpen] = useState(false);
 
     /**
      * The item's picture at once, while its details are still on their way (§14, "Waiting").
@@ -1392,6 +1406,7 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             steps={steps}
                             menuItems={stageMenu}
                             cast={castControl}
+                            captureMarks={captureMarks}
                             setControl={
                                 screening ? (
                                     <ScreeningFitChip
@@ -1569,17 +1584,34 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                 behind the Details button. It is always here now for a film, captures first, and
                 the cover is chosen here -- the Details panel no longer carries a second copy.
                 A photograph is its own cover and has no strip. */}
-            {data.kind === "video" && data.frames.length > 0 && (
-                <Stack gap="xs">
-                    <SectionLabel>Frames</SectionLabel>
-                    <FrameStrip
-                        mediaId={data.id}
-                        frames={data.frames}
-                        onSeek={seekAndShow}
-                        onLightboxChange={setLightboxOpen}
-                    />
-                </Stack>
-            )}
+            {/* While casting the captures ride on the frames above as pins, and what is left
+                here -- choosing a cover, keeping a capture -- is not where to go next. So it
+                folds to a line, closed each time a cast begins (§11). */}
+            {data.kind === "video" &&
+                data.frames.length > 0 &&
+                (castControl?.active && !framesOpen ? (
+                    <Group>
+                        <Button
+                            variant="subtle"
+                            color="gray"
+                            size="compact-sm"
+                            mih={TOUCH_TARGET}
+                            onClick={() => setFramesOpen(true)}
+                        >
+                            Frames · {data.frames.length}
+                        </Button>
+                    </Group>
+                ) : (
+                    <Stack gap="xs">
+                        <SectionLabel>Frames</SectionLabel>
+                        <FrameStrip
+                            mediaId={data.id}
+                            frames={data.frames}
+                            onSeek={seekAndShow}
+                            onLightboxChange={setLightboxOpen}
+                        />
+                    </Stack>
+                ))}
 
             {/* Marking a span, while one is being marked (§14d).
 
