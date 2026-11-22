@@ -1808,6 +1808,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      * While casting the bar is docked at the foot of the screen (§11), over the page. The page is
      * given that much room at its own foot, so its last row -- frames, or the rating -- can scroll
      * clear of it; the toast and the full-screen sheet read the same height.
+     *
+     * The page's overscroll is switched off while docked. Dragged past either end, a phone's
+     * browser stretches or bounces the page, and a bar fixed to the foot of the screen moved
+     * with it -- the remote rode up and down under the thumb pushing the page. Nothing here
+     * needs pull-to-refresh while a TV is playing.
      */
     const docked = casting && !bare;
 
@@ -1825,11 +1830,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         });
 
         observer.observe(bar);
+        root.style.overscrollBehaviorY = "none";
+        document.body.style.overscrollBehaviorY = "none";
 
         return () => {
             observer.disconnect();
             root.style.removeProperty("--ps-cast-dock");
+            root.style.overscrollBehaviorY = "";
             document.body.style.paddingBottom = "";
+            document.body.style.overscrollBehaviorY = "";
         };
     }, [docked]);
 
