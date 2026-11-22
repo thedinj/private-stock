@@ -298,25 +298,69 @@
     flex: 1 1 auto;
 }
 
-/** With frames under the remote, they take the room instead. */
+/**
+ * Casting: the bar is the TV's remote, docked at the foot of the screen (§11), and the page --
+ * the TV's name, the frames, the title and the rating -- scrolls above it, as one page. The dock
+ * is where a thumb already is. Clear of the side navigation on a wide screen; never hidden when
+ * idle, since there is no picture here for it to get out of the way of.
+ */
+.player[data-casting] .controls,
+.player[data-casting] .controls[data-hidden] {
+    position: fixed;
+    z-index: 150;
+    inset-inline: var(--app-shell-navbar-offset, 0px) 0;
+    inset-block-end: 0;
+    padding-block: var(--mantine-spacing-xs) max(var(--mantine-spacing-xs), var(--ps-safe-bottom));
+    padding-inline: max(var(--mantine-spacing-sm), var(--ps-safe-left))
+        max(var(--mantine-spacing-sm), var(--ps-safe-right));
+    background: var(--mantine-color-dark-8);
+    border-top: 1px solid var(--ps-hairline);
+    box-shadow: 0 -10px 30px rgb(0 0 0 / 0.45);
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+/** The player is the screen in full screen: the dock spans it. */
+.player[data-casting][data-fullscreen] .controls {
+    inset-inline: 0;
+}
+
+/** Its rows no wider than a remote needs on a wide screen. */
+.player[data-casting] .controls > * {
+    max-width: 40rem;
+    margin-inline: auto;
+}
+
+/** With frames after the cover, they take the room in full screen instead. */
 .player[data-casting][data-fullscreen]:has([data-cast-sheet]) .castCover {
     flex: none;
 }
 
-/** Where the TV is, large enough to read at arm's length on a sofa. */
-.castClock {
-    display: flex;
-    align-items: baseline;
-    justify-content: center;
-    gap: var(--mantine-spacing-xs);
-    color: var(--mantine-color-text);
+/** Where the TV is, at the start of the dock's first row; the buttons for it sit at the end. */
+.dockClock {
+    order: 1;
+    margin-inline-end: auto;
+    padding-inline-start: var(--mantine-spacing-xs);
+    font-family: var(--mantine-font-family-headings);
+    font-size: 1.35rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.castTime {
-    font-family: var(--mantine-font-family-headings);
-    font-size: 2.6rem;
-    line-height: 1.1;
-    font-variant-numeric: tabular-nums;
+.dockTotal {
+    font-family: var(--mantine-font-family);
+    font-size: var(--mantine-font-size-sm);
+}
+
+.remoteRows > * {
+    order: 1;
+}
+
+/** The contact sheet beside the picture: its frames scroll in the panel, under its title. */
+.sheetBody {
+    padding-top: 0;
 }
 
 /** The transport, outside casting: no box of its own, its buttons sit in the bar's one row. */
@@ -335,11 +379,12 @@
 
 .remoteTransport {
     display: flex;
+    order: 2;
     flex-basis: 100%;
     align-items: center;
     justify-content: center;
     gap: var(--mantine-spacing-md);
-    padding-block: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    padding-block: var(--mantine-spacing-xs) 0;
 }
 
 @media (max-width: 48em) {

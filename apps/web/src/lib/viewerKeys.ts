@@ -27,6 +27,7 @@ export type ViewerAction =
     | "mute"
     | "fullscreen"
     | "capture"
+    | "contactSheet"
     | "next"
     | "previous"
     | "markIn"
@@ -128,6 +129,14 @@ export const VIEWER_KEYS: readonly ViewerKey[] = [
         does: "Take a still of this frame",
         action: "capture",
         tip: ["s"],
+    },
+    {
+        group: "transport",
+        presses: ["g"],
+        shown: "g",
+        does: "Every frame of the film, to jump to one",
+        action: "contactSheet",
+        tip: ["g"],
     },
 
     { group: "items", presses: ["n"], shown: "n", does: "Next item", action: "next", tip: ["n"] },

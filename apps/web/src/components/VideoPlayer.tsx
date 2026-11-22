@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
+import { ActionIcon, Box, Button, Drawer, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 import { CastSheet } from "@/components/CastSheet";
+import { FrameGrid } from "@/components/FrameGrid";
 import { ViewerKeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { StageCaption, type StageCaptionContent } from "@/components/media/StageCaption";
@@ -356,6 +357,25 @@ const CaptureGlyph = () => (
     <Glyph>
         <path d="M3 8h3l2-2h8l2 2h3v11H3z" />
         <circle cx="12" cy="13" r="3.5" />
+    </Glyph>
+);
+
+/** The contact sheet: four frames in a square -- every frame of the film at once. */
+const ContactSheetGlyph: React.FC<{ size?: number }> = ({ size }) => (
+    <Glyph size={size}>
+        <rect x="3.5" y="5" width="7.5" height="6" rx="1" />
+        <rect x="13" y="5" width="7.5" height="6" rx="1" />
+        <rect x="3.5" y="13" width="7.5" height="6" rx="1" />
+        <rect x="13" y="13" width="7.5" height="6" rx="1" />
+    </Glyph>
+);
+
+/** The TV's frame: a screen with a dot at its centre -- "where it is now", in the frames. */
+const NowGlyph: React.FC = () => (
+    <Glyph>
+        <rect x="3" y="5" width="18" height="12" rx="1.5" />
+        <path d="M8 21h8" />
+        <circle cx="12" cy="11" r="2" fill="currentColor" stroke="none" />
     </Glyph>
 );
 
@@ -938,8 +958,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      * While casting the bar is the TV's remote, and drawn as one (§11): the jumps and play in a
      * row of their own, large enough to hit without looking from a sofa, the rest below them.
      */
-    const stepSize = casting ? 52 : iconSize;
-    const stepGlyph = casting ? 26 : undefined;
+    const stepSize = casting ? 48 : iconSize;
+    const stepGlyph = casting ? 24 : undefined;
     const stepClass = casting ? classes.remoteStep : undefined;
     /** Set when casting is stopped from here, so the film carries on here once it has. */
     const resumeHereRef = useRef(false);
@@ -1748,12 +1768,70 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
      * controls call the same function rather than each doing their own arithmetic.
      */
     const captureHere = useCallback(() => {
+        // Casting: the frame the TV is showing. Stills are cut from the file on the server,
+        // so the picture here need not be playing -- only the moment matters.
+        const tv = remoteRef.current;
+
+        if (tv) {
+            onCaptureRef.current?.(tv.positionMs);
+
+            return;
+        }
+
         const video = videoRef.current;
 
         if (video) {
             onCaptureRef.current?.(video.currentTime * 1000);
         }
     }, []);
+
+    /**
+     * The contact sheet: every frame of the film in a panel beside the picture, to jump to one (§14). A tap
+     * seeks and the panel stays open -- seeking here is instant, so trying several frames in a
+     * row is the point. Not for a reel, whose time is not one file's.
+     */
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const sheetAvailable = Boolean(spriteVttUrl) && !bare && !timeline && !remote;
+    const sheetAvailableRef = useRef(sheetAvailable);
+    sheetAvailableRef.current = sheetAvailable;
+    const sheetPortrait =
+        useMediaQuery("(orientation: portrait) and (max-width: 48em)", false) ?? false;
+
+    useEffect(() => {
+        if (!sheetAvailable) setSheetOpen(false);
+    }, [sheetAvailable]);
+
+    /** The dock's TV button: the frame the TV is on, brought into view (`CastSheet`). */
+    const revealTvFrame = useRef<(() => void) | null>(null);
+
+    /**
+     * While casting the bar is docked at the foot of the screen (§11), over the page. The page is
+     * given that much room at its own foot, so its last row -- frames, or the rating -- can scroll
+     * clear of it; the toast and the full-screen sheet read the same height.
+     */
+    const docked = casting && !bare;
+
+    useEffect(() => {
+        const bar = barRef.current;
+
+        if (!docked || !bar) return;
+
+        const root = document.documentElement;
+        const observer = new ResizeObserver(() => {
+            const height = `${Math.ceil(bar.getBoundingClientRect().height)}px`;
+
+            root.style.setProperty("--ps-cast-dock", height);
+            document.body.style.paddingBottom = height;
+        });
+
+        observer.observe(bar);
+
+        return () => {
+            observer.disconnect();
+            root.style.removeProperty("--ps-cast-dock");
+            document.body.style.paddingBottom = "";
+        };
+    }, [docked]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -1807,6 +1885,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         break;
                     case "m":
                         tv.toggleMute();
+                        break;
+                    case "s":
+                        event.preventDefault();
+                        captureHere();
                         break;
                 }
 
@@ -1882,6 +1964,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     // The container rather than the video, so our control bar comes with it,
                     // and through the hook, so the next item keeps the screen (§14b).
                     fullscreenRef.current();
+                    break;
+                case "g":
+                    if (sheetAvailableRef.current) setSheetOpen((open) => !open);
                     break;
                 case "-":
                 case "_":
@@ -2119,9 +2204,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <canvas ref={freezeRef_} className={classes.freeze} hidden={!frozen} aria-hidden />
 
             {/* Casting: the picture is on the TV, and this says which -- or what went wrong on
-                the way -- and where it is, large. A tap on it is play and pause, as a tap on
-                the picture is here. The film's frames, to move the TV by, are under the
-                remote (`CastSheet`). */}
+                the way. A tap on it is play and pause, as a tap on the picture is here. The
+                film's frames, to move the TV by, follow it (`CastSheet`); the remote is docked
+                at the foot of the screen. */}
             {cast && remote && !bare && (
                 <Box
                     className={classes.castCover}
@@ -2154,16 +2239,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <CloseGlyph />
                         </ActionIcon>
                     </Group>
-                    <Box className={classes.castClock}>
-                        <Text className={classes.castTime} aria-live="off">
-                            {formatTime(remote.positionMs)}
-                        </Text>
-                        {remote.durationMs > 0 && (
-                            <Text size="sm" c="dimmed">
-                                of {formatTime(remote.durationMs)}
-                            </Text>
-                        )}
-                    </Box>
                 </Box>
             )}
 
@@ -2235,9 +2310,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 >
                     {setControl && <Group pt={4}>{setControl}</Group>}
 
-                    {compact ? (
+                    {compact && !casting ? (
                         /* On a phone the time reads off the ends of the scrubber, which leaves the
-                           row below it to the targets. */
+                           row below it to the targets -- and the contact sheet at its end, since that row
+                           is full. While casting the dock's clock says it. */
                         <Group gap="xs" wrap="nowrap" align="center">
                             <Text size="xs" c="dimmed" className={classes.time}>
                                 {formatTime(shownPositionMs)}
@@ -2246,6 +2322,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <Text size="xs" c="dimmed" className={classes.time}>
                                 {formatTime(shownDurationMs)}
                             </Text>
+                            {sheetAvailable && (
+                                <ActionIcon
+                                    variant={sheetOpen ? "light" : "subtle"}
+                                    color="brass"
+                                    size={iconSize}
+                                    onClick={() => setSheetOpen((open) => !open)}
+                                    aria-label="Contact sheet"
+                                    title="Contact sheet"
+                                >
+                                    <ContactSheetGlyph />
+                                </ActionIcon>
+                            )}
                         </Group>
                     ) : (
                         scrubber
@@ -2257,6 +2345,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         align="center"
                         className={casting ? classes.remoteRows : undefined}
                     >
+                        {casting && (
+                            <Text className={classes.dockClock} aria-live="off">
+                                {formatTime(shownPositionMs)}
+                                {shownDurationMs > 0 && (
+                                    <Text span c="dimmed" inherit className={classes.dockTotal}>
+                                        {" / "}
+                                        {formatTime(shownDurationMs)}
+                                    </Text>
+                                )}
+                            </Text>
+                        )}
+
+                        {casting && spriteVttUrl && (
+                            <ActionIcon
+                                variant="subtle"
+                                color="brass"
+                                size={iconSize}
+                                onClick={() => revealTvFrame.current?.()}
+                                aria-label="Show the TV's frame"
+                                title="Show the TV's frame"
+                            >
+                                <NowGlyph />
+                            </ActionIcon>
+                        )}
+
                         <Box className={casting ? classes.remoteTransport : classes.inline}>
                             {steps &&
                                 keyTip(
@@ -2315,7 +2428,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                 <ActionIcon
                                     variant={casting ? "filled" : "subtle"}
                                     color="brass"
-                                    size={casting ? 64 : iconSize}
+                                    size={casting ? 56 : iconSize}
                                     radius={casting ? "xl" : undefined}
                                     onClick={remote ? remote.togglePlay : togglePlay}
                                     aria-label={
@@ -2325,9 +2438,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                     {shownAtEnd ? (
                                         <ReplayGlyph />
                                     ) : shownPlaying ? (
-                                        <PauseGlyph size={casting ? 30 : undefined} />
+                                        <PauseGlyph size={casting ? 28 : undefined} />
                                     ) : (
-                                        <PlayGlyph size={casting ? 30 : undefined} />
+                                        <PlayGlyph size={casting ? 28 : undefined} />
                                     )}
                                 </ActionIcon>
                             )}
@@ -2424,9 +2537,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                 </ActionIcon>
                             )}
 
-                        {!compact &&
+                        {(!compact || casting) &&
                             onCapture &&
-                            !remote &&
                             keyTip(
                                 "capture",
                                 "Take a still",
@@ -2439,6 +2551,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                                     aria-label="Take a still"
                                 >
                                     <CaptureGlyph />
+                                </ActionIcon>
+                            )}
+
+                        {!compact &&
+                            sheetAvailable &&
+                            keyTip(
+                                "contactSheet",
+                                "Contact sheet",
+                                <ActionIcon
+                                    variant={sheetOpen ? "light" : "subtle"}
+                                    color="brass"
+                                    size={iconSize}
+                                    onClick={() => setSheetOpen((open) => !open)}
+                                    aria-label="Contact sheet"
+                                >
+                                    <ContactSheetGlyph />
                                 </ActionIcon>
                             )}
 
@@ -2632,7 +2760,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 </Box>
             )}
 
-            {/* Under the remote, so it stays in reach while the frames are looked through. */}
+            {/* In the page, scrolling with it; the remote is docked below it all. */}
             {cast && remote && !bare && spriteVttUrl && (
                 <CastSheet
                     vttUrl={spriteVttUrl}
@@ -2640,7 +2768,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     clips={clipMarks ?? []}
                     captures={captureMarks ?? []}
                     onSeek={remote.seekTo}
+                    revealRef={revealTvFrame}
                 />
+            )}
+
+            {/* Below the picture on a phone held upright, beside it otherwise, so the frame a
+                tap jumps to is in view. Above the full-screen player, which is at the modal
+                layer itself. */}
+            {sheetAvailable && spriteVttUrl && (
+                <Drawer
+                    opened={sheetOpen}
+                    onClose={() => setSheetOpen(false)}
+                    position={sheetPortrait ? "bottom" : "right"}
+                    size={sheetPortrait ? "60%" : 460}
+                    title="Contact sheet"
+                    zIndex={400}
+                    overlayProps={{ backgroundOpacity: 0.15 }}
+                    lockScroll={false}
+                    classNames={{ body: classes.sheetBody }}
+                >
+                    <FrameGrid
+                        vttUrl={spriteVttUrl}
+                        positionMs={positionMs}
+                        clips={clipMarks ?? []}
+                        captures={captureMarks ?? []}
+                        onPick={seekTo}
+                        revealOnMount
+                        minTilePx={sheetPortrait ? undefined : 96}
+                    />
+                </Drawer>
             )}
         </Box>
     );

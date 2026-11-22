@@ -6213,20 +6213,32 @@ button, or play on a TV with nothing loaded, starts a queue.** A page with no ag
 the TV on its item or on nothing adopts its item as agreed and sends nothing. It used to load, and
 that sent a TV whose queue had run out back to the item the phone fell asleep on: the cast looped.
 
-**While casting, the film is a contact sheet under the remote** (2026-11-22, `CastSheet`). The
-box held a frozen frame at the film's aspect for the length of the cast -- a portrait video stood a
-screen and more tall to say "Playing on the TV". Now the element leaves the flow and the cover
-takes the box at its own height: the TV's name with a stop button, and a large clock. The bar
-below it is drawn as the TV's remote: the jumps and play in a centred row of their own, play a
-64px brass disc, the rest of the bar below. Under the remote, **every sprite tile at once**, in
-rows read like a page -- four across a phone, more as the screen widens -- in a scroller of its
-own, so the remote stays in reach while the frames are looked through. Scrolling never moves the
-TV. **One tap on a frame sends it there**, once, and a toast offers Undo for six seconds. The
-frame the TV is on is outlined and labelled, what has played is dimmed, clips mark their frames
-with an oxblood bar and captures with a verdigris dot. The sheet keeps the TV's frame in view as it
-plays until somebody scrolls it, then stays put behind a "Back to now". A film without sprites
+**While casting, the film is a contact sheet over a docked remote** (2026-11-22, `CastSheet`).
+The box held a frozen frame at the film's aspect for the length of the cast -- a portrait video
+stood a screen and more tall to say "Playing on the TV". Now the element leaves the flow and the
+cover takes the box at its own height: the TV's name and a stop button. After it, **every sprite
+tile at once** (`FrameGrid`), in rows read like a page -- four across a phone, more as the screen
+widens -- and then the rest of the page, title and rating included, all scrolling as **one page**.
+Scrolling never moves the TV. **One tap on a frame sends it there**, once, and a toast offers Undo
+for six seconds. The frame the TV is on is outlined and labelled, what has played is dimmed, clips
+mark their frames with an oxblood bar and captures with a verdigris dot. A film without sprites
 yet keeps the plain cover. The Frames section below folds to one line while casting -- its
 captures are on the sheet, and choosing a cover is not navigation.
+
+**The bar is the TV's remote, docked at the foot of the screen**, where a thumb already is: the
+scrubber, then the clock with the TV button, Take a still, mute, cast, full screen and the menu,
+then previous, the jumps, a 56px brass play and next. The page is given the dock's height at its
+own foot (`--ps-cast-dock`), so its last row scrolls clear of it. Nothing scrolls the page by
+itself -- the page is the reader's; the **TV button** brings the TV's frame into view. In full
+screen the player is the screen, and the frames scroll in what the cover leaves, above the dock.
+**A still is taken from the TV's moment** -- stills are cut from the file on the server, so the
+picture here need not be playing -- from the dock's camera or `s`.
+
+The sheet scrolled in a box of its own under the remote at first (one day, 2026-11-22). On a phone
+a swipe reached either the box or the page and never both, the box ran under the foot of the
+screen, and a fixed share of the screen for it was wrong on every screen but one. Rejected with
+it: a slim remote pinned at the top once the full one scrolled away -- a second remote, and the
+top is out of a thumb's reach.
 
 The sheet replaced a **timeline ribbon** (2026-11-21): the tiles in a sideways strip under a
 fixed needle, dragged to steer, the TV sent where it came to rest. It failed on both counts that
@@ -9333,6 +9345,18 @@ submenu, one rate per line. On a wider screen everything stays in the bar and sp
 that opens a menu: the `Select` it replaced was too narrow on a phone to show its own value, and
 its list wrapped. Every target is 44px under `pointer: coarse`, whatever the width. `⋯` also
 carries the rating and the bin, everywhere, because fullscreen otherwise leaves them to the keys.
+
+**The contact sheet: every frame of the film, to jump to one** (2026-11-22, `g`). The grid built
+for casting (§11, `FrameGrid`), in a panel opened from the bar: from the foot of the screen on a
+phone held upright, over 60% of it, so the picture stays above; from the right otherwise, 460px
+wide, so it stays beside. A tap seeks and **the panel stays open** -- seeking here is instant, so
+trying several frames in a row is the point -- until ✕, Esc or a tap outside. It opens centred
+on the frame playing. On a phone its button ends the scrubber's row, since the row of targets
+below is full; elsewhere it sits with capture and speed. Not for a reel, whose time is not one
+file's. A panel and not the sheet on the page: watching, the picture owns the page, and a grid
+always under it would push the title and rating down for something wanted now and then. Not
+called Scenes: the frames are evenly spaced, not cut where the scenes change, and the name
+promised something they are not.
 
 **What you write about an item is on the page, not in the drawer.** Tags and the note sat in
 the Details drawer below the facts, which meant describing a film with a panel covering it, and

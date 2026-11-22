@@ -1,0 +1,131 @@
+// Every frame of the film at once (§11, §14).
+
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mantine-spacing-xs);
+}
+
+.grid {
+    display: grid;
+}
+
+.tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--ps-well);
+    // Clear of a header pinned over whatever it scrolls in, when one is brought into view.
+    scroll-margin-block: 4rem;
+}
+
+.tile:focus-visible {
+    outline: 2px solid var(--mantine-color-brass-4);
+    outline-offset: 1px;
+}
+
+.crop {
+    background-repeat: no-repeat;
+    transform-origin: 0 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+}
+
+/** What has played, dimmed. */
+.tile[data-played] .crop {
+    opacity: 0.45;
+    filter: saturate(0.6);
+}
+
+/** The frame playing now: outlined in brass, and labelled, since colour alone says nothing. */
+.tile[data-now] {
+    box-shadow: inset 0 0 0 3px var(--mantine-color-brass-4);
+}
+
+.tile[data-now]::after {
+    content: attr(data-now);
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--mantine-color-brass-4);
+    color: #16130f;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+/** A frame inside a clip: a bar across its top, as the legend says. */
+.tile[data-clip]::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: var(--mantine-color-oxblood-6);
+}
+
+.time {
+    position: absolute;
+    left: 4px;
+    bottom: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    text-shadow:
+        0 1px 2px #000,
+        0 0 4px #000;
+    pointer-events: none;
+}
+
+.capture {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--mantine-color-verdigris-4);
+    box-shadow: 0 0 0 1px #000;
+}
+
+.legend {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+}
+
+.legendNow,
+.legendClip,
+.legendCapture {
+    display: inline-block;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.legendNow {
+    width: 12px;
+    height: 9px;
+    border: 2px solid var(--mantine-color-brass-4);
+    border-radius: 2px;
+}
+
+.legendClip {
+    width: 12px;
+    height: 4px;
+    background: var(--mantine-color-oxblood-6);
+}
+
+.legendCapture {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mantine-color-verdigris-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crop {
+        transition: none;
+    }
+}
