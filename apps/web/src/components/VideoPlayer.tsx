@@ -2789,7 +2789,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     opened={sheetOpen}
                     onClose={() => setSheetOpen(false)}
                     position={sheetPortrait ? "bottom" : "right"}
-                    size={sheetPortrait ? "60%" : 460}
+                    size={sheetPortrait ? "60%" : 520}
                     title="Contact sheet"
                     zIndex={400}
                     overlayProps={{ backgroundOpacity: 0.15 }}
@@ -2803,7 +2803,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         captures={captureMarks ?? []}
                         onPick={seekTo}
                         revealOnMount
-                        minTilePx={sheetPortrait ? undefined : 96}
+                        minTilePx={sheetPortrait ? undefined : 112}
                     />
                 </Drawer>
             )}

@@ -6217,7 +6217,7 @@ that sent a TV whose queue had run out back to the item the phone fell asleep on
 The box held a frozen frame at the film's aspect for the length of the cast -- a portrait video
 stood a screen and more tall to say "Playing on the TV". Now the element leaves the flow and the
 cover takes the box at its own height: the TV's name and a stop button. After it, **every sprite
-tile at once** (`FrameGrid`), in rows read like a page -- four across a phone, more as the screen
+tile at once** (`FrameGrid`), in rows read like a page -- three across a phone, more as the screen
 widens -- and then the rest of the page, title and rating included, all scrolling as **one page**.
 Scrolling never moves the TV. **One tap on a frame sends it there**, once, and a toast offers Undo
 for six seconds. The frame the TV is on is outlined and labelled, what has played is dimmed, clips
@@ -9348,7 +9348,7 @@ carries the rating and the bin, everywhere, because fullscreen otherwise leaves 
 
 **The contact sheet: every frame of the film, to jump to one** (2026-11-22, `g`). The grid built
 for casting (§11, `FrameGrid`), in a panel opened from the bar: from the foot of the screen on a
-phone held upright, over 60% of it, so the picture stays above; from the right otherwise, 460px
+phone held upright, over 60% of it, so the picture stays above; from the right otherwise, 520px
 wide, so it stays beside. A tap seeks and **the panel stays open** -- seeking here is instant, so
 trying several frames in a row is the point -- until ✕, Esc or a tap outside. It opens centred
 on the frame playing. On a phone its button ends the scrubber's row, since the row of targets

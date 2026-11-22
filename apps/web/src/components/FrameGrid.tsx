@@ -43,9 +43,9 @@ export interface FrameGridProps {
 
 const GAP = 4;
 
-/** The narrowest a frame is drawn: four across a phone, more as the room widens. */
-const MIN_TILE_PX = 76;
-const MIN_TILE_WIDE_PX = 136;
+/** The narrowest a frame is drawn: three across a phone, more as the room widens. */
+const MIN_TILE_PX = 100;
+const MIN_TILE_WIDE_PX = 160;
 const WIDE_PX = 720;
 
 const cueKey = (cue: SpriteCue) => `${cue.url}:${cue.x}:${cue.y}`;
