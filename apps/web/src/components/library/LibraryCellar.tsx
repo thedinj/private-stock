@@ -261,6 +261,49 @@ export const LibraryCellar: React.FC = () => {
     /** The pinned working row's height, which the pinned filter column sits beneath. */
     const { ref: toolbarRef, height: toolbarHeight } = useElementSize();
 
+    /**
+     * The filter column ends at the window's foot wherever the page is scrolled.
+     *
+     * A fixed height is only right once the column has pinned under the working row; above
+     * that -- the top of every visit -- it starts lower, and its last ~150px hung below the
+     * window, out of reach of its own scroll until the page was moved. So the height is what
+     * is left of the window below its top, kept in step with scrolling and anything above it
+     * changing height. Written to the element, not state: this runs on every scroll frame.
+     */
+    const filterColumnRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const column = filterColumnRef.current;
+
+        if (!column) return;
+
+        let frame = 0;
+
+        const fit = () => {
+            frame = 0;
+            const pinnedTop = parseFloat(getComputedStyle(column).top) || 0;
+            const top = Math.max(column.getBoundingClientRect().top, pinnedTop);
+            column.style.height = `${document.documentElement.clientHeight - top}px`;
+        };
+        const schedule = () => {
+            if (!frame) frame = requestAnimationFrame(fit);
+        };
+
+        fit();
+        window.addEventListener("scroll", schedule, { passive: true });
+        window.addEventListener("resize", schedule);
+        // The plate, the count line and the chips beside it all move the column's top.
+        const resized = new ResizeObserver(schedule);
+        resized.observe(document.body);
+
+        return () => {
+            cancelAnimationFrame(frame);
+            window.removeEventListener("scroll", schedule);
+            window.removeEventListener("resize", schedule);
+            resized.disconnect();
+        };
+    }, [wide]);
+
     const { user, hasScope } = useAuth();
 
     /**
@@ -918,8 +961,10 @@ export const LibraryCellar: React.FC = () => {
 
             <Group align="flex-start" gap="md" wrap="nowrap">
                 {wide && (
-                    <Box className={classes.filterColumn}>
-                        <ScrollArea h="100%">
+                    <Box ref={filterColumnRef} className={classes.filterColumn}>
+                        {/* Contained: reaching either end of the filters stops there rather
+                            than carrying on into the grid, as if it were a pane of its own. */}
+                        <ScrollArea h="100%" overscrollBehavior="contain">
                             {/* Its own "Clear all" is left to the phone drawer: here the chips
                                 beside the count are on screen too, with theirs. */}
                             <FilterPanel view={view} onChange={applyFilter} clearAll={false} />

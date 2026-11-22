@@ -41,6 +41,9 @@
  * It used to be a scroll area that left with the page, so below the first screen the left
  * 260px was an empty strip and every refinement started with a trip back up. Pinned, the
  * filters are wherever the grid is, and the column scrolls on its own when it is long.
+ *
+ * The height here is only the first paint's: LibraryCellar sets it from the column's actual
+ * top as the page scrolls, so its foot is at the window's foot before it has pinned as well.
  */
 .filterColumn {
     position: sticky;
