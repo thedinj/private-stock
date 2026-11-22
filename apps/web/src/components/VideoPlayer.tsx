@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionIcon, Box, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
-import { CastRibbon } from "@/components/CastRibbon";
+import { CastSheet } from "@/components/CastSheet";
 import { ViewerKeyTip } from "@/components/KeyTip";
 import { ReleasingVideo } from "@/components/media/ReleasingVideo";
 import { StageCaption, type StageCaptionContent } from "@/components/media/StageCaption";
@@ -2081,6 +2081,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             ref={attachContainer}
             onTouchEnd={bare ? undefined : onTouchEnd}
             className={classes.player}
+            // Full screen while casting, the frames take what the cover and the remote leave
+            // (`CastSheet`), and its stylesheet cannot see this module's data attributes.
+            data-cast-fullscreen={(isFullscreen && casting && !bare) || undefined}
             // The whole window, laid over the page rather than handed to this element: what
             // the browser is showing full screen is the document, so that the next item
             // inherits it (§14b, `usePlayerFullscreen`). Never when bare: the stage around it
@@ -2116,17 +2119,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <canvas ref={freezeRef_} className={classes.freeze} hidden={!frozen} aria-hidden />
 
             {/* Casting: the picture is on the TV, and this says which -- or what went wrong on
-                the way. A tap on it is play and pause, as a tap on the picture is here. */}
-            {/* The frames are the rest of it: the film under a needle, to move the TV by
-                (`CastRibbon`). A tap on a frame is a jump, so only the cover's own ground
-                plays and pauses. */}
+                the way -- and where it is, large. A tap on it is play and pause, as a tap on
+                the picture is here. The film's frames, to move the TV by, are under the
+                remote (`CastSheet`). */}
             {cast && remote && !bare && (
                 <Box
                     className={classes.castCover}
                     onClick={(event) => {
                         const target = event.target as Element;
 
-                        if (!target.closest("button, [data-cast-strip]")) remote.togglePlay();
+                        if (!target.closest("button")) remote.togglePlay();
                     }}
                 >
                     <Group gap="sm" wrap="nowrap" className={classes.castLine}>
@@ -2152,16 +2154,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                             <CloseGlyph />
                         </ActionIcon>
                     </Group>
-                    {spriteVttUrl && (
-                        <CastRibbon
-                            vttUrl={spriteVttUrl}
-                            positionMs={remote.positionMs}
-                            durationMs={remote.durationMs}
-                            clips={clipMarks ?? []}
-                            captures={captureMarks ?? []}
-                            onSeek={remote.seekTo}
-                        />
-                    )}
+                    <Box className={classes.castClock}>
+                        <Text className={classes.castTime} aria-live="off">
+                            {formatTime(remote.positionMs)}
+                        </Text>
+                        {remote.durationMs > 0 && (
+                            <Text size="sm" c="dimmed">
+                                of {formatTime(remote.durationMs)}
+                            </Text>
+                        )}
+                    </Box>
                 </Box>
             )}
 
@@ -2628,6 +2630,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         )}
                     </Group>
                 </Box>
+            )}
+
+            {/* Under the remote, so it stays in reach while the frames are looked through. */}
+            {cast && remote && !bare && spriteVttUrl && (
+                <CastSheet
+                    vttUrl={spriteVttUrl}
+                    positionMs={remote.positionMs}
+                    clips={clipMarks ?? []}
+                    captures={captureMarks ?? []}
+                    onSeek={remote.seekTo}
+                />
             )}
         </Box>
     );

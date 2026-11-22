@@ -6213,26 +6213,32 @@ button, or play on a TV with nothing loaded, starts a queue.** A page with no ag
 the TV on its item or on nothing adopts its item as agreed and sends nothing. It used to load, and
 that sent a TV whose queue had run out back to the item the phone fell asleep on: the cast looped.
 
-**While casting, the picture's box is a timeline ribbon** (2026-11-21, `CastRibbon`). The box
-held a frozen frame at the film's aspect for the length of the cast -- a portrait video stood a
+**While casting, the film is a contact sheet under the remote** (2026-11-22, `CastSheet`). The
+box held a frozen frame at the film's aspect for the length of the cast -- a portrait video stood a
 screen and more tall to say "Playing on the TV". Now the element leaves the flow and the cover
-takes the box at its own height: the TV's name, a large clock, and the film's sprite tiles in a
-strip that scrolls under a fixed needle, with clips (oxblood bars) and captures (brass pins) in a
-lane above. Dragging moves the clock; letting go sends the TV there **once**, since a Cast seek
-takes about a second and a stream of them leaves the TV behind the finger. A tap on a frame or a
-mark goes straight there. A film without sprites yet keeps the plain cover. The Frames section
-below folds to one line while casting -- its captures are on the ribbon, and choosing a cover is
-not navigation. Chosen over a seek wall (every tile at once), a remote-first page and a sticky
-mini-remote, from a round of mockups: precise placement on phone and desktop alike.
+takes the box at its own height: the TV's name with a stop button, and a large clock. The bar
+below it is drawn as the TV's remote: the jumps and play in a centred row of their own, play a
+64px brass disc, the rest of the bar below. Under the remote, **every sprite tile at once**, in
+rows read like a page -- four across a phone, more as the screen widens -- in a scroller of its
+own, so the remote stays in reach while the frames are looked through. Scrolling never moves the
+TV. **One tap on a frame sends it there**, once, and a toast offers Undo for six seconds. The
+frame the TV is on is outlined and labelled, what has played is dimmed, clips mark their frames
+with an oxblood bar and captures with a verdigris dot. The sheet keeps the TV's frame in view as it
+plays until somebody scrolls it, then stays put behind a "Back to now". A film without sprites
+yet keeps the plain cover. The Frames section below folds to one line while casting -- its
+captures are on the sheet, and choosing a cover is not navigation.
 
-The strip is **two strip-widths long, whatever the film's length**. One tile per sprite cue made
-it as long as the film -- a hundred tiles for twenty minutes, a dozen swipes to reach the middle
--- so a long film shows every second, fifth or tenth cue at the same size instead. Any moment is a
-swipe or two away; a tap is still exact to its tile; the bar's jumps take the small steps.
-Rejected for now: an overview strip above the ribbon (a second thing to explain), zoom levels
-(pinch inside a sideways scroller is unreliable on Android) and drag acceleration (unpredictable
-when landing on a frame). The bar under it is drawn as the TV's remote while casting: the jumps
-and play in a centred row of their own, play a 64px brass disc, the rest of the bar below.
+The sheet replaced a **timeline ribbon** (2026-11-21): the tiles in a sideways strip under a
+fixed needle, dragged to steer, the TV sent where it came to rest. It failed on both counts that
+mattered. A phone showed three frames of it -- the strip was thinned to two widths long so a
+drag could reach the middle, and the tiles were large -- and every look along the film moved the
+TV. Looking and moving are two jobs; the sheet gives looking the whole screen and moving one
+deliberate tap. Chosen from a round of clickable mockups over: the same sheet with pick-then-
+confirm (a second tap for every move, when Undo covers the mis-tap), chapters then frames (two
+levels, and no view of the whole film), a scrub bar with one large preview (one frame at a time),
+and the whole film as one tiny mosaic with a magnifier (no scrolling, but frames too small to
+read without it). A tile's moment is as fine as the sheet goes -- one every few tens of seconds
+on a long film -- and the remote's jumps take it the rest of the way.
 
 **What plays on the TV counts as it would here** (§14b). The thirty-second watched run is
 counted off the TV's reported clock while the phone is awake, with the element's rules: a seek or

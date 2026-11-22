@@ -1,0 +1,209 @@
+// The film as a contact sheet, while it plays on a TV (§11).
+
+.sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mantine-spacing-xs);
+    min-height: 0;
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm) var(--mantine-spacing-sm);
+    background: #0d0a08;
+}
+
+.hint {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+    text-align: center;
+}
+
+/** The scroller's frame: what the toast and "Back to now" float over. */
+.frame {
+    position: relative;
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/**
+ * Its own scroll, below the remote, so the remote stays in reach while the frames are looked
+ * through: about half a phone's screen, more on a tall one.
+ */
+.scroller {
+    position: relative;
+    max-height: min(60dvh, 36rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--mantine-radius-xs);
+}
+
+.grid {
+    display: grid;
+}
+
+.tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--ps-well);
+    transition: opacity 200ms ease;
+}
+
+.tile:focus-visible {
+    outline: 2px solid var(--mantine-color-brass-4);
+    outline-offset: 1px;
+}
+
+.crop {
+    background-repeat: no-repeat;
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+/** What has played, dimmed. */
+.tile[data-played] .crop {
+    opacity: 0.45;
+    filter: saturate(0.6);
+}
+
+/** The frame the TV is on: outlined in brass, and labelled, since colour alone says nothing. */
+.tile[data-now] {
+    box-shadow: inset 0 0 0 3px var(--mantine-color-brass-4);
+}
+
+.tile[data-now]::after {
+    content: "TV";
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--mantine-color-brass-4);
+    color: #16130f;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.tile[data-clip]::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: var(--mantine-color-oxblood-6);
+}
+
+.time {
+    position: absolute;
+    left: 4px;
+    bottom: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    text-shadow:
+        0 1px 2px #000,
+        0 0 4px #000;
+    pointer-events: none;
+}
+
+.capture {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--mantine-color-verdigris-4);
+    box-shadow: 0 0 0 1px #000;
+}
+
+.backToNow {
+    position: absolute;
+    top: var(--mantine-spacing-xs);
+    left: 50%;
+    translate: -50% 0;
+    min-height: 40px;
+    padding-inline: var(--mantine-spacing-md);
+    border-radius: 999px;
+    background: var(--mantine-color-brass-4);
+    color: #16130f;
+    font-weight: 700;
+    font-size: var(--mantine-font-size-sm);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.toast {
+    position: absolute;
+    left: var(--mantine-spacing-xs);
+    right: var(--mantine-spacing-xs);
+    bottom: var(--mantine-spacing-xs);
+    max-width: 26rem;
+    margin-inline: auto;
+    padding: 4px 4px 4px var(--mantine-spacing-sm);
+    border-radius: var(--mantine-radius-md);
+    background: var(--mantine-color-dark-0);
+    color: #16130f;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.toastText {
+    flex: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.undo {
+    min-height: 40px;
+    padding-inline: var(--mantine-spacing-sm);
+    color: var(--mantine-color-brass-9);
+    font-weight: 700;
+}
+
+.legend {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+}
+
+.legendNow,
+.legendClip,
+.legendCapture {
+    display: inline-block;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.legendNow {
+    width: 12px;
+    height: 9px;
+    border: 2px solid var(--mantine-color-brass-4);
+    border-radius: 2px;
+}
+
+.legendClip {
+    width: 12px;
+    height: 4px;
+    background: var(--mantine-color-oxblood-6);
+}
+
+.legendCapture {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mantine-color-verdigris-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tile {
+        transition: none;
+    }
+}
+
+/** Full screen: the sheet takes what the cover and the remote leave. */
+:global([data-cast-fullscreen]) .sheet {
+    flex: 1 1 auto;
+}
+
+:global([data-cast-fullscreen]) .scroller {
+    flex: 1 1 auto;
+    max-height: none;
+}

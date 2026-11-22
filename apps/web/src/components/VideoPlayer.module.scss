@@ -287,7 +287,7 @@
 .player[data-casting] .castCover {
     position: relative;
     inset: auto;
-    min-height: 9rem;
+    min-height: 0;
     justify-content: flex-start;
     padding-block: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
     padding-inline: 0;
@@ -296,6 +296,27 @@
 
 .player[data-casting][data-fullscreen] .castCover {
     flex: 1 1 auto;
+}
+
+/** With frames under the remote, they take the room instead. */
+.player[data-casting][data-fullscreen]:has([data-cast-sheet]) .castCover {
+    flex: none;
+}
+
+/** Where the TV is, large enough to read at arm's length on a sofa. */
+.castClock {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--mantine-spacing-xs);
+    color: var(--mantine-color-text);
+}
+
+.castTime {
+    font-family: var(--mantine-font-family-headings);
+    font-size: 2.6rem;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
 }
 
 /** The transport, outside casting: no box of its own, its buttons sit in the bar's one row. */
