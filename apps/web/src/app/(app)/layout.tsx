@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -58,6 +58,11 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { lockable, lockNow } = useScreenLock();
     const pathname = usePathname();
 
+    // A phone's open nav covers the page, so anything that moves the page has to take it down:
+    // its own links do, and this catches the rest -- the screening dealt from the header or on
+    // Shift+S, a search, the seal home. Left open, it sat over the viewer it had opened.
+    useEffect(() => close(), [pathname, close]);
+
     // For the "Scanning" badge only. One shared query rather than a copy here: `useLibraryStats`
     // owns the poll interval, and the interval is the part that turned out to matter (§20).
     const { data: stats } = useLibraryStats();
@@ -93,7 +98,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                         <Group gap="sm" wrap="nowrap">
                             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                            <Group gap={8} wrap="nowrap">
+                            {/* Capture, so the nav is down before the control acts: the seal,
+                                the room's menu. */}
+                            <Group gap={8} wrap="nowrap" onClickCapture={close}>
                                 <Link
                                     href="/"
                                     aria-label="Home"
@@ -119,7 +126,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             screen, an icon at its end on a phone. */}
                         {!isMobile && <HeaderSearch compact={false} />}
 
-                        <Group gap="xs" wrap="nowrap">
+                        {/* The same for the screening, the lock and the phone's search. */}
+                        <Group gap="xs" wrap="nowrap" onClickCapture={close}>
                             {stats?.scanning && (
                                 <Badge color="brass" variant="light" visibleFrom="xs">
                                     Scanning
