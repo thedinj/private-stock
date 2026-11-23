@@ -28,18 +28,12 @@
     background-repeat: no-repeat;
     transform-origin: 0 0;
     pointer-events: none;
-    transition: filter 200ms ease;
 }
 
 /**
- * What has played: faded just enough to tell the two runs apart at a glance, never so far that
- * the frame cannot be read. The bar at the foot is what says it.
+ * What has played: a brass bar along the foot, full under what has played and part-way under the
+ * frame playing now. The frame itself is left alone -- dimming it made it hard to read.
  */
-.tile[data-played] .crop {
-    filter: saturate(0.5) brightness(0.85);
-}
-
-/** A brass bar along the foot: full under what has played, part-way under the frame playing now. */
 .played {
     position: absolute;
     inset: auto 0 0;
@@ -144,10 +138,4 @@
     height: 8px;
     border-radius: 50%;
     background: var(--mantine-color-verdigris-4);
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .crop {
-        transition: none;
-    }
 }

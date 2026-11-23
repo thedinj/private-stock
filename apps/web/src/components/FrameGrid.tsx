@@ -15,8 +15,8 @@ import classes from "./FrameGrid.module.scss";
  * Every frame of the film at once, in rows read like a page (§11, §14).
  *
  * The sprite tiles in time order, as many across as fit: four on a phone, more as the room
- * widens. The frame at `positionMs` is outlined, what has played is faded and underlined in
- * brass, a clip marks its frames with a bar and a capture its frame with a dot. A tap hands the frame's moment to
+ * widens. The frame at `positionMs` is outlined, what has played is underlined in brass, a
+ * clip marks its frames with a bar and a capture its frame with a dot. A tap hands the frame's moment to
  * `onPick`; what that does -- send a TV there, seek the picture here -- is the caller's.
  *
  * It scrolls with whatever it sits in: the page while casting, a panel beside the picture
@@ -225,7 +225,6 @@ const Grid: React.FC<Omit<FrameGridProps, "vttUrl"> & { cues: SpriteCue[] }> = (
                         }}
                         className={classes.tile}
                         h={tileHeight}
-                        data-played={endMs <= positionMs || undefined}
                         data-now={index === nowIndex ? nowBadge : undefined}
                         data-clip={clip || undefined}
                         tabIndex={index === tabIndexAt ? 0 : -1}
