@@ -15,7 +15,7 @@ import classes from "./FrameGrid.module.scss";
  * Every frame of the film at once, in rows read like a page (§11, §14).
  *
  * The sprite tiles in time order, as many across as fit: four on a phone, more as the room
- * widens. The frame at `positionMs` is outlined, what has played is dimmed, a clip marks its
+ * widens. The frame at `positionMs` is outlined, what has played is faded and underlined in brass, a clip marks its
  * frames with a bar and a capture its frame with a dot. A tap hands the frame's moment to
  * `onPick`; what that does -- send a TV there, seek the picture here -- is the caller's.
  *
@@ -235,6 +235,16 @@ const Grid: React.FC<Omit<FrameGridProps, "vttUrl"> & { cues: SpriteCue[] }> = (
                         aria-current={index === nowIndex ? "time" : undefined}
                     >
                         <Frame cue={cue} width={tileWidth} />
+                        {(endMs <= positionMs || index === nowIndex) && (
+                            <span
+                                className={classes.played}
+                                style={
+                                    {
+                                        "--played": playedFraction(cue.startMs, endMs, positionMs),
+                                    } as React.CSSProperties
+                                }
+                            />
+                        )}
                         <span className={classes.time}>
                             {formatTimecode(cue.startMs)}
                             {capture && <i className={classes.capture} aria-hidden />}
@@ -260,11 +270,18 @@ const Grid: React.FC<Omit<FrameGridProps, "vttUrl"> & { cues: SpriteCue[] }> = (
                         capture
                     </span>
                 )}
-                <span>dimmed: played</span>
+                <span>
+                    <i className={classes.legendPlayed} />
+                    played
+                </span>
             </Group>
         </Box>
     );
 };
+
+/** How much of a frame's span is behind the playhead, 0 to 1. */
+const playedFraction = (startMs: number, endMs: number, positionMs: number): number =>
+    endMs > startMs ? Math.min(Math.max((positionMs - startMs) / (endMs - startMs), 0), 1) : 1;
 
 /** Null until the film has a sprite track. */
 export const FrameGrid: React.FC<FrameGridProps> = ({ vttUrl, ...rest }) => {

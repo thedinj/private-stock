@@ -28,13 +28,28 @@
     background-repeat: no-repeat;
     transform-origin: 0 0;
     pointer-events: none;
-    transition: opacity 200ms ease;
+    transition: filter 200ms ease;
 }
 
-/** What has played, dimmed. */
+/**
+ * What has played: faded just enough to tell the two runs apart at a glance, never so far that
+ * the frame cannot be read. The bar at the foot is what says it.
+ */
 .tile[data-played] .crop {
-    opacity: 0.45;
-    filter: saturate(0.6);
+    filter: saturate(0.5) brightness(0.85);
+}
+
+/** A brass bar along the foot: full under what has played, part-way under the frame playing now. */
+.played {
+    position: absolute;
+    inset: auto 0 0;
+    height: 3px;
+    background: linear-gradient(
+        to right,
+        var(--mantine-color-brass-4) calc(var(--played) * 100%),
+        transparent 0
+    );
+    pointer-events: none;
 }
 
 /** The frame playing now: outlined in brass, and labelled, since colour alone says nothing. */
@@ -68,7 +83,7 @@
 .time {
     position: absolute;
     left: 4px;
-    bottom: 2px;
+    bottom: 4px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -97,6 +112,7 @@
 }
 
 .legendNow,
+.legendPlayed,
 .legendClip,
 .legendCapture {
     display: inline-block;
@@ -109,6 +125,12 @@
     height: 9px;
     border: 2px solid var(--mantine-color-brass-4);
     border-radius: 2px;
+}
+
+.legendPlayed {
+    width: 12px;
+    height: 3px;
+    background: var(--mantine-color-brass-4);
 }
 
 .legendClip {
