@@ -114,6 +114,9 @@ the Android/TV casting problem (§10): a Capacitor app can use the native Cast S
 instead of fighting the browser sender SDK. Not phase 1, but `packages/core` stays free of
 DOM and Node dependencies so a mobile app can consume it unchanged.
 
+The Android TV app has since been designed (§22, not built), and chose plain Kotlin around a
+WebView over Capacitor; §22 says why.
+
 ## 3. Repo layout
 
 ```
@@ -12796,3 +12799,125 @@ violet-black, magenta and phosphor cyan, Chakra Petch, and the room's name in a 
   were taken out (2026-11-08) because they filtered the video itself. §14's rule holds in every
   room: a room is its frame, ground, type and glow around a picture, never a tint on it.
 - The study (§14) drops towards black from each room's own ground.
+
+## 22. The TV app (designed, not built)
+
+An Android app for the Google TV that Cast was proven on (§11, 2026-10-30), driven by its remote
+and its microphone, so the library can be browsed and watched from the sofa without a phone in
+hand. Designed 2026-11-24 and deliberately stopped there; this section is the record for whoever
+builds it. Casting stays: it is the phone-first path, and this is the TV-first one.
+
+### A thin native shell around a `/tv` part of the site
+
+Three shapes were weighed:
+
+- **The TV's own browser** with a trimmed layout -- §11's cheap fallback. Google TV ships no
+  browser worth the name, a browser gives no voice input, and its D-pad handling is whatever the
+  browser does. Rejected.
+- **A fully native app** (Kotlin, Compose for TV). The best feel, and a second copy of every
+  screen in another language, outside the zod types and the query-key factory. Rejected for now;
+  nothing below prevents it later, since the API is what either one talks to.
+- **A WebView app that loads `/tv` from the NAS and hands playback and speech to native code.**
+  Chosen. The screens are React, built and deployed with everything else -- a `ship.sh` updates
+  the TV without reinstalling anything -- and the native side is only the parts a page cannot do
+  well.
+
+**Plain Kotlin, not Capacitor**, despite §2 naming Capacitor and basket-bot using it. The native
+side here _is_ the point -- the player, speech, key handling -- and Capacitor's value (a plugin
+ecosystem, iOS from the same project) does not apply to one app on one TV. The shell is one
+Activity, a few hundred lines, in `apps/tv/` as a Gradle project outside pnpm and turbo, so
+`pnpm build` and `docker/smoke.sh` never see it. Building it needs the Android SDK and a JDK on
+the development machine. It is **sideloaded** (`adb` over the network, the TV in developer mode),
+never published to a store.
+
+### The web half: `/tv`
+
+A route outside the `(app)` shell, as `/showcase` is (§14f), laid out for ten feet from the start
+rather than a desktop page enlarged.
+
+- **View only** (decided 2026-11-24). Home rows (continue watching, playlists, reels, recent),
+  the library grid with a few preset views, an item page, search, and the showcase and tasting,
+  which are already full-screen and already take arrow keys. Nothing on the TV changes the
+  library: no rating, favouriting, tagging, playlist or reel editing, deleting, dupes, review,
+  OCR or admin. All of that stays on the phone and the PC, where the app's main job of organising
+  is done, and a remote is the wrong tool for it. The only things the TV writes are what watching
+  writes anywhere -- progress, resume points and views (§14b) -- because those are records of
+  watching, not management.
+- **Focus is the real work.** Android's WebView does not move focus between elements on a D-pad
+  press; arrows arrive as plain arrow keys. `/tv` needs a spatial-navigation layer
+  (`@noriginmedia/norigin-spatial-navigation` is the candidate), a focus ring that reads from
+  across a room, and every control reachable by arrows alone. Mantine's popovers, menus and
+  selects are built around a pointer and a keyboard, so `/tv` uses its own focusable tiles and
+  buttons, still drawn from the theme.
+- **Back** is the remote's Back key, passed to the page; at the root of `/tv` it leaves the app.
+- **Searching** reuses the header search's kinds (§14): Library, Performer, Source, Keyword and
+  Look. Look -- searching by description, §5e -- is the one a spoken sentence suits best.
+
+### The native half: playback and speech
+
+The page calls into the shell through a JavaScript bridge with two verbs:
+
+- **`play(itemIds, startAt)`** -- the shell mints tokens (`/api/media/tokens`, §12d) and plays
+  them in **Media3 ExoPlayer**, reporting progress and finishes to the same endpoints the browser
+  and the Cast sender use, so what is watched on the TV counts as it would anywhere (§14b).
+  Native playback rather than `<video>` in the WebView because ExoPlayer on Google TV plays
+  **MPEG-TS** natively -- the 81-file gap in the measured codec mix (§8 "Checking the verdict on
+  real devices") -- and decodes HEVC in hardware, with proper buffering and resume.
+- **`listen()`** -- Android's `SpeechRecognizer`, behind a microphone button on screen, returns
+  the words to the page, which runs them as a search.
+
+### The server half
+
+- **A token request is held to a playable file** (§12d), which refuses a `pending` item because a
+  Cast receiver handed one shows nothing. The TV app can play much of what is pending. It needs a
+  token purpose or client claim that says so, with the verdict for that client kept in
+  `packages/core/src/playback.ts` beside the others -- measured on the TV, as §8 measures every
+  device, not assumed from ExoPlayer's documentation.
+- **The certificate.** An Android app does not trust a user-installed CA, so the Caddy root that
+  the phone trusts for the LAN site is worthless to the app unless it is bundled in the app's
+  network security config. The alternative is the public hostname with its real certificate, which
+  then has to resolve to the NAS from the TV -- the same split-horizon or hairpin question §12
+  "Casting decides the certificate" raises for the cast path.
+- **The domain header** (`x-ps-domain`, §21) is sent by `/tv` like any page; nothing about rooms
+  is new.
+
+### Every room, the Cellar behind its PIN
+
+**The TV reaches all three rooms** (decided 2026-11-24). §21's rules apply unchanged: a TV with no
+memory of a room opens in the Parlour, and the Cellar is behind the wine rack's PIN (§12c), whose
+digits a remote can enter. A living-room TV is the screen most likely to be in front of somebody
+else, which is what the Parlour default and the lock already exist for.
+
+### Signing in by pairing
+
+**Pairing, not a password typed with a remote** (decided 2026-11-24). The shape, to be settled
+when it is built:
+
+- The TV asks for a pairing (`POST /api/auth/pair`) and gets a short code and a private device
+  secret. It shows the code, and a QR code of `/pair?code=…`, and polls with the secret.
+- On a phone or PC that is already signed in, `/pair` takes the code and asks the user to approve
+  "Google TV" by name. Approval is what grants a session, so it is tied to the approving account
+  and nothing else.
+- The TV's next poll receives a refresh token as the cookie its WebView keeps, and from then on it
+  is a session like any other: listed on the active-sessions page (§12c) and revocable there, and
+  ended by a password change.
+- Codes are single-use, live minutes, and the pairing endpoints are metered like the other
+  unauthenticated credential endpoints (§12). A pending pairing is a row, so this is a migration
+  plus `init.ts` plus the zod schema.
+
+### Still open
+
+- **Where speech goes.** `SpeechRecognizer` normally sends the audio to Google, and the Cellar's
+  searches are performer names. Options: accept it, prefer on-device recognition
+  (`EXTRA_PREFER_OFFLINE`, where the TV has it), turn voice off in the Cellar, or recognise on the
+  NAS -- which costs the i3 CPU that §17 already names as the constraint.
+
+### Deferred, and ruled out
+
+- **The remote's own microphone or Search key.** On Google TV the remote's Assistant button is
+  normally taken by the system, not delivered to the app. Whether this TV's remote sends a key an
+  app can receive was not tested, and is not wanted yet; the on-screen microphone does not depend
+  on it.
+- **Searching from Google Assistant** ("search private-stock for …"). Ruled out: Google TV's global
+  search is open to partner apps, not a sideloaded one.
+- **A store listing.** Ruled out by what the Cellar holds; sideloading is the distribution.
