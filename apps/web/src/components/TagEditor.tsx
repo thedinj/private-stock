@@ -110,11 +110,15 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
     const faceOf = (chip: (typeof chips)[number]) =>
         chip.tagId && faceFor ? faceFor(chip.tagId) : null;
     // A card where there is a picture of them or their face in the item, and a performer always
-    // (§6 "A tag's picture"); a chip otherwise.
-    const asCard = (chip: (typeof chips)[number]) =>
+    // (§6 "A tag's picture"); a chip otherwise. Once one tag in the box is a card, all of them
+    // are -- a tag added a moment ago has no picture yet, and drawing it as a chip under the
+    // cards made it a different size from its neighbours until one arrived. The glyph holds the
+    // picture's place meanwhile.
+    const hasCard = (chip: (typeof chips)[number]) =>
         kind === "performer" || pictureOf(chip) !== null || Boolean(faceOf(chip));
-    const cards = chips.filter(asCard);
-    const plain = chips.filter((chip) => !asCard(chip));
+    const allCards = chips.some(hasCard);
+    const cards = allCards ? chips : [];
+    const plain = allCards ? [] : chips;
 
     // Both read the chips as drawn, not the item as last fetched: removing the only chip left
     // its author's name over an empty box until the page was reloaded.
@@ -208,9 +212,8 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
                 input
             )}
 
-            {/* Those with a picture as cards, the rest as chips under them (§6 "A tag's
-                picture"): one row of each, rather than chips standing beside cards four times
-                their height. */}
+            {/* Cards where any tag here has a picture, chips where none does (§6 "A tag's
+                picture"): never chips standing beside cards four times their height. */}
             {cards.length > 0 && (
                 <Group gap={8} wrap="wrap" mt={4} align="flex-start">
                     {cards.map((chip) => (
@@ -222,7 +225,7 @@ export const FacetBox: React.FC<FacetBoxProps> = ({
                             kind={kind}
                             picture={pictureOf(chip)}
                             face={faceOf(chip)}
-                            card={kind === "performer"}
+                            card
                             moment={moment}
                         />
                     ))}

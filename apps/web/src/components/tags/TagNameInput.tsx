@@ -17,6 +17,7 @@ import { normalizeName, type TagScope } from "@private-stock/core";
 
 import { useTagSearch } from "@/lib/api/tags";
 
+import { TagKindGlyph } from "./TagKindGlyph";
 import classes from "./TagNameInput.module.scss";
 
 /**
@@ -50,7 +51,8 @@ import classes from "./TagNameInput.module.scss";
  *
  * **A tag with a picture shows it** (§6 "A tag's picture"), at the size of an item's tag cards
  * and never smaller: the way to tell two Annas apart is to see them. The list is a few names
- * long by the time anybody reads it, so the height costs little.
+ * long by the time anybody reads it, so the height costs little. Where one row has a picture
+ * every row keeps the slot, a glyph standing in, so all the rows are one size.
  */
 
 interface TagNameInputProps extends Omit<TagsInputProps, "data" | "renderOption"> {
@@ -65,6 +67,13 @@ interface TagNameInputProps extends Omit<TagsInputProps, "data" | "renderOption"
      * the box empty, so without this it offered the tags the item already has.
      */
     exclude?: string[];
+    /**
+     * Called when a name the vocabulary already has is added -- picked from the list, or typed
+     * in full and entered -- with that tag's own name (an alias resolves to it). Not called for a
+     * name being coined. For a box that takes one name and acts on it: an existing tag needs no
+     * second press to confirm, a new one may.
+     */
+    onPick?: (name: string) => void;
 }
 
 /**
@@ -101,7 +110,10 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
     kind,
     scope,
     exclude,
+    onPick,
     onFocus,
+    onChange,
+    value,
     searchValue,
     onSearchChange,
     className,
@@ -138,6 +150,34 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
         };
     }, [data]);
 
+    /**
+     * Every row holds a picture's place, or none does: a performer's list always, any other
+     * facet's once one of its matches has a picture. A row without one -- a tag whose picture
+     * is not drawn yet, or the name about to be coined -- shows the facet's glyph at the
+     * picture's size, so the rows are one height and the list does not shift under a finger.
+     */
+    const withPictures = kind === "performer" || [...pictures.values()].some(Boolean);
+
+    const slot = (picture: string | null | undefined) =>
+        !withPictures ? null : picture ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+                src={picture}
+                alt=""
+                className={classes.picture}
+                data-portrait={kind === "performer" || undefined}
+                loading="lazy"
+                decoding="async"
+            />
+        ) : (
+            <span
+                className={`${classes.picture} ${classes.placeholder}`}
+                data-portrait={kind === "performer" || undefined}
+            >
+                <TagKindGlyph kind={kind} />
+            </span>
+        );
+
     const excluded = useMemo(() => new Set((exclude ?? []).map(normalizeName)), [exclude]);
 
     /**
@@ -159,6 +199,19 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
         )
             ? typed
             : null;
+
+    /** The tag a name answers to among the matches -- itself, or by an alias -- if any. */
+    const knownAs = (added: string): string | null => {
+        const norm = normalizeName(added);
+
+        return (
+            names.find((name) =>
+                [name, ...(aliases.get(name) ?? [])].some(
+                    (candidate) => normalizeName(candidate) === norm
+                )
+            ) ?? null
+        );
+    };
 
     /**
      * The server's matches, in its order. Close spellings (`near`) come after the new name on
@@ -193,6 +246,17 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
         <TagsInput
             className={className ? `${classes.box} ${className}` : classes.box}
             data={offering ? [...names, offering] : names}
+            value={value}
+            onChange={(next) => {
+                onChange?.(next);
+
+                if (!onPick) return;
+
+                const added = next.filter((name) => !(value ?? []).includes(name));
+                const known = added.length === 1 ? knownAs(added[0]) : null;
+
+                if (known) onPick(known);
+            }}
             searchValue={searchValue}
             onSearchChange={(value) => {
                 setOwnSearch(value);
@@ -215,9 +279,10 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
                 if (option.value === offering) {
                     return (
                         <Group justify="space-between" gap="sm" w="100%" miw={0} wrap="nowrap">
+                            {slot(null)}
                             {/* `miw={0}` so a long name truncates rather than widening the
                                 dropdown into a sideways scroll. */}
-                            <Text size="sm" truncate miw={0}>
+                            <Text size="sm" truncate miw={0} style={{ flex: 1 }}>
                                 Add “{option.value}”
                             </Text>
                             <Text size="xs" c="dimmed" style={{ flex: "none" }}>
@@ -232,17 +297,7 @@ export const TagNameInput: React.FC<TagNameInputProps> = ({
 
                 return (
                     <Group justify="space-between" gap="sm" w="100%" miw={0} wrap="nowrap">
-                        {picture && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                                src={picture}
-                                alt=""
-                                className={classes.picture}
-                                data-portrait={kind === "performer" || undefined}
-                                loading="lazy"
-                                decoding="async"
-                            />
-                        )}
+                        {slot(picture)}
                         <Stack gap={0} miw={0} style={{ flex: 1 }}>
                             <Text size="sm" truncate>
                                 {option.value}

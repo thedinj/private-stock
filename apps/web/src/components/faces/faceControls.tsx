@@ -42,6 +42,12 @@ const SUGGESTIONS = { styles: { dropdown: { minWidth: "min(320px, calc(100vw - 3
  * performers for one person are a merge somebody has to notice. So when what is typed is not
  * already a name but is close to some (the vocabulary's own search, typos included), those are
  * offered beside it, and the button says it is adding someone new.
+ *
+ * **A name already in the library tags at once** -- picked from the suggestions or the "Already
+ * in the library" row, or typed in full and entered. Picking one is the decision; a button
+ * repeating it was a second press for nothing. Only coining keeps the button, because that is
+ * the step worth pausing on. (While the box is disabled -- nothing chosen yet -- a pick waits in
+ * the box for the button, as before.)
  */
 export const NameBox: React.FC<{
     action: (name: string) => string;
@@ -65,6 +71,16 @@ export const NameBox: React.FC<{
     const coining = name !== "" && names.length === 0 && !exists && search.isSuccess;
     const offered = exists ? [] : near.slice(0, NEAR_NAMES);
 
+    /** Tags with an existing name straight away, when the box is free to. */
+    const commit = (picked: string): boolean => {
+        if (disabled || busy) return false;
+
+        onName(picked);
+        setNames([]);
+        setTyped("");
+        return true;
+    };
+
     return (
         <Stack gap={6}>
             <Group gap="xs" wrap="wrap" align="flex-start">
@@ -75,6 +91,10 @@ export const NameBox: React.FC<{
                     onChange={(next) => setNames(next.slice(-1))}
                     searchValue={typed}
                     onSearchChange={setTyped}
+                    onPick={commit}
+                    // A name left typed in the box is not a decision: leaving the box must not
+                    // tag anybody. The button still reads what is typed.
+                    acceptValueOnBlur={false}
                     maxTags={1}
                     placeholder="Who is this?"
                     aria-label={`${facetLabel("performer")} name`}
@@ -108,6 +128,8 @@ export const NameBox: React.FC<{
                             variant="light"
                             color="gray"
                             onClick={() => {
+                                if (commit(tag.name)) return;
+
                                 setNames([tag.name]);
                                 setTyped("");
                             }}

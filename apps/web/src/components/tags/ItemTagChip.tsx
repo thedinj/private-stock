@@ -9,6 +9,7 @@ import type { TagPicture } from "@private-stock/core";
 import type { ItemTagChip as Chip } from "@/lib/api/itemTags";
 import { CloseGlyph } from "@/components/media/Glyph";
 
+import { TagKindGlyph } from "./TagKindGlyph";
 import { TagPictureDialog } from "./TagPictureDialog";
 import classes from "./ItemTagChip.module.scss";
 
@@ -58,8 +59,8 @@ interface ItemTagChipProps {
     face?: React.ReactNode;
     /**
      * A card whatever it has: a performer's, so every one on an item is the same size (§6 "A
-     * tag's picture"). Without a picture yet -- the pass that draws one is minutes behind a new
-     * performer -- the picture's place is held empty.
+     * tag's picture"), or any tag beside others that are cards. Without a picture yet -- the
+     * pass that draws one is minutes behind a new performer -- the facet's glyph holds its place.
      */
     card?: boolean;
     /** The tag's facet, which decides the picture's shape. */
@@ -167,9 +168,13 @@ export const ItemTagChip: React.FC<ItemTagChipProps> = ({
             >
                 {opens(
                     <UnstyledButton className={classes.cardPicture} title={name}>
-                        {picture && (
+                        {picture ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={picture.smallUrl} alt="" loading="lazy" decoding="async" />
+                        ) : (
+                            <span className={classes.placeholder}>
+                                <TagKindGlyph kind={kind ?? "tag"} />
+                            </span>
                         )}
                     </UnstyledButton>
                 )}

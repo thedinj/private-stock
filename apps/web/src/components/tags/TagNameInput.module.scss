@@ -47,3 +47,16 @@
         }
     }
 }
+
+// No picture yet: the facet's glyph in the picture's place, so the row is the height of one
+// that has a picture.
+.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mantine-color-dimmed);
+
+    > svg {
+        opacity: 0.7;
+    }
+}

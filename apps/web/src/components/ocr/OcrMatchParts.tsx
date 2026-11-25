@@ -66,14 +66,17 @@ export const OtherTag: React.FC<{
 }> = ({ onPick, disabled }) => {
     const [opened, setOpened] = useState(false);
     const [kind, setKind] = useState<OcrMatchTagKind>("performer");
-    const [names, setNames] = useState<string[]>([]);
 
-    const pick = (): void => {
-        const name = names[0]?.trim();
+    /**
+     * Proposed the moment a name is entered or picked. It is one name and only a proposal --
+     * nothing is tagged until it is accepted like the others -- so a Propose button after it
+     * was a second press for nothing.
+     */
+    const pick = (name: string | undefined): void => {
+        const trimmed = name?.trim();
 
-        if (name) {
-            onPick(kind, name);
-            setNames([]);
+        if (trimmed) {
+            onPick(kind, trimmed);
             setOpened(false);
         }
     };
@@ -108,15 +111,13 @@ export const OtherTag: React.FC<{
                     <TagNameInput
                         kind={kind}
                         scope="public"
-                        value={names}
-                        onChange={(next) => setNames(next.slice(-1))}
-                        maxTags={1}
-                        placeholder="Name"
+                        value={[]}
+                        onChange={(next) => pick(next.at(-1))}
+                        // Leaving the box half-typed, to change the facet, proposes nothing.
+                        acceptValueOnBlur={false}
+                        placeholder="Name, then Enter"
                         aria-label={`${facetLabel(kind)} name`}
                     />
-                    <Button size="xs" color="brass" disabled={names.length === 0} onClick={pick}>
-                        Propose
-                    </Button>
                     <Text size="xs" c="dimmed">
                         Added as a proposal with its own count, to tag like the others.
                     </Text>
