@@ -1415,7 +1415,12 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                                     />
                                 ) : undefined
                             }
-                            caption={{ title: data.title, tags: data.tags }}
+                            caption={{
+                                title: data.title,
+                                tags: data.tags,
+                                rating: shownRating,
+                                favorite: shownFavorite,
+                            }}
                         />
                     ) : (
                         <StillStage
@@ -1433,7 +1438,12 @@ const MediaPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) =>
                             hotkeys={!overlayOpen && !trashOpen && !helpOpen}
                             steps={steps}
                             menuItems={stageMenu}
-                            caption={{ title: data.title, tags: data.tags }}
+                            caption={{
+                                title: data.title,
+                                tags: data.tags,
+                                rating: shownRating,
+                                favorite: shownFavorite,
+                            }}
                         />
                     )}
                 </Box>
